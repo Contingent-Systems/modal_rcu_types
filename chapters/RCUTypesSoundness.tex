@@ -1,0 +1,155 @@
+\section{Soundness}
+\label{sec:soundness}
+Here we give overview for our strategy to prove soundness of the system. To prove soundness we use the Views Framework~\cite{views} and all Views encoding, definitions, proofs and invariants for \textit{wellformedness} can be found in detail in Appendix \ref{sec:lemmas}. 
+
+We do our reasoning for soundness over instrumented states which we define logical states, $\textsf{LState}$ to be
+\begin{itemize}
+\item A machine state, $\sigma=(s,h,l,rt,R,B,F)$;
+\item An observation map, O, of type $ \textsf{Loc} \to \mathcal{P}(\textsf{obs})$
+\item Undefined variable map, $U$, of type $\mathcal{P}(\textsf{Var}\times \textsf{TID})$
+\item Set of threads, $T$, of type $\mathcal{P}(\textsf{TIDS})$
+\end{itemize}
+Each memory region can be observed in one of the following type states within a snapshot taken at any time $\textsf{obs} := \texttt{iterator} \; \mathrm{tid} \mid \texttt{unlinked} \mid \texttt{fresh} \mid \texttt{freeable} \mid \texttt{root}$. We are interested in \textsf{RCU} typed of heap domain which we define as:$\textsf{RCU} = \{ o \mid \textsf{ftype}(f) = \textsf{rcu} \land \exists o' \ldotp h(o',f) = o \}$
+A thread's (or scope's) \emph{view} of memory is a subset of the instrumented(logical states), which satisfy certain well-formedness criteria relating the physical state and the additional meta-data ($O$, $U$, and $T$):  $\mathcal{M} \stackrel{def}{=} \{ m \in (\textsf{MState} \times O \times U \times T) \mid  \textsf{WellFormed}(m) \}$.
+We do our reasoning for soundness over instrumented states and define an erasure relation $\lfloor - \rfloor :\mathsf{MState} \implies \textsf{LState}$ that projects instrumented states to the common components with \textsf{MState}.
+
+Well-formedness imposes restrictions over the representation of the \textsf{RCU} structure in memory and type of threads for actions defined in operational semantics. For instance, \emph{an unlinked heap location cannot be reached from a root of an \textsf{RCU} data structure}. We define well-formedness as conjuction of memory axioms define in Section \ref{sec:memaxioms} Appendix \ref{sec:lemmas}.
+\begin{figure}\tiny
+\[
+\begin{array}{l@{\;\;=\;\;}l}
+ \llbracket \, x : \textsf{rcuItr}\,\rho\,\N \,  \rrbracket_{tid}
+&
+\left\{
+\begin{array}{l|l}
+\sigma,O,U,T,F
+&(\textsf{iterator} \, tid\in  O(\sigma.s(x,tid)))  \land (x \notin U)  \land \\
+& (\forall_{f_i\in dom(\N), x_i\in codom(\N) } \ldotp \sigma.s(x_i,tid) = \sigma.h(\sigma.s(x,tid), f_i) \land \textsf{iterator}\in O(s(x_i,tid))) \land \\
+&(\forall_{\rho', \rho''}\ldotp \rho'.\rho'' = \rho \implies  \textsf{iterator}\,tid \in O(h^{*}(\sigma.rt,\rho'))) \land h^{*}(\sigma.rt,\rho)  \sigma.s(x,tid)\\
+
+\end{array}
+\right\}
+\\
+\llbracket \, x : \textsf{unlinked} \, \rrbracket_{tid}
+&
+\left\{
+\begin{array}{l|l}
+\sigma,O,U,T
+&(\textsf{unlinked}\in  O(\sigma.s(x,tid)) \land \sigma.l = tid \land x \notin U)
+%\land \\ &((\forall_{o'f'} \ldotp h(o',f')= s(x,tid) \implies (\textsf{unlinked} \in O(o') \lor \textsf{freeable} \in O(o'))))
+\end{array}
+\right\}
+\\
+\llbracket \, x : \textsf{freeable} \, \rrbracket_{tid}
+&
+\left\{
+\begin{array}{l|l}
+\sigma,O,U,T
+&\textsf{freeable}\in  O(\sigma.s(x,tid)) \land \sigma.l = tid \land x \notin U \land \{x\mapsto \{\emptyset\}\} \in \sigma.F
+\end{array}
+\right\}
+\\
+\llbracket \, x : \textsf{rcuFresh} \, \N \, \,  \rrbracket_{tid}
+&
+\left\{
+\begin{array}{l|l}
+\sigma,O,U,T
+&(\textsf{fresh}\in  O(s(x,tid)) \land x \notin U ) \land \\
+&(\forall_{f_i\in dom(\N), x_i\in codom(\N) } \ldotp \sigma.s(x_i,tid) = \sigma.h(\sigma.s(x,tid), f_i) \land \textsf{iterator}\,tid \in O(s(x_i,tid))) \\
+& \forall_{f}
+\end{array}
+\right\}
+\\
+\llbracket  x : \textsf{undef}\rrbracket_{tid}
+&
+\left\{
+\begin{array}{l|l}
+\sigma,O,U,T
+&
+(x,tid) \in U
+\end{array}
+\right\}
+\\
+\llbracket \, x : \textsf{rcuRoot}\rrbracket
+&
+\left\{
+\begin{array}{l|l}
+\sigma,O,U,T
+&
+((\sigma.rt \notin U \land (x,\_) = \sigma.rt \land \sigma.rt \in dom(\sigma.h) \land O(\sigma.rt) \in \textsf{root} )
+\end{array}
+\right\}
+\end{array}
+\]
+$  \bullet  = (\bullet_{\sigma},\bullet_O,\cup,\cup)$ \quad
+  $O_{1} \bullet_O O_{2}(loc) \overset{\mathrm{def}}{=}  O_{1}(loc) \cup O_{2}(loc)$\quad
+  $ (s_1 \bullet_s s_2) \overset{\mathrm{def}}{=}  s_1 \cup s_2 \texttt{   when   } dom(s_1) \cap dom(s_2) = \emptyset$ \\
+  $(F_1 \bullet_F F_2) \overset{\mathrm{def}}{=}  F_1  \cup F_2 \texttt{   when   } dom(F_1) \cap dom(F_2) = \emptyset$ \\
+$
+\begin{array}{l}
+(h_1\bullet_h h_2)(o,f)\overset{\mathrm{def}}{=}  \left\{
+\begin{array}{ll}  
+\mathrm{undef} & \textrm{if}~h_1(o,f)=v \land h_2(o,f)=v' \land v' \neq v\\
+v & \textrm{if}~h_1(o,f)=v \land h_2(o,f)=v\\
+v & \textrm{if}~h_1(o,f)=\mathrm{undef}\land h_2(o,f)=v\\
+v & \textrm{if}~h_1(o,f)=v\land h_2(o,f)=\mathrm{undef}\\
+\mathrm{undef} & \textrm{if}~h_1(o,f)=\mathrm{undef}\land h_2(o,f)=\mathrm{undef}
+\end{array}
+\right\}
+\end{array}
+\;\;
+\begin{array}{l}
+((s,h,l,rt,R,B,F), O, U, T) \mathcal{R}_{0}((s',h',l',rt',R',B',F'), O', U', T') \overset{\mathrm{def}}{=}
+\\ \bigwedge\left\{
+	\begin{array}{l}
+	  l  \in  T \rightarrow (h = h' \land l=l')\\
+	  l\in T\rightarrow F=F'\\
+          l\in T\rightarrow T \cap B= T'\cap B'\\
+	  \forall tid,o\ldotp\textsf{iterator} \, tid \in O(o) \rightarrow o \in dom(h) \\
+	  \forall tid,o\ldotp\textsf{iterator} \, tid \in O(o) \rightarrow o \in dom(h') \\
+	  O = O' \land U = U' \land T = T'\land rt = rt' \\
+
+	  \forall x, t \in T \ldotp s(x,t) = s'(x,t)
+	\end{array}
+\right\}
+\end{array}
+$
+
+\caption{Type Environments, Composition($\bullet$) and Thread Interference Relation($\mathcal{R}_{0}$)}
+\label{fig:denotingtypeenviromentp}
+\vspace{-2mm}
+\end{figure}
+Every type environment represents a set of possible views (well-formed logical states) consistent with the types in the environment.  We make this precise with a denotation function
+\[\llbracket-:-\rrbracket_- : \mathsf{Var}\rightarrow\mathsf{Type}\rightarrow\mathsf{TID}\rightarrow\mathcal{P}(\mathcal{M})\] that yields the set of states corresponding to a given type environment. This is defined in terms of denotation of individual variable assertions given in Figure \ref{fig:denotingtypeenviromentp}. To define the former, we first need to state what it means to combine logical machine states.
+
+Composition of instrumented states is an operation $\bullet$ : $\mathcal{M} \longrightarrow \mathcal{M} \longrightarrow \mathcal{M}$ that is commutative and associative, and defined component-wise in terms of composing physical states, observation maps, undefined sets, and thread sets as shown in Figure \ref{fig:denotingtypeenviromentp}. An important property of composition is that it preserves validity of logical states:
+\begin{lemma}[Well Formed Composition]
+\label{lem:wf-compositionp}
+Any successful composition of two well-formed logical states is well-formed:\[\forall_{x,y,z}\ldotp \mathsf{WellFormed}(x) \implies \mathsf{WellFormed}(y) \implies x\bullet y = z \implies \mathsf{WellFormed(z)}\]
+\end{lemma}
+Different threads' views of the state may overlap (e.g., on shared heap locations, or the reader thread set), but one thread may modify that shared state. Subsets of the logical views that are \emph{stable} with respect to expected interference from other threads or contexts.  We define the interference as (the transitive reflexive closure of) a binary relation $\mathcal{R}$ on $\mathcal{M}$ as $M \in \mathcal{P}(\mathcal{M}) | \mathcal{R}(M) \subseteq M\}$
+Thread interference relation -- $\mathcal{R} \subseteq \mathcal{M} \times \mathcal{M}$ --  defines permissible interference on an instrumented state. The relation must distribute over composition:
+\[ \forall m_{1}, m_{2}, m\ldotp (m_{1} \bullet  m_{2})\mathcal{R}m \Longrightarrow \begin{array}{ll}  \exists  m'_{1} m'_{2} \ldotp m_{1} \mathcal{R} m'_{1} \land m_{2} \mathcal{R} m'_{2} \land  m \in m'_{1} \bullet m'_{2} \end{array}\]
+where $\mathcal{R}$ is transitive-reflexive closure of $\mathcal{R}_{0}$ shown at Figure \ref{fig:denotingtypeenviromentp}. $\mathcal{R}_0$ (and therefore $\mathcal{R}$) also ``preserves'' validity:
+\begin{lemma}[Valid $\mathcal{R}_0$ Interference]
+For any $m$ and $m'$, if $\mathsf{WellFormed}(m)$ and $m\mathcal{R}_0m'$, then $\mathsf{WellFormed}(m')$.
+\end{lemma}
+\begin{lemma}[Stable Environment Denotation]
+For any \emph{closed} environment $\Gamma$ $($i.e., $\forall x\in\mathsf{dom}(\Gamma)\ldotp, \mathsf{FV}(\Gamma(x))\subseteq\mathsf{dom}(\Gamma)$ $):$
+\[
+\mathcal{R}(\llbracket\Gamma\rrbracket_{\mathsf{M},tid})\subseteq\llbracket\Gamma\rrbracket_{\mathsf{M},tid}
+\]
+Alternatively, we say that environment denotation is \emph{stable} (closed under $\mathcal{R}$).
+\end{lemma}
+The Views Framework defines a program logic (Hoare logic) with judgments of the form $\{ p \} C \{ q \}$ for views p and q and commands $C$.  Commands include atomic actions, and soundness of such judgments for atomic actions is a parameter to the framework.  The framework itself provides for soundness of rules for sequencing, fork-join parallelism, and other general rules.
+To prove type soundness for our system, we define a denotation of \emph{type judgments} in terms of the Views logic, and show that every valid  typing derivation translates to a valid derivation in the Views logic:
+\[\forall\Gamma,C,\Gamma',\mathit{tid}\ldotp\Gamma\vdash_{M,R} C\dashv \Gamma' \Rightarrow \{\llbracket\Gamma\rrbracket_\mathit{tid}\} \llbracket C\rrbracket_\mathit{tid}\{\llbracket\Gamma'\rrbracket_\mathit{tid}\}\].
+\begin{theorem}[Axiom Soundness]
+For each axiom, $\Gamma_{1} \vdash_{\textsf{RMO}} \alpha \dashv \Gamma_{2}$, we must show
+\[
+\forall m\ldotp   \llbracket \alpha \rrbracket  (\lfloor \llbracket \Gamma_{1} \rrbracket_{tid}  * \{m\} \rfloor )\subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{tid} * \mathcal{R}(\{m\}) \rfloor
+\]
+\end{theorem}
+\begin{proof}
+By case analysis on the atomic action $\alpha$ followed by inversion on typing derivation.
+\end{proof}
+The use of $*$ validates the frame rule (\todo{ref}), and makes this obligation akin to an interference-tolerant version of the small footprint property from traditional separation logics~\tocite{lics02,localaction}.

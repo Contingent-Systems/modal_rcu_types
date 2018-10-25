@@ -1,0 +1,905 @@
+\makeatletter % allow us to mention @-commands
+\def\arcr{\@arraycr}
+\makeatother
+\section{Type System \& Programming Language}
+In this section, we present a simple object oriented programming language with two block constructs for modelling \textsf{RCU}. We provide a programming language and a type system to enforce correct usage of RCU primitives. In the following subsections, We stress two aspects of our type system.
+First, to ensure memory safety, we must show how our type system makes programs preserve the following two properties:
+\begin{itemize}
+\item A heap node can only be freed, if it is no longer accessible from an RCU data structure
+\item Local variables may not point inside an RCU data structure unless they are inside an \textsf{RCU} read or write block
+\end{itemize}
+To achieve this we ensure the reachability and access which can be suitably restricted. We explain how our types support a delayed ownership transfer for the deallocation.
+Second, to ensure that our type system can type useful programs, we must show how it works on well known data structures such as binary search trees and list-based bags. To achieve the level of expressibility for typing these data structures, we use a refinement types like system to ensure having approximation on loop abstractions and control flow joins.
+In our system, all objects contain all fields.  This means we do not have to worry about the correct typing of field manipulation, etc. which is covered by a standard type system such as found in C. We will only focus on the aspects of the typing related to the correct operation of RCU. This means our type system extends C like languages' type systems which can handle standard type errors such as field not-exists.
+We explain the two main aspects of our type system in the following subsections. In Section \ref{subsection:rcu-typing} we introduce the \textsf{RCU} types and the need for substyping. In Section \ref{subsection:type-action}, we see how types represent programs via showing the code snippets from our type checking effort list-based bag example. Then, in Section \ref{subsection:type-rules}, we discuss possible memory safety issues in the \textsf{RCU} setting, introduce the type rules and how they prevent these issues. At last, we discuss our type system by code fragments peculiar to the \textsf{BST}. 
+\subsection{\textsf{RCU} Typing}
+\label{subsection:rcu-typing}
+Here, we present an high-level introduction of the types in our system. There are five types of local variable
+\[
+\tau_{local} ::=  \textsf{rcuItr}\;\rho\;\N \mid \textsf{rcuFresh}\;\N  \mid \textsf{unlinked} \mid \textsf{undef} \mid \textsf{freeable}
+\]
+and we assume a function, $\textsf{FType}$ that maps each field to its type. In addition, we have a type for global variables
+\[\tau_{global} ::= \textsf{rcuRoot}\]
+\textit{\textbf{rcuItr}} -is the type given to references pointing into a shared RCU data structure. An \textsf{rcuItr} reference can be used in either a read or write region. It indicates both that the reference points into the shared \textsf{RCU} data structure and that the heap location referenced by the \textsf{rcuItr} reference is reachable by following the following the path $\rho$ from the root. A component $\N$ is a set of field mappings taking the field name to local variable names. Field mappings are added to the set when the object's fields are read. Field mapping set and path components are important for keeping track of heap locations through \textit{reached-by} and \textit{points-to} relations so that effects of mutations using references in \textsf{rcuItr} type are localized.
+In general, we utilize path information to ensure that we preserve well shaped heap for the data structures, e.g. acyclicity. In conjuction with the path component, we employ the field mappings to assist in checking whether proper linking/mapping exists between the related nodes shown by the pointers when unlinking occurs.
+
+\textit{\textbf{unlinked}} - is the type given to references pointing at unlinked heap locations inside an \textsf{RCU} write block. An object reference by a reference in unlinked type means that the object is now disconnected from the data structure, unreachable. A heap location referenced by unlinked reference may also be accessed by reader threads using a reference in \textsf{rcuItr} simultaneously. This means that an object referenced by an unlinked reference may reside in the free list which defers reclamation/deallocation of the object until all reader threads pointing to the object simultaneously at the time of unlinking  are done with the object. However, from now on the object is inaccessible for the incoming reader threads.
+
+\textit{\textbf{freeable}} - is the type given to references pointing at unlinked heap location which is convenient to reclaim as there are no reader threads to wait. This enforces the right time -- after syncronising with all readers threads on the object (to be reclaimed) exit the \textsf{RCU} read block -- to reclaim the object in the \textsf{RCU} setting. Only freeable objects can be reclaimed.
+
+\textit{\textbf{undef}} - is the type given to references where the content of the referenced location is inaccessible. A freeable object becomes undefined after it is reclaimed.
+
+\textit{\textbf{rcuFresh}} - is the type given to references pointing at freshly allocated heap location. Similar to the \textsf{rcuItr} type, it has field mappings set $\N$. We set the field mappings in the set of an existsing \textsf{rcuFresh} reference to be the same as field mappings in the set of an \textsf{rcuItr} reference when we replace the heap referenced by the \textsf{rcuItr} with the heap referenced by \textsf{rcuFresh} for memory safe replacement.
+
+\textit{\textbf{rcuRoot}} - is the type given to references pointing at the heap location which is the data structure unique global root. An undefined reference can be loaded with a value -- it becomes \textsf{rcuItr} -- once we read the global unique root to it.
+%%%%%%%%%%%%%%%%%%%%%%%%SUB TYPING JUDGEMENTS%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{figure}\tiny
+%\begin{subfigure}[b]{.4\linewidth}
+\begin{mathpar}
+ \fmapextendn \and \fmapname  \and \fmapdiff \and \fmapwithf \and \fmapextend \and \fmapempty \and \fmapfieldemp \and \typelocalmap \and \typeglobal \and \rcutypes \and \types \and  \ftypedecl \and \rpth 
+\and
+\fbox{$\vdash \, \N \subt \N'$} \;\;
+\inferrule[\scriptsize{T-NSub3}]
+{
+\N'([f \rightharpoonup y]) \;\;
+\N_{f,\emptyset}
+}
+{\vdash \, \N\subt \N'}
+\and
+\inferrule[\scriptsize{T-NSub4}]
+{
+ \N' \;\;
+ \N_{\emptyset}
+}
+{\vdash \, \N \subt \N'}
+\and
+\inferrule[\scriptsize{T-NSub2}]
+{
+ \N([f_2 \rightharpoonup y]) \;\;
+\N'([f^{*} \rightharpoonup y])
+}
+{\vdash \, \N\subt \N'}
+\and
+\inferrule[\scriptsize{T-NSub1}]
+{
+\N([f_1 \rightharpoonup y]) \;\;
+ \N'([f^{*} \rightharpoonup y])
+}
+{\vdash \, \N \subt \N'}
+\and
+\inferrule[\scriptsize{T-NSub5}]
+{
+}
+{\vdash \, \N \subt \N}
+\and
+\fbox{$\vdash \, \rho \subt \rho'$} \;\;
+\inferrule[\scriptsize{T-PSub1}]
+{
+\rho'=\rho''.f_1 \qquad \rho = \rho''.f_1|f_2
+}
+{
+ \vdash  \rho' \subt \rho
+}
+\and
+\inferrule[\scriptsize{T-PSub2})]
+{
+\rho'=\rho''.f_2  \qquad \rho= \rho''.f_1|f_2
+}
+{
+ \vdash  \rho' \subt \rho
+}
+\and
+\fbox{$\vdash \, \rho \subt \rho'$} \;\;
+\inferrule[\scriptsize{T-TSub}]
+{
+T=\textsf{rcuItr}\; \_ \qquad T'=\textsf{undef}
+}
+{
+\vdash T   \subt T' 
+}
+\and
+\inferrule[\scriptsize{T-TSub1}]
+{
+\vdash\rho\subt \rho' \qquad \vdash \N \subt \N' \\
+T =\textsf{rcuItr} \, \rho \, \N \qquad T'=\textsf{rcuItr} \, \rho' \, \N'
+}
+{
+\vdash T  \subt  T'
+}
+\and
+\fbox{$\vdash \, \Gamma \subt \Gamma'$} \;\;
+\inferrule[\scriptsize{T-CSub1}]
+{
+\vdash\Gamma \subt \Gamma' \;\; \vdash \text{T}  \subt \text{T'}
+}
+{
+\vdash \Gamma\, , x:\text{T}  \subt \Gamma'\, , x:\text{T'}
+}
+\and
+\inferrule[\scriptsize{T-CSub2}]
+{
+\Gamma' = \Gamma[\rho.f^{k}/\rho.f^{k}.f]
+}
+{
+ \vdash  \Gamma \subt \Gamma'
+}
+\and
+\inferrule[\scriptsize{T-ESub}]
+{
+}
+{
+\vdash  \epsilon \subt \epsilon
+}\and
+%\end{mathpar}
+%\caption{Sub-Typing Judgements}
+%\label{fig:sub-typing}
+%\end{subfigure}\quad
+%\begin{subfigure}[b]{.4\linewidth}
+%\tiny
+%\begin{mathpar}
+\fbox{$\Gamma \vdash \bar{s} \dashv \Gamma'$} \and
+\inferrule[\scriptsize(T-Branch1)]
+{
+  x.f_1==z \and
+ \Gamma\, ,x:\textsf{rcuItr}\,\rho \, \N([f_1 \rightharpoonup  z]) \vdash \bar{s}_1 \dashv\Gamma_4 \and
+  \Gamma\, ,x:\textsf{rcuItr}\, \rho \, \N([f_2 \rightharpoonup z]) \vdash \bar{s}_2 \dashv \Gamma_4
+}
+{
+\Gamma\, ,x:\textsf{rcuItr}\, \rho \, \N([f_1\mid f_2 \rightharpoonup z]) \vdash \textsf{if}(x.f_1==z)  \textsf{ then } \bar{s}_1 \textsf{ else } \bar{s}_2 \dashv \Gamma_4
+}
+\and
+\inferrule[\scriptsize(T-Branch2)]
+{
+\Gamma(x)= \textsf{bool} \\
+ \Gamma \vdash \bar{s}_1 \dashv\Gamma' \and \Gamma \vdash \bar{s}_2 \dashv \Gamma'
+}
+{
+\Gamma \vdash \textsf{if}(x) \textsf{ then } \bar{s}_1  \textsf{ else } \bar{s}_2 \dashv \Gamma'
+}
+\and
+\inferrule[\scriptsize(T-Branch3)]
+{
+ \Gamma,\,x:\textsf{rcuItr} \, \rho \, \N([f\rightharpoonup y \setminus \textsf{null}]) \vdash \bar{s}_1 \dashv \Gamma' \and \Gamma,\,x:\textsf{rcuItr} \, \rho \, \N([f\rightharpoonup y]) \vdash \bar{s}_2 \dashv \Gamma'
+}
+{
+\Gamma,\,x:\textsf{rcuItr} \, \rho \, \N([f\rightharpoonup y]) \vdash \textsf{if}(x.f == \textsf{null}) \textsf{ then } \bar{s}_1  \textsf{ else } \bar{s}_2 \dashv \Gamma'
+}
+\and
+\inferrule[\scriptsize(T-Conseq)]
+{
+ \Gamma \subt \Gamma'  \and \Gamma' \vdash \bar{s} \dashv \Gamma'' \and \Gamma'' \subt \Gamma'''
+}
+{
+ \Gamma \vdash \bar{s} \dashv \Gamma'''
+}
+\and
+\inferrule[\scriptsize(T-Loop1)]
+{
+\Gamma(x) = \textsf{bool} \and
+\Gamma \vdash \bar{s} \dashv \Gamma 
+}
+{
+\Gamma \vdash \textsf{while}(x)\{\bar{s}\} \dashv  \Gamma
+}
+\and
+\inferrule[\scriptsize(T-Loop2)]
+{
+\Gamma,\, x:\textsf{rcuItr}\;\rho \; \N([f\rightharpoonup \_]) \vdash \bar{s} \dashv \Gamma, x:\textsf{rcuItr}\;\rho' \; \N([f\rightharpoonup \_])
+}
+{
+\Gamma,\, x:\textsf{rcuItr}\;\rho \; \N([f\rightharpoonup \_]) \vdash \textsf{while}(x.f \neq \textsf{null})\{\bar{s}\} \dashv   x:\textsf{rcuItr}\;\rho' \; \N([f\rightharpoonup \textsf{null}]) ,\,  \Gamma
+}
+\and
+\inferrule[\scriptsize(T-ReIndex)]
+{
+}
+{
+\Gamma \vdash \bar{s}_{k} \dashv  \Gamma[\rho.f^{k}/\rho.f^{k}.f]
+}\and
+%\end{mathpar}
+%\caption{Type Judgements for Control-Flow.}
+%\label{fig:type-judgements-for-cf}
+%\end{subfigure}\quad
+%%%%%%%%%%%%%%%%%%%%%%%%TYPE JUDEGEMENT%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%\begin{subfigure}[b]{.4\linewidth}
+%\begin{mathpar}
+\inferrule[\scriptsize(T-Root)]
+{ \textsf{FV}(\Gamma) \cap \{r,y\}  =\emptyset}
+{\Gamma\,,r:\textsf{rcuRoot}\,,y:\textsf{undef} \vdash_{M,R} y = r \dashv y: \textsf{rcuItr}\, \epsilon \, \N_{\emptyset}\,,r:\textsf{rcuRoot}\,,\Gamma}
+\;\;
+\inferrule[\scriptsize(T-ReadS)]
+{ \textsf{FV}(\Gamma) \cap \{z,x\}  =\emptyset}
+{
+\Gamma\,, z:\textsf{rcuItr}\,\_ \, ,\rcuitrT{x}{G}{k}{k+1}{\_} \vdash_{M,R} z=x \dashv  \rcuitrT{x}{G}{k}{k+1}{\_}\, , \rcuitrT{z}{G}{k}{k+1}{\_} \,, \Gamma
+}
+\and
+\inferrule[\scriptsize(T-ReadH)]
+{
+\rho.f=\rho' \\
+ \textsf{FV}(\Gamma) \cap \{z,x\} =\emptyset
+}
+{
+ \Gamma\, , z:\textsf{rcuItr}\,\_ \, ,  x:\textsf{rcuItr} \, \rho \, \N   \vdash_{M,R}
+ 	z=x.f
+ \dashv  x:\textsf{rcuItr} \, \rho \, \N[f\mapsto z]\, ,z:\textsf{rcuItr} \, \rho' \, \N_{\emptyset} \, , \Gamma
+}
+\and
+\inferrule[\scriptsize(T-Alloc)]
+{
+\mathsf{FV}(\Gamma) \cap \{x\} = \emptyset
+}
+{
+ \Gamma\,, x:\textsf{undef} \vdash_{M} x = \NEW \dashv x:\textsf{rcuFresh} \, \N_{\emptyset} \, ,  \Gamma
+}
+\;\;
+\inferrule[\scriptsize(T-Free)]
+{
+}
+{
+x:\textsf{freeable} \vdash_{M} \textsf{Free}(x) \dashv x:\textsf{undef}
+}\;\;
+\inferrule[\scriptsize(T-Exchange)]
+{
+ \Gamma, \, y:T' , \, x:T, \, \Gamma' \vdash \bar{s} \dashv   \Gamma''
+}
+{
+\Gamma, \, x:T , \, y:T' , \, \Gamma' \vdash \bar{s} \dashv   \Gamma''
+}
+\and
+\inferrule[\scriptsize(T-Sync)]
+{
+\textsf{FV}(\Gamma) \cap \textsf{FV}(\Gamma'')  = \emptyset \\
+\lnot(\exists_{x \in \Gamma''} \ldotp x:\textsf{unlinked}) \\
+\forall x \in \Gamma \ldotp  x:\textsf{unlinked} \quad \Gamma'  = \forall_{x\in \Gamma }\ldotp \Gamma \setminus \{x:\textsf{unlinked}\} \cup \{x:\textsf{freeable}\} \\
+\Gamma'',\Gamma \vdash_{M}\textsf{SyncStart}\dashv\Gamma'',\Gamma \qquad \Gamma'',\Gamma \vdash_{M}\textsf{SyncStop}\dashv\Gamma'',\Gamma' \qquad
+}
+{
+\Gamma'',\Gamma \vdash_{M} \textsf{SyncStart};\textsf{SyncStop} \dashv \Gamma',\Gamma''
+}
+\and
+\inferrule[\scriptsize(T-WriteFH)]
+{
+\textsf{FV}(\Gamma) \cap \{p,z,x\}  =\emptyset \\ z:\textsf{rcuItr} \; \rho.f \; \_
+}
+{
+ \Gamma, p:\textsf{rcuFresh}\,\N_{f,\emptyset},\; x:\textsf{rcuItr}\;\; \rho \;\; \N([f\rightharpoonup z])
+  \vdash_{M} p.f = z \dashv
+  \rcunf{p}{f}{z} \, , x:\textsf{rcuItr}\, \rho \, \N([f\rightharpoonup z]), \, \Gamma
+}
+\and
+\inferrule[\scriptsize(T-UnlinkH)]
+{
+\textsf{FV}(\Gamma) \cap \{x,z,r\} \qquad \rho.f_1=\rho' \;\; \rho'.f_2=\rho'' \qquad \forall_{f\in dom(\N')} \ldotp f\neq f_2 \implies \N'([f\rightharpoonup \textsf{null}]) \lor \N'_{f,\emptyset}   \\
+\begin{array}{l}
+\forall_{n\in \Gamma,m,\N''', p''',f}\ldotp n:\textsf{rcuItr}\,\rho'''\,\N'''([f\rightharpoonup m]) \implies 
+\left\{\begin{array}{l}
+(((\rho \neq \rho''' \land \rho' \neq \rho''' \land \rho'' \neq \rho''')  ) \land (\{m\} \cap \{z,r\} = \emptyset ) ) \arcr
+\land (\forall_{\rho''''\neq \epsilon} \ldotp \rho'''\neq \rho''.\rho'''' )
+\end{array}\right.
+\end{array}
+}
+{
+\Gamma,\,x:\textsf{rcuItr}\, \rho \, \N([f_1\rightharpoonup z]) \, ,
+z:\textsf{rcuItr}\, \rho' \, \N'([f_2\rightharpoonup r]) \, ,  r:\textsf{rcuItr} \, \rho'' \, \N''\, 
+\vdash_{M} x.f_1=r \dashv
+z:\unlinked\, ,
+x:\textsf{rcuItr} \, \rho \, \N(f_1\rightharpoonup z \setminus r)\, ,
+r:\textsf{rcuItr} \, \rho' \, \N'',\, \Gamma
+}
+\and
+\inferrule[\scriptsize(T-LinkF)]
+{
+\rho.f  = \rho'  \qquad \N' = \N'' \qquad  \textsf{FV}(\Gamma) \cap \{p,o,n\}  =\emptyset \\
+\lnot(\exists_{x \in \Gamma, \N''', \rho'',f',y} \ldotp (x:\textsf{rcuItr}\,\rho''\,\N'''([f'\rightharpoonup y])) \land ((\rho'' = \rho)\lor(\rho'' = \rho')) \land (y\neq o \land (\forall_{x_i \in codom(\N')} \ldotp y \neq x_i  ) ) )
+}
+{
+\Gamma,\,
+ p:\textsf{rcuItr}\, \rho \, \N([f\rightharpoonup o]) \, ,
+  o:\textsf{rcuItr}\, \rho' \, \N' \, , n:\textsf{rcuFresh} \, \N''
+  \vdash_{M} p.f = n \dashv
+  p:\textsf{rcuItr}\, \rho \, \N(f \rightharpoonup o \setminus n) \, ,
+  n:\textsf{rcuItr}\, \rho' \, \N'' \,
+  o:\unlinked\, ,  \Gamma
+}
+\and
+\inferrule[\scriptsize(T-Seq)]
+{
+\Gamma_1 \vdash \bar{s_1} \dashv_{M,R}   \Gamma_2  \qquad   \Gamma_2 \vdash_{M,R} \bar{s_2} \dashv   \Gamma_3
+}
+{
+\Gamma_1  \vdash_{M,R} \bar{s_1} \; ; \; \bar{s_2} \dashv  \Gamma_3
+}
+\and
+\inferrule[\scriptsize(T-Par)]
+{
+ \Gamma_1 \vdash_{R} \bar{s_1} \dashv   \Gamma'_1  \qquad   \Gamma_2 \vdash_{M,R} \bar{s_2} \dashv   \Gamma'_2
+}
+{
+ \Gamma_1, \; \Gamma_2  \vdash \bar{s_1} || \bar{s_2} \dashv  \Gamma'_1 \; , \Gamma'_2
+}
+\and
+\inferrule[\scriptsize(T-Skip)]
+{
+}
+{
+ \Gamma \vdash_{M,R} \textsf{skip} \dashv   \Gamma
+}
+\and
+\inferrule[\scriptsize(ToRCURead)]
+{
+\Gamma\, , y : \textsf{rcuItr} \vdash_R \bar{s} \dashv \Gamma'
+}
+{
+\Gamma \vdash \textsf{RCURead}\, x.f \textsf{ as }y\textsf{ in }\{\bar{s}\}
+}
+\and
+\inferrule[\scriptsize(ToRCUWrite)]
+{
+ \Gamma\, , y : \textsf{rcuItr} \vdash_M \bar{s} \dashv \Gamma' \;\; \ftype{}{\textsf{rcu}} \;\;  \textsf{NoFresh}(\Gamma') \;\; \textsf{NoUnlinked}(\Gamma')
+}
+{
+\Gamma \vdash \textsf{RCUWrite}\, x.f \textsf{ as }y\textsf{ in } \{ \bar{s} \}
+}
+\end{mathpar}
+\label{fig:ts}
+\caption{Type Rule for \textsf{RCU} Programming}
+\end{figure}
+%%%%%%%%%%%%%%%COND TYPE JUDGEMENTS ENDS%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{Subtyping}
+We know that there is non-determinisim in the number of the loop execution times. To capture this non-determinisim in the \textsf{rcuItr} types, we approximate over the number of loop executions and abstract the contribution of the loop execution to the \textsf{rcuItr} typed references' path components. The abstraction on the path  makes it possible to write loop invariants that grow paths by traversing the heap. Assertions of the \texttt{add} function in lines 19 and 20 in Listing \ref{fig:rculist} show the \textit{loop}'s effects on paths of iterator pointers used inside the loop, \texttt{current} and \texttt{parent}. The \textsf{rcuItr} reference \texttt{parent}'s assertion in the line 20 has $(Next)^{k}$ on the path component in addition to the path component of its assertion before the loop in the line 17. The $k$ in the $(Next)^{k}$ is our approximation to the number of loop executions with side condition $k>=0$. We define the path capturing this abstraction as $\cpath$. The \textsf{rcuItr} reference \texttt{current}'s assertion in the line 19 has $(Next)^{k}.Next$ on the path component in addition to the path component of its assertion before the loop in the line 16. The $Next$ portion of the $(Next)^{k}.Next$ distinguishes the relationship between \texttt{current} and \texttt{parent}. Under these mechanisms, we end up having the loop invariants in  assertions of the \texttt{current} and \texttt{parent} in lines 19 and 20. We apply reindexing(\textsc{T-ReIndex}) with respect to $k$ on the path components after loop execution to preserve loop invariant. The relation between the context to be reindexed(lines 23 and 24 of the \texttt{add} function in Figure \ref{fig:rculist}) and the context forming the loop invariant (lines 19 and 20 of the \texttt{add} function in Figure \ref{fig:rculist}) is captured by subtyping relation(\textsc{T-CSub2}).
+
+(\textit{\textbf{Approximation on Fields}}) - We sometimes need to overapproximate, both for control flow joins or later to throw away detailed information (like field map contents, or coercing to undef) in order to prune accessible aliases. Since our list based bag example's objects have single field($Next$), we take small code snippet from our \textsf{BST} type checking effort in Appendix \ref{appendix:bst_del} in which objects have two fields $Left$ and $Right$. Field mappings take field names to local variable names. They are added to the field map, $\N$, when the object's fields are read. In Listing \ref{lst:altfield}, we see that \texttt{parent} reads \texttt{current} to its different fields in different branches of the \textit{if-statement}. We see the join of the type assertions in lines 6 and 11 to the one in the line 12. We overapproximate on the fields $Left|Right$ (either $Left$ or $Right$) both in the path of the \texttt{current} and in the field mappings of \texttt{parent} and \texttt{current}. We capture this overapproximation through subtyping relations(\textsc{T-NSub1-5} and \textsc{T-PSub1-2}).
+
+(\textit{\textbf{Choosing Fields to Read}}) - Thus far, we have always been precise on the representation of the object fields-- mention just one field name -- both in the path component and field mappings. However, we cannot always be precise in mentioning the field names in the \textsf{rcuItr} type. The assertion in Listing \ref{lst:altfield} line 1 mentions field names in different way, $Left|Right$, than we have seen so far. Our intention to represent the object fields this way is to make \textsf{RCU} types expressible enough to assert "either Left or Right field''. The assertion for the \texttt{current} in Listing \ref{lst:altfield} line 1 tells that the heap node pointed by the \texttt{current} pointer is reached via either "Left or Right" field. From other perspective, the assertion for the \texttt{parent} in the same line tells that the heap node pointed by \texttt{current} can be reached from the heap node pointed by \texttt{parent} via "either the Left or the Right" field.
+However, we should also note that being precise in the field names is so crucial for mutation actions. This means we need to know which fields are used to replace/unlink a heap node. Then, what is the mechanism to become more/less precise in the fields used in both path and field mappings of the \textsf{rcuItr} type? In Listing \ref{lst:altfield}, we see a \textit{if-statement} with the condition $parent.Left == current$. This condition refines the assertions in Listing \ref{lst:altfield} line 1 to the one in the line 3 for the \textit{then} branch and to the one in the line 8 for the \textit{else} branch via making types more precise on the object fields.
+To capture the precision relation on object fields in the types, we use \textit{subtyping}.
+\begin{lstlisting}[caption={Choosing fields to read},label={lst:altfield}, numbers=left, numberstyle=\tiny\color{red}, numbersep=5pt]%, basicstyle=\scriptsize]
+
+$\assert{current:\mathsf{rcuItr}\; Left|Right \;\{\},\;\;parent:\mathsf{rcuItr}\;  \epsilon \;\{Left|Right\mapsto current\}}$
+if(parent.Left == current){
+  $\assert{current:\mathsf{rcuItr}\; Left \;\{\} ,\;\; parent:\mathsf{rcuItr}\;  \epsilon \;\{Left\mapsto current\}}$
+  parent = current;
+  current = parent.Left;
+  $\assert{current:\mathsf{rcuItr}\; Left.Left \;\{\}, \;\; parent:\mathsf{rcuItr}\;  Left \;\{Left\mapsto current\}}$
+}else{
+  $\assert{current:\mathsf{rcuItr}\; Right \;\{\}, \;\; parent:\mathsf{rcuItr}\;  \epsilon \;\{Right\mapsto current\}}$
+  parent = current;
+  current = parent.Right;
+  $\assert{current:\mathsf{rcuItr}\; Right.Right \;\{\}, \;\; parent:\mathsf{rcuItr}\;  Right \;\{Right\mapsto current\}}$
+}$\assert{current:\mathsf{rcuItr}\; Left|Right.Left|Right \;\{\}, \;\; parent:\mathsf{rcuItr}\;  Left|Right \;\{Left|Right\mapsto current\}}$
+\end{lstlisting}
+
+(\textit{\textbf{Points to}}\textsf{null}) - \todo{Motivate and explain}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Types in Action}
+\label{subsection:type-action}
+%%%%%%%%%%%%%%%%%%%%%%TYPE JUDGEMENTS ENDS%%%%%%%%%%%%%%%%%%%%%%%%%%%
+We have typing context $\Gamma$ of the form $x_1 : T_1, \ldots x_n : T_n$.
+
+The system has three forms of typing judgement
+\begin{itemize}
+\item $\Gamma \vdash C$: standard typing outside rcu regions
+\item $\Gamma \vdash_R C \dashv \Gamma'$: flow sensitive typing inside an rcu read region
+\item $\Gamma \vdash_M C \dashv \Gamma'$: flow sensitive typing inside an rcu write region
+\end{itemize}
+Below, we introduce our types through the list-based bag implementation in Figure \ref{fig:rculist} ~\cite{McKenney2015SomeEO}.  We aim to
+\begin{itemize}
+\item explain why we employ each of these components. How do they serve to certify memory safety in \textsf{RCU} programs? How do they represent the program?
+\item explain the \textit{flow-sensitive} nature of the type system. 
+\end{itemize}
+The code fragments below are annotated with assertions about type environments between each statement (in the style of a proof outline in Hoare Logic) to demonstrate informally how types change before and after various statements. All of the formal definitions for the type components and rules can be found in the Figures \ref{fig:ts} and \ref{fig:transitionsbetweendifferenttypesystems}.
+
+(\textit{\textbf{Reading a Global}} \textsf{RCU} \textit{\textbf{Root}}) - All \textsf{RCU} data structures have global unique roots so that we can attach an iterator pointer to the data structure to traverse it. The type \textsf{rcuRoot} represents a variable referencing a unique root. We read a \textsf{rcuRoot} typed pointer to a local variable. As we observe in the pre/post conditions of reading the global root in assertions of the \texttt{remove} function in lines 3 and 5, \texttt{root} pointer's type does not change. A local variable \texttt{current} is our new pointer to iterate over the data structure. The type of \texttt{current} changes from \textsf{undef} in line 3 to \textsf{rcuItr} in line 6 after reading the global root. The path of \texttt{current} pointer is empty, $\epsilon$, and there exists no field mappings in its field mapping set.  The type assertion for the \texttt{current} pointer in the post condition says that the heap node pointed by it is at the root -- its path is $\epsilon$ -- and there is no field mapping -- \{\}  -- which means there is no link to any other heap node from the node referenced by the \texttt{current}. So, at this point, there are not enough resources for actions such as \textit{unlinking}, \textit{reclaiming} and \textit{replacing} a node.
+
+(\textit{\textbf{Reading an Object Field and a Variable}}) - As expected, we explore the heap of the data structure via reading the objects' fields. For example, the assertion of the \textsf{remove} function in line 7 says that the path to reach the heap node pointed by \texttt{current} is $Next$. The assertion in line 8 for \texttt{parent} tells that there exists a link from the referent of \textsf{parent} to the referent of \textsf{current}. As we observe in the post condition in the lines 7 and 8, reading \texttt{current} to the \texttt{parent}'s $Next$ field in line 6 adds the field mapping entry $Next \mapsto \texttt{current}$ to the field mapping set of \texttt{parent} and extends the path of the \texttt{current} with $Next$.
+
+(\textit{\textbf{Mutation - Unlinking a Heap Node}}) - When we unlink a heap node, the type of the reference to it changes from \textsf{rcuItr} to \textsf{unlinked}. We observe this change for \texttt{current} reference in the assertions of the \texttt{remove} in lines 22 and 26.
+
+(\textit{\textbf{Mutation - Reclaiming a Heap Node after a Grace Period}}) - After the referent of \texttt{current} is unlinked, the crucial phase with respect to \textsf{RCU} semantic -- grace period for the reader threads -- starts. We start the grace period with \texttt{SyncStart} as we see in line 28 of the \texttt{remove} function. In real implementations, \texttt{SyncStart}-\texttt{SyncStop} are just one call to \texttt{synchronize\_rcu} to wait the grace period to end so there is no need for a change in the type of the \texttt{current}. The change from \textsf{unlinked} to \textsf{freeable} in the type of the \texttt{current} pointer indicates that grace period for the heap node referenced by the \texttt{current} has finished. The grace period ends once the \texttt{SyncStop} returns as seen in line 29. Once the grace period ends, It is semantically convenient to to reclaim the heap node referenced by the \texttt{current} via calling \texttt{Free} as seen in line 31. We indicate the end of grace period and being able to reclaim the heap node via the change in type of \texttt{current} reference from \textsf{unlinked} in line 26, to \textsf{freeable} in line 30.
+
+(\textit{\textbf{Creating a Fresh Node}}) - Some data structure implementations needs allocation and linking of a new heap node e.g. replacing a new node with an existing one in BST or adding a new node to a bag. In line 8 of the \texttt{add} method, we allocate a new node and set its fields in lines 10 and 29. The type of the variable \textsf{nw} in line 9 represents a freshly allocated heap node, whose fields are not set yet. A \textsf{rcuFresh} pointer can be used either in setting the fields of a fresh object or linking the fresh object. We will investigate  linking a fresh object in the next analysis but, first we anaylze how we set the fields of the fresh object. In  line 29, we set the fields of the object referenced by \texttt{nw} and we end up having the type in line 30 which seems similar to a type \textsf{rcuItr} with empty path. We will justify why we have separate type \textsf{rcuFresh} instead of typing the freshly allocated heap with \textsf{rcuItr} when we explain the type rules.
+\subsection{Type Rules}
+\label{subsection:type-rules}
+Our aim in this section is to investigate potential memory safety issues, discuss what memory inconsistencies they can cause and how type rules prevent it and justify why the flow of change in types serves to the correct \textsf{RCU} programming.
+
+(\textit{\textbf{Mutation - Unlinking a Heap Node}}) - Preserving invariants of a data structure against possible mutations under \textsf{RCU} semantics is challenging. Unlinking a heap node is one way of mutating the heap. To understand the importance of the locality on the effect of the mutation, we illustrate the setting of \texttt{remove} function in \ref{fig:rculist} with some additional fictional resources such as stack pointer aliases in Figures  \ref{fig:frameout} and \ref{fig:unlinkframeout}. The square nodes filled with $R$ -- a root node -- and $H$ -- a heap node -- are heap nodes. The hollow nodes are stack pointers to the square heap nodes. All resources in red form the memory foot print of unlinking. The hollow red nodes -- $pr$, $cr$ and $crl$ -- point to the red square heap nodes which are involved in unlinking of the heap node pointed by \texttt{cr}. We have $a_1$, $a_2$ and $a_3$ which are aliases with \texttt{parent}-$pr$, \texttt{current}-$cr$ and \texttt{currenL}-$crl$ respectively. We call them the \textit{path-aliases} as they share the same path from root to the node that they reference. The $n$ field depicts $Next$.
+ \begin{figure}[H]
+ \centering
+ \begin{subfigure}[b]{.4\linewidth}
+\centering
+ \begin{tikzpicture}[>=stealth',node distance=1.3cm,semithick,auto]
+ \tikzstyle{hollow node}=[circle,draw,inner sep=1]
+ \tikzstyle{sub node}=[triangle,draw,inner sep=1]
+ \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+ \tikzstyle{solids node}=[rectangle,draw=red,inner sep=1.5]
+\tikzstyle{null node}=[circle,draw=red,fill=red]
+ \tikzset{
+ 	red node/.style={rectangle,draw=black,fill=red,inner sep=1},
+ 	blue node/.style={rectangle,draw=black,inner sep=1},
+ 	reader node/.style={circle,draw=black,inner sep=1},
+        redreader node/.style={circle,draw=red,inner sep=1},
+        readerr node/.style={dashed,circle,draw=black,inner sep=1},
+ 	writer node/.style={circle,draw=black,inner sep=1}
+ }
+
+       \node[solid node] (R) {$R$};
+       \node[solid node] (1) [right of=R] {$H_0$};
+       \node[solids node] (2) [right of=1] {$H_1$};
+       \node[solids node] (3) [right of=2] {$H_2$};
+       \node[solids node] (4) [right of=3] {$H_3$};
+       \node[solid node] (5) [above  of=3] {$H_4$};
+       \node[solid node] (6) [above  of=4] {$H_5$};
+       
+       \node[redreader node] (r0) [below  of= 2]  {$pr$};
+       \node[redreader node] (r1) [below  of= 3]  {$cr$};
+       \node[redreader node] (r2)  [below  of= 4] {$crl$};
+
+       \node[readerr node] (r0a) [above  of= 1]  {$a_1$};
+       \node[readerr node] (r1a) [above   of= 2]  {$a_2$};
+       \node[readerr node] (r2a)  [below right of= 4] {$a_3$};
+
+       \node[reader node] (r1f) [above  of= 5]  {$a_4$};
+       \node[reader node] (r2f)  [above  of= 6] {$a_5$};
+
+     \path[->]  (R) edge node[below] {$n$} (1);
+     \path[->]  (1) edge node[below] {$n$} (2);
+     \path[draw=red,->]  (2) edge node[below] {$n$} (3);
+     \path[draw=red,->]  (3) edge node[below] {$n$} (4);
+     \path[dashed,->]  (5) edge node {$n$} (3);
+     \path[dashed,->]  (6) edge node {$n$} (4);
+
+     \path[draw=red,->]  (r0) edge node {} (2);
+     \path[draw=red,->]  (r1) edge node  {}  (3);
+     \path[draw=red,->]  (r2) edge  node  {}   (4);
+
+     \path[dashed,->]  (r0a) edge node {} (2);
+     \path[dashed,->]  (r1a) edge node  {}  (3);
+     \path[dashed,->]  (r2a) edge  node  {}   (4);
+
+     \path[->]  (r1f) edge node  {}  (5);
+     \path[->]  (r2f) edge  node  {}   (6);
+   
+%\path[dotted,->] (1) edge[bend left] node  {$f^{*}$} (5)
+ ;
+ 
+ \end{tikzpicture}
+ \caption{\textsf{Framing} before unlinking the heap node pointed by \texttt{current}-$cr$.}
+ \label{fig:frameout}
+ \end{subfigure}\quad
+\begin{subfigure}[b]{.4\linewidth}
+ \centering
+ \begin{tikzpicture}[>=stealth',node distance=1.3cm,semithick,auto]
+ \tikzstyle{hollow node}=[circle,draw,inner sep=1]
+ \tikzstyle{sub node}=[triangle,draw,inner sep=1]
+ \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+ \tikzstyle{solids node}=[rectangle,draw=red,inner sep=1.5]
+  \tikzstyle{solidss node}=[dashed,rectangle,draw=red,inner sep=1.5]
+ \tikzstyle{null node}=[circle,draw=red,fill=red]
+ \tikzset{
+ 	red node/.style={rectangle,draw=black,fill=red,inner sep=1.5},
+ 	blue node/.style={rectangle,draw=black,inner sep=1.5},
+ 	reader node/.style={circle,draw=black,inner sep=1},
+        redreader node/.style={circle,draw=red,inner sep=1},
+                rredreader node/.style={dashed,circle,draw=red,inner sep=1},
+        readerr node/.style={dashed,circle,draw=black,inner sep=1},
+ 	writer node/.style={circle,draw=black,inner sep=1}
+ }
+
+       \node[solid node] (R) {$R$};
+       \node[solid node] (1) [right of=R] {$H_0$};
+       \node[solids node] (2) [right of=1] {$H_1$};
+       \node[solidss node] (3) [right of=2] {$H_2$};
+       \node[solids node] (4) [right of=3] {$H_3$};
+       \node[solid node] (5) [above  of=3] {$H_4$};
+       \node[solid node] (6) [above  of=4] {$H_5$};
+
+       \node[redreader node] (r0) [below  of= 2]  {$pr$};
+       \node[rredreader node] (r1) [below  of= 3]  {$cr$};
+       \node[redreader node] (r2)  [below  of= 4] {$crl$};
+
+       \node[readerr node] (r0a) [above  of= 1]  {$a_1$};
+       \node[readerr node] (r1a) [above   of= 2]  {$a_2$};
+       \node[readerr node] (r2a)  [below right of= 4] {$a_3$};
+
+       \node[reader node] (r1f) [above  of= 5]  {$a_4$};
+       \node[reader node] (r2f)  [above  of= 6] {$a_5$};
+
+     \path[->]  (R) edge node[below] {$n$} (1);
+     \path[->]  (1) edge node[below] {$n$} (2);
+     \path[draw=red,->]  (2) edge [bend right] node[below left] {$n$} (4);
+     \path[dashed,draw=red,->]  (3) edge node[below] {$n$} (4);
+     \path[dashed,->]  (5) edge node {$n$} (3);
+     \path[dashed,->]  (6) edge node {$n$} (4);
+
+     \path[draw=red,->]  (r0) edge node {} (2);
+     \path[dashed,draw=red,->]  (r1) edge node  {}  (3);
+     \path[draw=red,->]  (r2) edge  node  {}   (4);
+
+     \path[dashed,->]  (r0a) edge node {} (2);
+     \path[dashed,->]  (r1a) edge node  {}  (3);
+     \path[dashed,->]  (r2a) edge  node  {}   (4);
+
+     \path[->]  (r1f) edge node  {}  (5);
+     \path[->]  (r2f) edge  node  {}   (6);
+
+ ;
+ \end{tikzpicture}
+
+ \caption{Safe unlinking of the heap node pointed by \texttt{current}-$cr$ via \textsf{Framing}}
+ \label{fig:unlinkframeout}
+ \end{subfigure}
+ \caption{Safe unlinking of the heap node}\vspace{-2mm}
+ \end{figure}
+The type rule for unlinking must assert the "proper linkage" in between the heap nodes involved in unlinking. We see the proper linkage relation between in Figure \ref{fig:frameout} as red $n$ links between $H_1$, $H_2$ and $H_3$ which are referenced by $pr$, $cr$ and $crl$ respectively. Our type rule for unlinking(\textsc{T-UnlinkH}) asserts that $x$ (\texttt{parent}), $y$ (\texttt{current}) and $z$ (\texttt{currentL}) pointers are linked with field mappings $\N([f_1\rightharpoonup z])$ ($Next \mapsto current$) of $x$, $\N'([f_2\rightharpoonup r])$ ($Next \mapsto currentL$) of $y$. In accordance with the field mappings, the type rule also asserts that $x$ has the path $\rho$ ($(Next)^{k}$), $y$ has the path $\rho.f_1$ ($(Next)^{k}.Next$) and $z$ has the path $\rho.f_1.f_2$ ($(Next)^{k}.Next.Next$).
+Being able to localize the effects of the mutation is important in a sense that it prevents unexpected side effects of the mutation. So, sharing through aliasing to the resources under mutation, e.g. aliasing to \texttt{parent}, \texttt{current} and \texttt{currentL}, needs to be handled carefully. Aliasing can occur via either through  object fields -- via field mappings -- or stack pointers -- via path components. We see path aliases, $a_1$, $a_2$ and $a_3$, illustrated with dashed nodes and arrows to the heap nodes in Figures \ref{fig:frameout} and \ref{fig:unlinkframeout}. They are depicted as dashed because they are not safe resources to use when unlinking so they are \textit{framed-out} by the type system via $\rho \neq \rho''' \land \rho' \neq \rho''' \land \rho'' \neq \rho'''$ which ensures the non-existence of the \textit{path-aliases} to any of $x$, $z$ and $r$ in the rule which corresponds to $pr$, $cr$ and $crl$ respectively. 
+Any heap node reached from root by following a path($\rho'''$) deeper than the path reaching to the last heap node($crl$) in the footprint cannot be pointed by the heap nodes($pr$, $cr$ and $crl$) in the footprint. We require this restriction to prevent inconsistency on the type of pointers having $\rho'''$ as path component($\forall_{\rho''''\neq \epsilon} \ldotp \rho''' = \rho''.\rho'''' \implies \lnot(\exists_{f'}\ldotp ( \N(f')=n \lor \N'(f')=n  \lor \N''(f')=n ))$). The reason for framing-out these dashed path aliases is obvious when we look at the changes from the Figure \ref{fig:frameout} to Figure \ref{fig:unlinkframeout}. For example, $a_1$ points to $H_1$ which has object field $Next$-$n$ pointing to $H_2$ which is also pointed by \texttt{current} as depicted in the Figure \ref{fig:frameout}. However, in Figure \ref{fig:unlinkframeout}, $n$ of $H_1$ is pointing to $H_3$ though $a_1$ still points to $H_1$. This change invalidates the field mapping $Next \mapsto current$ of $a_1$ in the \textsf{rcuItr} type. One another safety achieved with framing shows up in a setting where \texttt{current} and $a_2$ are aliases. In the Figure \ref{fig:frameout}, both \texttt{current} and $a_2$ are in the \textsf{rcuItr} type and point to $H_2$. After the unlinking action, the type of the \texttt{current} becomes \texttt{unlinked} although $a_2$ is still in the \texttt{rcuItr} type. Framing out $a_2$ prevents the inconsistency in its type under the unlinking operation. One interesting and not obvious inconsistency issue shows up due to the aliasing between $a_3$ and the \texttt{currentL}-$crl$. Before the unlinking happens, both \texttt{currentL} and $a_3$ have the same path components (assuming that it is $(Next)^{k}.Next.Next$ line 23 in \texttt{remove} function). After unlinking, the path of \texttt{currentL}-$crl$ gets shortened as the path to heap node it points, $H_3$, changes  to $(Next)^{k}.Next$ as we see in line 27 in \texttt{remove} function. However, the path component of $a_3$  would not change so the path component of $a_3$ in the \textsf{rcuItr} would become inconsistent with the actual path reaching to $H_3$.
+In addition to \textit{path-aliasing}, there can also be aliasing via \textit{field-mappings} which we call \textit{field-aliasing}. We see field alising examples in Figures \ref{fig:frameout} and \ref{fig:unlinkframeout}: $pr$ and $a_1$ are field aliases with $Next-n$ from $H_0$ points to $H_1$, $cr$ and $a_2$ are field aliases with $Next-n$ from $H_4$ points to $H_2$  and $crl$ and $a_3$ are field aliases with $Next-n$ from $H_5$ points to $H_3$. We do not discuss the problems that can occur due to the \textit{field-aliasing} as they are same with the ones due to \textit{path-aliasing}. What we focus on is how the type rule prevents \textit{field-aliases}. The type rule asserts $\lnot(\{m\} \cap \{z,r\} \neq \emptyset)$ to make sure that there exists no object field from any other context pointing either to the variable points the heap node that is mutation(unlinking) -- \texttt{current}-$cr$ -- or to the variable which points to the new $Next$ of the \texttt{parent} after unlinking -- \texttt{currentL}-$crl$. We should also note that it is expected to have object fields in other contexts to point to $pr$ as they are not in the effect zone of unlinking. For example, we see the object field $n$ points from $H_0$ to  $H_1$ in Figures \ref{fig:frameout} and \ref{fig:unlinkframeout}.
+We should note that the type system must also forbid sharing the variable names variables in different contexts $\textsf{FV}(\Gamma) \cap \{x,z,r\} = \emptyset$.\\
+Once we unlink the heap node, it cannot be accessed by the new coming reader threads the ones that are currently reading this node cannot access to the rest of the heap. We illustrate this with dashed red $cr$, $H_2$ and object fields in Figure \ref{fig:unlinkframeout}.
+Although it is not quite obvious in the list-based bag example which we have been focusing on so far, being aware of how much of the heap is under mutation is important, e.g. a whole subtree or a single node. Our type system ensures that there can be only just one heap node unlinked at a time by atomic field update action. To be able to ensure this, in addition to the proper linkage enforcement, the rule also asserts that all other object fields which are not under mutation must either not exists or point to \texttt{null} via $\forall_{f\in dom(\N')} \ldotp f\neq f_2 \implies \N'([f\rightharpoonup \textsf{null}]) \lor \N'_{f,\emptyset}$.
+It is much easier to understand why we need this assertion when we consider a data structure implementation whose objects needs more than one field. A binary search tree is a good candidate to understand this setting. To understand this setting more pictorially, we also elaborate Figures \ref{fig:frameout} and \ref{fig:unlinkframeout} with the red filled circle which depicts \texttt{null}, the $l$ field which depicts $Left$ and $r$ which depicts $Right$ field in the Figures \ref{fig:bframeout} and \ref{fig:bunlinkframeout}. We see in these Figures that to unlink the referent of \texttt{current} using $Left$ field of the \texttt{parent}. With respec to the type rule, the proper set of field mappings of the \texttt{current} include $Left \mapsto currentL$ and $Right \mapsto \texttt{null}$. We also see this pictorially in Figures as the object field $Right$-$r$ from the $H_2$ points to red circle, \texttt{null}. So it is obvious that if we had a subtree instead of a red filled circle -- \texttt{null} -- we would be leaking more than a single node by unlinking.
+ \begin{figure}[H]
+ \centering
+ \begin{subfigure}[b]{.4\linewidth}
+\centering
+ \begin{tikzpicture}[>=stealth',node distance=1.3cm,semithick,auto]
+ \tikzstyle{hollow node}=[circle,draw,inner sep=1]
+ \tikzstyle{sub node}=[triangle,draw,inner sep=1]
+ \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+ \tikzstyle{solids node}=[rectangle,draw=red,inner sep=1.5]
+\tikzstyle{null node}=[circle,draw=red,fill=red]
+ \tikzset{
+ 	red node/.style={rectangle,draw=black,fill=red,inner sep=1},
+ 	blue node/.style={rectangle,draw=black,inner sep=1},
+ 	reader node/.style={circle,draw=black,inner sep=1},
+        redreader node/.style={circle,draw=red,inner sep=1},
+        readerr node/.style={dashed,circle,draw=black,inner sep=1},
+ 	writer node/.style={circle,draw=black,inner sep=1}
+ }
+
+       \node[solid node] (R) {$R$};
+       \node[solid node] (1) [right of=R] {$H_0$};
+       \node[solids node] (2) [right of=1] {$H_1$};
+       \node[solids node] (3) [right of=2] {$H_2$};
+       \node[solids node] (4) [right of=3] {$H_3$};
+       \node[solid node] (5) [above  of=3] {$H_4$};
+       \node[null node] (nl) [above right of = 3]{};
+       \node[solid node] (6) [above  of=4] {$H_5$};
+       
+       \node[redreader node] (r0) [below  of= 2]  {$pr$};
+       \node[redreader node] (r1) [below  of= 3]  {$cr$};
+       \node[redreader node] (r2)  [below  of= 4] {$crl$};
+
+       \node[readerr node] (r0a) [above  of= 1]  {$a_1$};
+       \node[readerr node] (r1a) [above   of= 2]  {$a_2$};
+       \node[readerr node] (r2a)  [below right of= 4] {$a_3$};
+
+       \node[reader node] (r1f) [above  of= 5]  {$a_4$};
+       \node[reader node] (r2f)  [above  of= 6] {$a_5$};
+
+     \path[->]  (R) edge node[below] {$l$} (1);
+     \path[->]  (1) edge node[below] {$l$} (2);
+     \path[draw=red,->]  (2) edge node[below] {$l$} (3);
+     \path[draw=red,->]  (3) edge node[below] {$l$} (4);
+     \path[dashed,->]  (5) edge node {$l$} (3);
+     \path[dashed,->]  (6) edge node {$l$} (4);
+
+     \path[draw=red,->]  (r0) edge node {} (2);
+     \path[draw=red,->]  (r1) edge node  {}  (3);
+     \path[draw=red,->]  (r2) edge  node  {}   (4);
+
+     \path[dashed,->]  (r0a) edge node {} (2);
+     \path[dashed,->]  (r1a) edge node  {}  (3);
+     \path[dashed,->]  (r2a) edge  node  {}   (4);
+
+     \path[->]  (r1f) edge node  {}  (5);
+     \path[->]  (r2f) edge  node  {}   (6);
+    \path[draw=red,->] (3) edge node[below] {$r$} (nl);
+%\path[dotted,->] (1) edge[bend left] node  {$f^{*}$} (5)
+ ;
+ 
+ \end{tikzpicture}
+ \caption{\textsf{Framing} before unlinking the heap node pointed by \texttt{current}-$cr$.}
+ \label{fig:bframeout}
+ \end{subfigure}\quad
+\begin{subfigure}[b]{.4\linewidth}
+ \centering
+ \begin{tikzpicture}[>=stealth',node distance=1.3cm,semithick,auto]
+ \tikzstyle{hollow node}=[circle,draw,inner sep=1]
+ \tikzstyle{sub node}=[triangle,draw,inner sep=1]
+ \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+ \tikzstyle{solids node}=[rectangle,draw=red,inner sep=1.5]
+  \tikzstyle{solidss node}=[dashed,rectangle,draw=red,inner sep=1.5]
+ \tikzstyle{null node}=[circle,draw=red,fill=red]
+ \tikzset{
+ 	red node/.style={rectangle,draw=black,fill=red,inner sep=1.5},
+ 	blue node/.style={rectangle,draw=black,inner sep=1.5},
+ 	reader node/.style={circle,draw=black,inner sep=1},
+        redreader node/.style={circle,draw=red,inner sep=1},
+                rredreader node/.style={dashed,circle,draw=red,inner sep=1},
+        readerr node/.style={dashed,circle,draw=black,inner sep=1},
+ 	writer node/.style={circle,draw=black,inner sep=1}
+ }
+
+       \node[solid node] (R) {$R$};
+       \node[solid node] (1) [right of=R] {$H_0$};
+       \node[solids node] (2) [right of=1] {$H_1$};
+       \node[solidss node] (3) [right of=2] {$H_2$};
+       \node[solids node] (4) [right of=3] {$H_3$};
+       \node[solid node] (5) [above  of=3] {$H_4$};
+       \node[solid node] (6) [above  of=4] {$H_5$};
+       \node[null node] (nl) [above right of = 3]{};
+
+       \node[redreader node] (r0) [below  of= 2]  {$pr$};
+       \node[rredreader node] (r1) [below  of= 3]  {$cr$};
+       \node[redreader node] (r2)  [below  of= 4] {$crl$};
+
+       \node[readerr node] (r0a) [above  of= 1]  {$a_1$};
+       \node[readerr node] (r1a) [above   of= 2]  {$a_2$};
+       \node[readerr node] (r2a)  [below right of= 4] {$a_3$};
+
+       \node[reader node] (r1f) [above  of= 5]  {$a_4$};
+       \node[reader node] (r2f)  [above  of= 6] {$a_5$};
+
+     \path[->]  (R) edge node[below] {$l$} (1);
+     \path[->]  (1) edge node[below] {$l$} (2);
+     \path[draw=red,->]  (2) edge [bend right] node[below left] {$l$} (4);
+     \path[dashed,draw=red,->]  (3) edge node[below] {$l$} (4);
+     \path[dashed,->]  (5) edge node {$l$} (3);
+     \path[dashed,->]  (6) edge node {$l$} (4);
+
+     \path[draw=red,->]  (r0) edge node {} (2);
+     \path[dashed,draw=red,->]  (r1) edge node  {}  (3);
+     \path[draw=red,->]  (r2) edge  node  {}   (4);
+
+     \path[dashed,->]  (r0a) edge node {} (2);
+     \path[dashed,->]  (r1a) edge node  {}  (3);
+     \path[dashed,->]  (r2a) edge  node  {}   (4);
+
+     \path[->]  (r1f) edge node  {}  (5);
+     \path[->]  (r2f) edge  node  {}   (6);
+     \path[dashed,draw=red, ->] (3) edge node[below] {$r$} (nl);
+ ;
+ \end{tikzpicture}
+
+ \caption{Safe unlinking of the heap node pointed by \texttt{current}-$cr$ via \textsf{Framing}}
+ \label{fig:bunlinkframeout}
+ \end{subfigure}
+ \caption{Safe unlinking: Unlinking a single node.}\vspace{-2mm}
+ \end{figure}
+\textit{\textbf{Creating a Fresh Node}} - We defered answering the questions: "Why do we need a separate type \textsf{rcuFresh}?" and "What would happen if we also typed the freshly allocated node with \textsf{rcuItr}?". To understand and answer the questions easily, we illustrate the setting for creating a fresh \textsf{BST} heap node and linking it in Figures \label{fig:frframeout} and \label{fig:freshframeout} --whole typing can be found in Appendix \ref{appendix:bst_del}. The dashed green $H_f$ denotes the freshly allocated heap node pointed by green dashed pointer \texttt{currentF}-$cf$. The dashed green $Left-l$ is set to point to the referent of \texttt{currentL}-$cl$ and the green dashed $Right-r$ is set to point to the referent of the heap node pointed by \texttt{lmParent}-$lm$. What if all of these dashed green pointers and heap nodes were black -- Why don't we just use the type \textsf{rcuItr} for heap allocation? If all were black -- which means all the heap nodes are pointed by \textsf{rcuItr} typed variables -- then we would violate \textit{well-shapedness} related invariants of the data structure. In our \textsf{BST} example, we would invalidate invariants such as the single entry point to the data structure -- both \texttt{root} and \textsf{currentF} would be used as entry points -- and the single path to all heap nodes in the data structure -- both $H_2$ and $H_4$ have 2 paths reaching to them. 
+Note that we can neither read a \textsf{rcuFresh} variable nor read a field of the object it points. So we do not allow to create aliases to the fresh variable and the object it points. This restriction localizes our reasoning over the effects due to linking to just one fresh pointer and the object it points. Otherwise, we would need to bookkeep the aliases of the fresh pointer and the object fields of it because once we linked the fresh object to the data structure via using one of its fresh pointer, the fresh pointer gets the type \textsf{rcuItr} and it would require us to change the aliases' types from \textsf{rcuFresh} to \textsf{rcuItr} to prevent inconsistency in between the types of aliases.\begin{comment}
+ \begin{figure}[H]
+ \centering
+ \begin{tikzpicture}[>=stealth',node distance=1.3cm,semithick,auto]
+ \tikzstyle{hollow node}=[circle,draw,inner sep=1]
+ \tikzstyle{sub node}=[triangle,draw,inner sep=1]
+ \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+ \tikzstyle{solids node}=[rectangle,draw=red,inner sep=1.5]
+  \tikzstyle{solidss node}=[dashed,rectangle,draw=red,inner sep=1.5]
+  \tikzstyle{freshollow node}=[dashed,circle,draw=green,inner sep=1]
+
+ \tikzstyle{fresh node}=[dashed,rectangle,draw=green,inner sep=1.5]
+  
+ \tikzstyle{null node}=[circle,draw=red,fill=red]
+ \tikzset{
+ 	red node/.style={rectangle,draw=black,fill=red,inner sep=1.5},
+ 	blue node/.style={rectangle,draw=black,inner sep=1.5},
+ 	reader node/.style={circle,draw=black,inner sep=1},
+        redreader node/.style={circle,draw=red,inner sep=1},
+        readerr node/.style={dashed,circle,draw=black,inner sep=1},
+ 	writer node/.style={circle,draw=black,inner sep=1}
+ }
+
+       \node[solid node] (R) {$R$};
+       \node[solid node] (0) [right of=R] {$H_0$};
+       \node[solid node] (1) [right of=0] {$H_1$};
+       \node[fresh node] (2) [above of=1] {$H_f$};
+       \node[solid node] (3) [right of=1] {$H_2$};
+       \node[solid node] (4) [above  of=3] {$H_4$};
+       %\node[solid node] (6) [above  of=4] {$H_5$};
+       %\node[null node] (nl) [above of = 3]{};
+
+       \node[reader node] (r0) [below  of= 0]  {$pr$};
+       \node[reader node] (r1) [below  of= 1]  {$cr$};
+       \node[freshollow node] (f)  [left  of= 2] {$cf$};
+        \node[reader node] (crl)  [below right  of= 3] {$crl$};
+        \node[reader node] (lm) [right  of= 4]  {$lm$};
+
+
+      % \node[reader node] (r1f) [above  of= 5]  {$a_4$};
+      % \node[reader node] (r2f)  [above  of= 6] {$a_5$};
+
+     \path[->]  (R) edge node[below] {$l$} (0);
+     \path[->]  (0) edge node[below] {$l$} (1);
+     \path[->]  (crl) edge  node {} (3);
+     \path[dashed,draw=green,->]  (f) edge node {} (2);
+     \path[dashed,draw=green,->]  (2) edge node {$r$} (4);
+     \path[dashed,draw=green,->]  (2) edge node {$l$} (3);
+     \path[->]  (1) edge node {$r$} (4);
+     \path[->]  (1) edge node {$l$} (3);
+     
+     \path[->]  (r0) edge node {} (0);
+     \path[->]  (r1) edge node  {}  (1);
+     \path[->]  (lm) edge  node  {}   (4);
+
+     %\path[dashed,->]  (r1a) edge node {} (0);
+     %\path[dashed,->]  (r2a) edge node  {}  (1);
+     %\path[dashed,->]  (r2a) edge  node  {}   (4);
+
+ %    \path[->]  (r1f) edge node  {}  (5);
+     %\path[->]  (r2f) edge  node  {}   (6);
+     %\path[draw=red, ->] (2) edge node[below] {$r$} (nl);
+ ;
+ \end{tikzpicture}
+ \caption{Allocating a \textit{fresh} heap node pointed by \texttt{currentF}-$cf$}
+ \label{fig:alloc}\vspace{-2mm}
+ \end{figure}\end{comment}
+ 
+\textit{\textbf{Mutation - Linking a Fresh Node}} - Linking a fresh heap node reference by a \textsf{rcuFresh} pointer mutates the heap so it needs to be handled carefully. We do not discuss the problems that can come up due to both \textit{path-aliasing} and \textit{field-aliasing} as they are same with ones we discussed for unlinking. Similar to the transition from Figure \ref{fig:bframeout} to Figure \ref{fig:bunlinkframeout}, transition from the Figure \ref{fig:frframeout} to \ref{fig:freshframeout} illustrates the effects of the heap mutation (linking a fresh node). The reasoning we make for aliasing in unlinking is also valid in fresh node linking with one exception. To frame linking/replacing action, we do not use abstraction(havocing path) on path reaching to heap nodes deeper than the ones involved in memory footprint which we do for unlinking an heap node. Our type rule for ensuring safe linking(\textsc{T-LinkF})prevents path aliasing  precisely -- nonexistence of $a_0$ and $a_1$ -- via asserting $\lnot((\rho'' = \rho)\lor(\rho'' = \rho'))$ and field mapping aliasing -- nonexistence of any object field from any other context pointing to $cr$ ($o$ in the type rule) -- via asserting $(y\neq o)$.
+Among other memory safety issues related to the fresh heap node linking, there is one that we want to raise attention to. When we look at Figure \ref{fig:frframeout}, we see that same object fields from $H_1$ and $H_f$, which are pointed by \texttt{current} ($cr$) and \texttt{currentF} ($cf$) respectively, point to exactly the same heap nodes $H_2$ and $H_4$, which are pointed by $crl$ and $lm$ respectively. This discharges the assertion $\N' = \N''$ in the type rule. So, why do we need this assertion? (Why do we need to capture all field mappings of the node-to-be-unlinked/replaced by the fresh one's field mappings?) In fact, if we did not capture all the field mapping of the node to be unlinked/replaced, we would leak more heap nodes in addition to the one we intend to e.g. the heap node pointed by $cl$. However, our type system allows mutation of a single heap node at a time. We see, in Figure \ref{fig:freshframeout}, that the only replaced/unlinked heap node is the one pointed by $cr$. We should also note that replacement does not change the reachability of any nodes except the one replaced. This leads to an interesting observation: there is not problem in having many pointers to the heap nodes $H_2$ and $H_4$ as pointers to them do not have change in their path components -- e.g. $crl$ and $lm$ do not have change in their path components. 
+ \begin{figure}[H]
+ \centering
+\begin{subfigure}[b]{.4\linewidth}
+ \centering
+ \begin{tikzpicture}[>=stealth',node distance=1.3cm,semithick,auto]
+ \tikzstyle{hollow node}=[circle,draw,inner sep=1]
+ \tikzstyle{sub node}=[triangle,draw,inner sep=1]
+ \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+ \tikzstyle{solids node}=[rectangle,draw=red,inner sep=1.5]
+  \tikzstyle{solidss node}=[dashed,rectangle,draw=red,inner sep=1.5]
+  \tikzstyle{freshollow node}=[dashed,circle,draw=green,inner sep=1]
+
+ \tikzstyle{fresh node}=[dashed,rectangle,draw=green,inner sep=1.5]
+  
+ \tikzstyle{null node}=[circle,draw=red,fill=red]
+ \tikzset{
+ 	red node/.style={rectangle,draw=black,fill=red,inner sep=1.5},
+ 	blue node/.style={rectangle,draw=black,inner sep=1.5},
+ 	reader node/.style={circle,draw=black,inner sep=1},
+        redreader node/.style={circle,draw=red,inner sep=1},
+        readerr node/.style={dashed,circle,draw=black,inner sep=1},
+ 	writer node/.style={circle,draw=black,inner sep=1}
+ }
+
+       \node[solid node] (R) {$R$};
+       \node[solids node] (0) [right of=R] {$H_0$};
+       \node[solids node] (1) [right of=0] {$H_1$};
+       \node[fresh node] (2) [above of=1] {$H_f$};
+       \node[solid node] (3) [right of=1] {$H_2$};
+       \node[solid node] (4) [above  of=3] {$H_4$};
+              \node[solid node] (5) [above left of=0] {$H_5$};
+       \node[solid node] (6) [above left of = 1]{$H_6$};
+      
+
+       \node[redreader node] (r0) [below  of= 0]  {$pr$};
+       \node[redreader node] (r1) [below  of= 1]  {$cr$};
+       \node[freshollow node] (f)  [above  of= 2] {$cf$};
+        \node[reader node] (crl)  [right  of= 3] {$crl$};
+       \node[reader node] (lm) [right  of= 4]  {$lm$};
+       \node[readerr node] (r1a) [below   of= R]  {$a_0$};
+       \node[readerr node] (r2a)  [below of= 3] {$a_1$};
+
+       \node[reader node] (r1f) [above  of= 5]  {$a_5$};
+       \node[reader node] (r2f)  [above  of= 6] {$a_6$};
+
+     \path[->]  (R) edge node[below] {$l$} (0);
+     \path[draw=red,->]  (0) edge node[below] {$l$} (1);
+     \path[->]  (crl) edge  node {} (3);
+     \path[dashed,draw=green,->]  (f) edge node {} (2);
+     \path[dashed,draw=green,->]  (2) edge node {$r$} (4);
+     \path[dashed,draw=green,->]  (2) edge node {$l$} (3);
+
+
+     \path[dashed,->]  (5) edge node {$l$} (0);
+     \path[dashed,->]  (6) edge node {$l$} (1);
+
+
+     \path[draw=red,->]  (1) edge node {$r$} (4);
+     \path[draw=red,->]  (1) edge node {$l$} (3);
+     
+     \path[draw=red,->]  (r0) edge node {} (0);
+     \path[draw=red,->]  (r1) edge node  {}  (1);
+     \path[->]  (lm) edge  node  {}   (4);
+
+     \path[dashed,->]  (r1a) edge node {} (0);
+     \path[dashed,->]  (r2a) edge node  {}  (1);
+     
+     \path[->]  (r1f) edge  node  {}   (5);
+     \path[->]  (r2f) edge  node  {}   (6);
+
+
+     %\path[draw=red, ->] (2) edge node[below] {$r$} (nl);
+ ;
+ \end{tikzpicture}
+
+ \caption{Safe linking of the \textit{fresh} heap node pointed by \texttt{currentF}-$cf$}
+ \label{fig:frframeout}
+ \end{subfigure} \quad
+ \begin{subfigure}[b]{.4\linewidth}
+ \centering
+ \begin{tikzpicture}[>=stealth',node distance=1.3cm,semithick,auto]
+ \tikzstyle{hollow node}=[circle,draw,inner sep=1]
+ \tikzstyle{sub node}=[triangle,draw,inner sep=1]
+ \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+ \tikzstyle{solids node}=[rectangle,draw=red,inner sep=1.5]
+  \tikzstyle{solidss node}=[dashed,rectangle,draw=red,inner sep=1.5]
+  \tikzstyle{freshollow node}=[dashed,circle,draw=green,inner sep=1]
+
+ \tikzstyle{fresh node}=[dashed,rectangle,draw=green,inner sep=1.5]
+  
+ \tikzstyle{null node}=[circle,draw=red,fill=red]
+ \tikzset{
+ 	red node/.style={rectangle,draw=black,fill=red,inner sep=1.5},
+ 	blue node/.style={rectangle,draw=black,inner sep=1.5},
+ 	reader node/.style={circle,draw=black,inner sep=1},
+        redreader node/.style={circle,draw=red,inner sep=1},
+        readerr node/.style={dashed,circle,draw=black,inner sep=1},
+ 	writer node/.style={circle,draw=black,inner sep=1},
+               rredreader node/.style={dashed,circle,draw=red,inner sep=1}
+ }
+
+       \node[solid node] (R) {$R$};
+       \node[solids node] (0) [right of=R] {$H_0$};
+       \node[solidss node] (1) [right of=0] {$H_1$};
+       \node[solid node] (2) [above of=1] {$H_f$};
+       \node[solid node] (3) [right of=1] {$H_2$};
+       \node[solid node] (4) [above  of=3] {$H_4$};
+       \node[solid node] (5) [above of=R] {$H_5$};
+       \node[solid node] (6) [above of = 0]{$H_6$};
+
+       \node[redreader node] (r0) [below  of= 0]  {$pr$};
+       \node[rredreader node] (r1) [below  of= 1]  {$cr$};
+       \node[reader node] (f)  [above  of= 2] {$cf$};
+        \node[reader node] (crl)  [ right  of= 3] {$crl$};
+       \node[reader node] (lm) [right  of= 4]  {$lm$};
+       \node[readerr node] (r1a) [below   of= R]  {$a_0$};
+       \node[readerr node] (r2a)  [below of= 3] {$a_1$};
+
+      \node[reader node] (r1f) [above  of= 5]  {$a_5$};
+      \node[reader node] (r2f)  [above  of= 6] {$a_6$};
+
+     \path[->]  (R) edge node[below] {$l$} (0);
+    % \path[draw=red,->]  (0) edge node[below] {$l$} (1);
+     \path[->]  (crl) edge  node {} (3);
+     \path[->]  (f) edge node {} (2);
+     \path[->]  (2) edge node {$r$} (4);
+     \path[->]  (2) edge node {$l$} (3);
+     \path[dashed,draw=red,->]  (1) edge node {$r$} (4);
+     \path[dashed,draw=red,->]  (1) edge node {$l$} (3);
+
+
+
+
+     \path[draw=red,->]  (r0) edge node {} (0);
+     \path[dashed,draw=red,->]  (r1) edge node  {}  (1);
+     \path[->]  (lm) edge  node  {}   (4);
+
+     \path[dashed,->]  (r1a) edge node {} (0);
+     \path[dashed,->]  (r2a) edge node  {}  (1);
+          \path[dashed,->]  (5) edge node {$l$} (0);
+     \path[dashed,->]  (6) edge node {$l$} (1);
+
+
+     %\path[dashed,->]  (r2a) edge  node  {}   (4);
+
+     \path[draw=red,->]  (0) edge node  {$l$}  (2);
+
+
+     \path[->]  (r1f) edge  node  {}   (5);
+     \path[->]  (r2f) edge  node  {}   (6);
+
+
+ ;
+ \end{tikzpicture}
+
+ \caption{Safe replacement of the heap node pointed by \texttt{current}-$cr$ by the \textit{fresh} heap node pointed by \texttt{currentF}-$cf$}
+ \label{fig:freshframeout}
+ \end{subfigure}
+ \label{fig:alloc}\vspace{-2mm}
+ \end{figure}
+\textit{\textbf{Mutation - Reclaiming a Heap Node after a Grace Period}} - The reason why we have type \textsf{freeable} after the grace period is to prevent the ability to call \texttt{Free} before the grace period ends. This means that we cannot give ownership of a heap node to heap right after unlinking. Our type system ensures this via enforcing that we call \texttt{Free} only with a pointer in type \textsf{freeable}.
+
+To get \textsf{freeable} pointer, first we wait the grace period \texttt{SyncStart};\texttt{SyncStop} for unlinked heap nodes to end. The \texttt{SyncStart} does not have any effect on type of the variables.
+
+(\textit{\textbf{Referencing inside \textsf{RCU} Blocks} } ) - There are two rules shown in Figure \ref{fig:ts} for moving between the different type systems: one for entering a write region, and one for a read region. The type rules for outside an RCU region are otherwise straightforward and restrict $\Gamma$ to only mention variables of type $\textsf{normal}$; that is, we cannot read or write to \textsf{RCU} structures.

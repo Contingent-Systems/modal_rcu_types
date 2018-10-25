@@ -1,0 +1,526 @@
+\section{Background \& Motivation}
+In this section, we recall the general concepts of read-copy-update concurrency.
+We use the RCU linked-list-based set~\cite{McKenney2015SomeEO} from Figure \ref{fig:rculist} as a running example.  It includes annotations for our type system, which will be explained in Section \ref{subsection:type-action}.
+%One of the most well-known and frequently used linked data structures following RCU programming pattern, singly acyclic linked list. Table ~\ref{tab:rculist} shows how we implement a RCU linked list with our types. We are going to explain the RCU setting with running code in Table ~\ref{tab:rculist} along with pictorial explanations to crucial interleavings in following subsections.
+\begin{comment}
+  \begin{lstlisting}[basicstyle=\tiny]
+    member & 
+int member(int toRead){
+ReadBegin;
+int result;
+BagNode<rcuItr> parent;
+parent = head;
+BagNode<rcuItr> current;
+current = parent.Next;
+while(current.data != toRead){
+  parent = current;
+  current= parent.Next;
+}
+result = current.data;
+ReadEnd;
+return result;
+}
+\end{lstlisting}&
+  
+  \end{comment}
+\begin{figure*}[t!]
+\begin{tabular}{p{0.6\textwidth}p{0.6\textwidth}}
+\begin{lstlisting}[basicstyle=\scriptsize\ttfamily]
+struct BagNode{
+  int data;
+  BagNode<rcu> Next;
+}
+BagNode<rcuRoot> head;
+void add(int toAdd){
+WriteBegin;
+BagNode nw = new;
+$\assert{nw:rcuFresh \; \{\}}$
+nw.data = toAdd;
+$\assert{head:\mathsf{rcuRoot},parent:\mathsf{undef}, current:\mathsf{undef}}$
+BagNode<rcuItr> parent,current = head;
+$\assert{head:\mathsf{rcuRoot},parent:\mathsf{rcuItr}\;\epsilon \; \{\},current:\mathsf{rcuItr} \;\epsilon \; \{\}}$
+$\assert{current:\mathsf{rcuItr} \;\epsilon \; \{\}}$
+current = parent.Next;
+$\assert{current:\mathsf{rcuItr}\; Next \;\{\}}$
+$\assert{parent:\mathsf{rcuItr}\; \epsilon \;\{Next\mapsto current\}}$
+while(current.Next != null){
+  $\assert{current:\mathsf{rcuItr} (Next)^{k}.Next \{\}}$
+  $\assert{parent:\mathsf{rcuItr}  (Next)^{k} \{Next \mapsto current\}}$
+  parent = current;
+  current = parent.Next;
+  $\assert{current:\mathsf{rcuItr} (Next)^{k}.Next.Next \{\}}$
+  $\assert{parent:\mathsf{rcuItr}(Next)^{k}.Next \{Next \mapsto current\}}$
+}
+$\assert{nw:\mathsf{rcuFresh} \; \{\}}$
+$\assert{current:\mathsf{rcuItr}\; (Next)^{k}.Next \;\{Next\mapsto null\}}$
+$\assert{ parent:\mathsf{rcuItr}\;  (Next)^{k} \;\{Next \mapsto current\}}$
+nw.Next= null;
+$\assert{nw:\mathsf{rcuFresh} \; \{Next\mapsto null\}}$
+$\assert{current:\mathsf{rcuItr}\; (Next)^{k}.Next \;\{Next \mapsto null\} }$
+current.Next=nw;
+$\assert{nw:\mathsf{rcuItr} \; (Next)^{k}.Next.Next \; \{Next\mapsto null\}}$
+$\assert{current:\mathsf{rcuItr}\; (Next)^{k}.Next \;\{Next \mapsto nw\} }$
+WriteEnd;
+}
+\end{lstlisting}&
+\begin{lstlisting}[basicstyle=\scriptsize\ttfamily]
+void remove(int toDel){
+WriteBegin;
+$\assert{head:\mathsf{rcuRoot},parent:\mathsf{undef}, current:\mathsf{undef}}$
+BagNode<rcuItr> parent,current = head;
+$\assert{head:\mathsf{rcuRoot},parent:\mathsf{rcuItr}\;\epsilon \; \{\},current:\mathsf{rcuItr} \;\epsilon \; \{\}}$
+current = parent.Next;
+$\assert{current:\mathsf{rcuItr}\; Next \;\{\}}$
+$\assert{parent:\mathsf{rcuItr}\; \epsilon \;\{Next\mapsto current\}}$
+while(current.Next != null&&current.data != toDel)
+{
+  $\assert{current:\mathsf{rcuItr}\; (Next)^{k}.Next \;\{\}}$
+  $\assert{parent:\mathsf{rcuItr}\;  (Next)^{k} \;\{Next \mapsto current\}}$
+  parent = current;
+  current = parent.Next;
+  $\assert{current:\mathsf{rcuItr}\; (Next)^{k}.Next.Next \;\{\}}$
+  $\assert{parent:\mathsf{rcuItr}  (Next)^{k}.Next \{Next \mapsto current\}}$
+}
+$\assert{nw:rcuFresh \; \{\}}$
+$\assert{parent:\mathsf{rcuItr}\;  (Next)^{k} \;\{Next \mapsto current\}}$
+$\assert{current:\mathsf{rcuItr}\; (Next)^{k}.Next \;\{\}}$
+BagNode<rcuItr> currentL = current.Next;
+$\assert{current:\mathsf{rcuItr}\; (Next)^{k}.Next \;\{Next \mapsto currentL\}}$
+$\assert{currentL:\mathsf{rcuItr}\; (Next)^{k}.Next.Next \;\{\}}$
+prev.Next = currentL;
+$\assert{parent:\mathsf{rcuItr}\;  (Next)^{k} \;\{Next \mapsto currentL\}}$
+$\assert{current:\mathsf{unlinked}}$
+$\assert{currentL:\mathsf{rcuItr}\; (Next)^{k}.Next \;\{\}}$
+SyncStart;
+SyncStop;
+$\assert{current:\mathsf{freeable}}$
+Free(current);
+$\assert{current:\mathsf{undef}}$
+WriteEnd;
+}
+\end{lstlisting}
+%\end{minipage}
+%\end{tabular*}
+\end{tabular}
+\vspace{-2em}
+\caption{Read-Copy-Update Client: Linked-List based Bag Implementation.}
+\label{fig:rculist}
+\end{figure*}
+
+As with concrete RCU implementations, we assume threads operating on a structure are either performing read-only traversals of the structure --- \emph{reader threads} --- or are performing an update --- \emph{writer threads} --- similar to the use of many-reader single-writer reader-writer locks.\footnote{RCU implementation supporting multiple concurrent writers exist~\cite{Arbel:2014:CUR:2611462.2611471}, but are the minority.}  It differs, however, in that readers may execute concurrently with the (single) writer.
+
+This distinction, and some runtime bookkeeping associated with the read- and write-side critical sections, allow this model to determine at modest cost when a node unlinked by the writer can safely be reclaimed.
+
+Figure \ref{fig:rculist} gives the code for adding/deleting nodes to a set(whole type cheking including membership queries for bag can be found in \ref{appendix:bag_paul}). Algorithmically, this code is nearly the same as any sequential implementation. There are only two differences.
+First, the read-side critical section in \texttt{member} is indicated by the use of \lstinline|ReadBegin| and \lstinline|ReadEnd|; the write-side critical section is between \lstinline|WriteBegin| and \lstinline|WriteEnd|.
+Second, rather than immediately reclaiming the memory for the unlinked node, \texttt{remove} calls \lstinline|SyncStart| to begin a \emph{grace period} --- a wait for reader threads that may still hold references to unlinked nodes to finish their critical sections.
+ %with saving the readers on the detached node as bounding readers. 
+ \lstinline|SyncStop| blocks execution of the reader thread until these readers exit their read critical section (via \lstinline|ReadEnd|). These are the essential primitives for the implementation of an RCU data structure.
+
+These six primitives together track a critical piece of information: which reader threads' critical sections overlapped the writer's.
+%When a reader thread executes \lstinline|ReadBegin|, some bookkeping data structures are updated to indicate that thread is an active reader; \lstinline|ReadEnd| atomically revokes that status.
+Implementing them efficiently is challenging~\cite{urcu_ieee}, but possible.
+The Linux kernel for example finds ways to reuse existing task switch mechanisms for this tracking, so readers incur no additional overhead.
+The reader primitives are semantically straightforward --- they atomically record the start, or completion, of a read-side critical section for that thread.
+
+The more interesting primitives are the write-side primitives and memory reclamation.
+\lstinline|WriteBegin| performs a (semantically) standard mutual exclusion with regard to other writers, so only one writer thread may modifying the structure \emph{or the writer structures used for grace periods}. % It also initializes a
+%\texttt{Free}, as the name suggests, reclaims the memory pointed by its argument when active readers are done with the memory that is to be reclaimed.
+
+\lstinline|SyncStart| and \lstinline|SyncStop| implement \emph{grace periods}~\cite{grc}: a mechanism to wait for readers to finish with any nodes the writer may have unlinked.  A grace period begins when a writer requests one, and finishes when all reader threads active \emph{at the start of the grace period} have finished their current critical section.
+Any nodes a writer unlinks before a grace period are physically unlinked, but not logically unlinked until after one grace period. \iso{An astute reader might already realize that our usage of logical/physical unlinking is different than the one used in data-structures literatur where typically a \textit{logical deletion}(marking/unlinking) is followed by a \textit{physical deletion}(free).}
+Because all threads are forbidden from holding an interior reference into the data structure after leaving their critical sections, waiting for active readers to finish their critical sections ensures they are no longer using any nodes the writer unlinked prior to the grace period.
+This makes actually freeing an unlinked node after a grace period safe.
+%a period of time where the writer waits for all readers active at the that after a node is logically removed from a data structure, the freeing thread must wait for some time to ensure threads that may have read the pointer before it was unlinked are done using the reference.  Typically, the notion of a reader thread being ``done'' with a reference is tied to its read-side critical section: reader threads are forbidden to use interior pointers to inside an RCU structure after leaving their critical section --- even if the use would occur in a subsequent critical section, since the referenced memory may have been reclaimed.
+
+\lstinline|SyncStart| conceptually takes a snapshot of all readers active when it is run.
+\lstinline|SyncStop| then blocks until all those threads in the snapshot have finished at least one critical section.
+%is a blocking operation.  Intuitively, it waits for all readers whose critical sections overlapped with \lstinline|SyncStart-SyncStop| calls to finish their critical section.  Once those threads have finished, no other threads retain usable references to unlinked nodes, and the writer thread may continue.
+Note that \lstinline|SyncStop| does not wait for \emph{all} readers to finish, and does not wait for all overlapping readers to simultaneously be out of critical sections.  If two reader threads $A$ and $B$ overlap some \texttt{SyncStart-SyncStop}'s critical section, it is possible that $A$ may exit and re-enter a read-side critical section before $B$ exits, and vice versa.  Implementations must distinguish subsequent read-side critical sections from earlier ones that overlapped the writer's initial request to wait: since \lstinline|SyncStart| is used \emph{after} a node is physically removed from the data structure and readers may not retain RCU references across critical sections, $A$ re-entering a fresh read-side critical section will not permit it to re-observe the node to be freed.
+
+To date, every description of RCU semantics, most centered around the notion of a grace period, has been given algorithmically, as a specific (efficient) implementation.  While the implementation aspects are essential to real use, the lack of an abstract characterization makes judging the correctness of these implementations --- or clients --- difficult in general. In Section \ref{sec:semantics} we give formal \emph{abstract} semantics for RCU implementations --- horrifically inefficient if implemented directly, but correct from a memory-safety and programming model perspective, and not tied to the low-level RCU implementation details.
+%We handle the management of grace periods (and in particular, distinguishing multiple overlapping read-side critical sections by the same thread) in intuitive ways, which would be terribly inefficient to implement directly, but express the intended semantics of more sophisticated implementations.
+%For these semantics to correctly manage memory reclamation in an RCU data structure implementation, a number of assumptions must be satisfied:
+To use these semantics or a concrete implementation correctly, client code must ensure:
+\begin{itemize}
+\item Reader threads never modify the structure
+\item No thread holds an interior pointer into the RCU structure across critial sections
+\item Unlinked nodes are always freed by the unlinking thread \emph{after} the unlinking, \emph{after} a grace period, and \emph{inside} the critical section
+\item Nodes are freed at most once
+\end{itemize}
+In practice, RCU data structures typically ensure additional invariants to simplify the above:
+\begin{itemize}
+\item The data structure is always an acyclic tree
+\item A writer thread unlinks or replaces only one node at a time. 
+\end{itemize}
+% \subsection{Relation to Concrete Implementations}
+% Operations on RCU data structure have two kinds of computational blocks, \textsf{Read Block} and \textsf{Write Block}. \textsf{Read Block} is the block where read-only travelsals to do queries on \textsf{RCU} data structures occur. \textsf{Mutator Block} is the block where mutation on \textsf{RCU} data structures occur.
+% \subsubsection{Mutator Block in RCU}
+% Mostly, data structures employ RCU in performance critical systems such as operating system kernels. This generally requires implementing these data structures with programming languages enabling you to explicity manipulate, reclaim/allocate, heap. The most crucial point in  RCU or similar programming patterns is delaying the reclaimation of unlinked memory regions in the heap. We call this delay in memory reclamation as relaxed memory reclamation throughout this paper.
+
+% Writer threads access to \textsf{RCU} data structure must preserve mutually exclusiveness. A writer thread needs to grab a global lock before running \textsf{WriteBlock}. However, there exists no explicit synchronisation between readers and the writer thread. Writer thread may access to the node that is concurrently being accessed by reader threads.
+
+% \textsf{WriteBlock} starts with traversing the list to find the node on the heap to update. Traversing \textsf{RCU} data structure starts with reading a shared global pointer pointing to the unique root of the data structure,$R$,into a local \textsf{RCU} pointers. In the figure \ref{fig:rculist}, we see two \textsf{RCU} pointers used to show the consecutive nodes in heap-(\emph{remove:3-4})-.
+
+% Mutation, detaching a node from the heap-(\emph{remove:16})-is followed by  \textsf{SyncStart}-(\emph{remove:17})-in \textsf{Write Block}. \textsf{SyncStart} starts \emph{grace-period} which basically saves all active reading threads as \emph{bouinding threads}. Writer thread needs to wait bounding thread to continue its execution possibly for reclaiming the detached node. \textsf{SyncStop} is the construct to wait all bounding threads to exit \textsf{Read Block}-(\emph{remove:18}). Exiting the \textsf{WriteBlock}-(\emph{remove:20})-\emph{add:18})-is releasing the global lock of \textsf{RCU} data structure.
+% \subsubsection{Read Block in RCU}
+% \textsf{Read Block} primitives are strightforward. \textsf{Read Block} starts with entering to read critical section with \textsf{ReadBegin}-(\emph{member:2})-which adds the reader thread's identifier to the read set. In \textsf{Read Block} and also \textsf{Write Block}, \textsf{RCU} data strcuture can only be traversed with \textsf{RCU} typed iterators. Exiting \textsf{Read Block}-(\emph{member:12})-means removing the exiting reader thread's identifier from the read set. If the exiting thread also exists in bounding thread set, then it is also removed from this set.
+% \subsubsection{Informal Reasoning on Mutating and Reading Together}
+% To understand the working mechanics and correct usage of RCU more clearly, we present a \emph{bag} example which is a client of a singly linked list in \textsf{RCU} setting \todo{ref Paul}.
+
+% We show the most critical case for correct usage of RCU pattern in terms of memory safety. Suppose that there are two reader threads, $\textsf{tid}_{r1}$ and $\textsf{tid}_{r2}$. reading the shared global head pointer of the linked list pointing to the unique root of the data structure,$R$,into their local pointers,$cr$, shown in Figure ~\ref{fig:readlist}.
+% \begin{figure}[H]
+% \centering
+% \begin{tikzpicture}[>=stealth',node distance=1.5cm,semithick,auto]
+% \tikzstyle{hollow node}=[circle,draw,inner sep=1]
+% \tikzstyle{sub node}=[triangle,draw,inner sep=1]
+% \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+
+% \tikzset{
+% 	red node/.style={rectangle,draw=black,fill=black,inner sep=1.5},
+% 	blue node/.style={rectangle,draw=black,inner sep=1.5},
+% 	reader node/.style={circle,draw=black,inner sep=1},
+% 	writer node/.style={circle,draw=black,inner sep=1}
+% }
+
+%     \node[solid node] (R) {$R$};
+%     \node[hollow node] (5) [right of=R] {$5$};
+%    \node[hollow node] (8) [right of=5] {$8$};
+%     \node[hollow node] (2) [right of=8] {$2$};
+%     \node[hollow node] (1) [right of=2] {$1$};
+%     \node[hollow node] (11) [right of=1] {$11$};
+%     %\node[hollow node] (4) [right of=11] {$4$};
+%   \node[reader node] (r1) [above right of= 1]  {$cr$};
+%     \node[reader node] (r2)  [above left of= 1] {$cr$};
+
+%     \path[->]   (R) edge node {} (5)
+%                 (5) edge node {} (8)
+% 		(8) edge node {} (2)
+% 		(2) edge node {} (1)
+% 		(1) edge node {} (11)
+% 	%	(11) edge node {} (4)
+% 		(r1) edge node {$\textsf{tid}_{r1}$} (1)
+% 		(r2) edge node {$\textsf{tid}_{r2}$} (1)
+% ;
+% \end{tikzpicture}
+% \caption{$R$ is unique root of the \textsf{RCU} singly linked list. Two concurrent reader threads with $\textsf{tid}_{r1}$ and $\textsf{tid}_{r2}$ ids are on the node with value 1. These threads have their own iterators $\textsf{cr}$ on linked list. }
+% \label{fig:readlist}
+% \end{figure}
+% The mutator thread acquires a global lock-(\emph{remove:2})-and reads the shared pointer to the head of the list to a local \textsf{RCU} pointer-(\emph{remove:5})-for traversing/iterating over the linked list. Inside \textsf{Write Block}, there exists two \textsf{RCU} pointers, $prev$ and $itr$, to point two consecutive heap locations. These pointers are used for the updating the heap-(\emph{remove:16},\emph{add:17})-.   
+
+% For mutation purpose, \emph{detaching a node}, in our bag example, two \textsf{RCU} pointers are used to point consecutive heap locations in the heap as shown pictorially in Figure ~\ref{fig:mutatelist}.
+% \begin{figure}[H]
+% \centering
+% \begin{tikzpicture}[>=stealth',node distance=1.5cm,semithick,auto]
+% \tikzstyle{hollow node}=[circle,draw,inner sep=1]
+% \tikzstyle{sub node}=[triangle,draw,inner sep=1]
+% \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+
+% \tikzset{
+% 	red node/.style={rectangle,draw=black,fill=red,inner sep=1.5},
+% 	blue node/.style={rectangle,draw=black,inner sep=1.5},
+% 	reader node/.style={circle,draw=black,inner sep=1},
+% 	writer node/.style={circle,draw=black,inner sep=1}
+% }
+
+%       \node[solid node] (R) {$R$};
+%       \node[hollow node] (5) [right of=R] {$5$};
+
+%       \node[hollow node] (8) [right of=5] {$8$};
+%       \node[hollow node] (2) [right of=8] {$2$};
+%       \node[hollow node] (1) [right of=2] {$1$};
+%       \node[hollow node] (11) [right of=1] {$11$};
+%      % \node[hollow node] (4) [right of=11] {$4$};
+%       \node[reader node] (r1) [above right of= 1]  {$cr$};
+%       \node[reader node] (r2)  [above left of= 1] {$cr$};
+%       \node[writer node] (wp) [below of=2] {$pr$};
+%       \node[writer node] (wc) [below of=1]{$cr$};
+
+%     \path[->]   (R) edge node {} (5)
+%     		(5) edge node {} (8)
+%      		(8) edge node {} (2)
+%      	%	(11) edge node {} (4)
+%     		(1) edge node {} (11)
+% 		(2) edge node {} (1)
+% 		(r1) edge node {$\textsf{tid}_{r1}$} (1)
+% 		(r2) edge node {$\textsf{tid}_{r2}$} (1)
+% 	        (wp) edge node  {$\textsf{tid}_{mut}$}  (2)
+% 		(wc) edge  node  {$\textsf{tid}_{mut}$}   (1)
+% ;
+% \end{tikzpicture}
+% \caption{$\textsf{tid}_{mut}$ traverses the list to deletes the node with value 1.}
+% \label{fig:mutatelist}
+% \end{figure}
+
+% In figure \ref{fig:unlinkedlist}, mutator thread unlinks the node with value 1 which is simultanously accessed by reader threads. Any new thread which starts traversing the data structure after the node with value 1 gets unlinked cannot access the node 1 as the link between nodes 1 and 11 is dashed--\emph{unlinked}--after mutation. Type of dashed link also prevents the traversal starting from node 1 to node 11 and rest of the linked list.
+
+% However, threads, $\textsf{tid}_{r1}$ and $\textsf{tid}_{r2}$, which were accessing to the node 1 when mutation occured still have valid, not dashed, \textsf{cr} pointers. This is exactly where the grace is shown to reader threads for letting them to complete their operations on node 1. The node 1 is unlinked but heap location pointed by the $cr$ pointers of the bounding threads, $tid_{r1}$ and $tid_{r2}$ are observed as straight arrows which are valid \textsf{RCU} heap locations during the grace period. 
+
+% \textsf{cr} pointers are not dashed, valid  pointers, but the reachability can be provided as long as all nodes forming the data structure is linked via valid pointers, not the dashed ones, which is obviously not possible as shown in Figure~\ref{fig:unlinkedlist}.
+% \begin{figure}[H]
+% \centering
+% \begin{tikzpicture}[>=stealth',node distance=1.5cm,semithick,auto]
+% \tikzstyle{hollow node}=[circle,draw,inner sep=1]
+% \tikzstyle{sub node}=[triangle,draw,inner sep=1]
+% \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+
+% \tikzset{
+% 	red node/.style={rectangle,draw=black,fill=red,inner sep=1.5},
+% 	blue node/.style={rectangle,draw=black,inner sep=1.5},
+% 	reader node/.style={circle,draw=black,inner sep=1},
+% 	writer node/.style={circle,draw=black,inner sep=1}
+% }
+
+%       \node[solid node] (R) {$R$};
+%       \node[hollow node] (5) [right of=R] {$5$};
+%       \node[hollow node] (8) [right of=5] {$8$};
+%       \node[hollow node] (2) [right of=8] {$2$};
+%       \node[hollow node] (1) [right of=2] {$1$};
+%       \node[hollow node] (11) [right of=1] {$11$};
+%       %\node[hollow node] (4) [right of=11] {$4$};
+%       \node[reader node] (r1) [above right of= 1]  {$cr$};
+%       \node[reader node] (r2)  [above left of= 1] {$cr$};
+%       \node[writer node] (wp) [below of=2] {$pr$};
+%       \node[writer node] (wc) [below of=11]{$cr$};
+
+%     \path[->]  (R) edge node {} (5);
+%     \path[->]  (5) edge node {} (8);
+%     \path[->]  (8) edge node {} (2);
+%    % \path[->]  (11) edge node {} (4);
+%     \path[->] (2) edge [bend right] node {} (11);
+%     \path[dashed,->]  (1) edge node {} (11);
+
+%     \path[->]  (r1) edge node {$\textsf{tid}_{r1}$} (1);
+%     \path[->]  (r2) edge node {$\textsf{tid}_{r2}$} (1);
+%     \path[->]  (wp) edge node  {$\textsf{tid}_{mut}$}  (2);
+%     \path[->]  (wc) edge  node  {$\textsf{tid}_{mut}$}   (11);
+% ;
+% \end{tikzpicture}
+% \caption{$\textsf{tid}_{mut}$ unlinks the node with value 1.}
+% \label{fig:unlinkedlist}
+% \end{figure}
+% After \emph{mutation} in heap, -(remove:16)-, Writer thread calls \textsf{SyncStart}-(\emph{remove:14})-to start \emph{grace-period}. Now, $\textsf{tid}_{r1}$ and $\textsf{tid}_{r1}$ become \emph{bounding-threads} which $t_{mut}$ needs to wait which is shown in \ref{fig:unlinkedlist}.
+% \begin{figure}[H]
+% \centering
+% \begin{tikzpicture}[>=stealth',node distance=1.5cm,semithick,auto]
+% \tikzstyle{hollow node}=[circle,draw,inner sep=1]
+% \tikzstyle{sub node}=[triangle,draw,inner sep=1]
+% \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+
+% \tikzset{
+% 	red node/.style={rectangle,draw=black,fill=red,inner sep=1.5},
+% 	blue node/.style={rectangle,draw=black,inner sep=1.5},
+% 	reader node/.style={circle,draw=black,inner sep=1},
+% 	writer node/.style={circle,draw=black,inner sep=1}
+% }
+
+%       \node[solid node] (R) {$R$};
+%       \node[hollow node] (5) [right of=R] {$5$};
+%       \node[hollow node] (8) [right of=5] {$8$};
+%       \node[hollow node] (2) [right of=8] {$2$};
+%       \node[hollow node] (1) [right of=2] {$1$};
+%       \node[hollow node] (11) [right of=1] {$11$};
+%     %  \node[hollow node] (4) [right of=11] {$4$};
+%       \node[reader node] (r1) [above right of= 1]  {$cr$};
+%       \node[reader node] (r2)  [above left of= 1] {$cr$};
+
+%     \path[->]  (R) edge node {} (5);
+%     \path[->]  (5) edge node {} (8);
+%     \path[->]  (8) edge node {} (2);
+%    % \path[->]  (11) edge node {} (4);
+%     \path[->] (2) edge [bend right] node {} (11);
+%     \path[dotted,->]  (1) edge node {} (11);
+
+%     \path[->]  (r1) edge node {$\textsf{tid}_{r1}$} (1);
+%     \path[->]  (r2) edge node {$\textsf{tid}_{r2}$} (1);
+
+% ;
+% \end{tikzpicture}
+% \qquad
+% \qquad
+% \tikzset{
+%     font=\sffamily,
+%     BLOCK/.style={
+%         draw,
+%         align=center,
+%         text height=0.4cm,
+%         draw=red!50,
+%         fill=red!20,
+%         rectangle split,
+%         rectangle split horizontal,
+%         rectangle split parts=#1,
+%     }
+% }
+% \begin{tikzpicture}
+%     \node (h1) {to-free list};
+%     \node[BLOCK=3, below=0 of h1]{
+%       \nodepart{one}...\nodepart{two}( F[ s(1,$\textsf{tid}_{mut}$) $\rightharpoonup$ {$\textsf{tid}_{r1}$, $\textsf{tid}_{r2}$} ]
+%         \nodepart{three}...};
+% \end{tikzpicture}
+
+% \caption{Bounding threads, $\textsf{tid}_{r1}$ $\textsf{tid}_{r1}$. }
+% \label{fig:unlinkedlistnomut}
+% \end{figure}
+% Grace period lasts until \textsf{SyncStop} returns-(\emph{remove:15})-. \textsf{SyncStop} blocks the execution of the writer thread until $\textsf{tid}_{r1}$ and $\textsf{tid}_{r2}$ exit \textsf{Read Block} as shown in figure ~\ref{fig:unlinkedlistnomut}. We use mapping, $F$, to from mutated memory locations to reader thread identifiers active when the mutation occurs.  
+% \begin{figure}[H]
+% \centering
+% \begin{tikzpicture}[>=stealth',node distance=1.5cm,semithick,auto]
+% \tikzstyle{hollow node}=[circle,draw,inner sep=1]
+% \tikzstyle{sub node}=[triangle,draw,inner sep=1]
+% \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+
+% \tikzset{
+% 	red node/.style={rectangle,draw=black,fill=red,inner sep=1.5},
+% 	blue node/.style={rectangle,draw=black,inner sep=1.5},
+% 	reader node/.style={circle,draw=black,inner sep=1},
+% 	writer node/.style={circle,draw=green,inner sep=1}
+% }
+
+%       \node[solid node] (R) {$R$};
+%       \node[hollow node] (5) [right of=R] {$5$};
+%       \node[hollow node] (8) [right of=5] {$8$};
+%       \node[hollow node] (2) [right of=8] {$2$};
+%       \node[hollow node] (1) [right of=2] {$1$};
+%       \node[hollow node] (11) [right of=1] {$11$};
+%       %\node[hollow node] (4) [right of=11] {$4$};
+
+%     \path[->]  (R) edge node {} (5);
+%     \path[->]  (5) edge node {} (8);
+%     \path[->]  (8) edge node {} (2);
+%     %\path[->]  (11) edge node {} (4);
+%     \path[->] (2) edge [bend right] node {} (11);
+%     \path[dotted,->]  (1) edge node {} (11);
+
+
+% ;
+% \end{tikzpicture}
+% \qquad
+% \qquad
+% \tikzset{
+%     font=\sffamily,
+%     BLOCK/.style={
+%         draw,
+%         align=center,
+%         text height=0.4cm,
+%         draw=red!50,
+%         fill=red!20,
+%         rectangle split,
+%         rectangle split horizontal,
+%         rectangle split parts=#1,
+%     }
+% }
+% \begin{tikzpicture}
+%     \node (h1) {to-free list};
+%     \node[BLOCK=3, below=0 of h1]{
+%       \nodepart{one}...\nodepart{two} F[s(1,\textsf{tid}) $\rightharpoonup$ $\emptyset$ )
+%         \nodepart{three}...};
+% \end{tikzpicture}
+% \caption{Bounding threads, $\textsf{tid}_{r1}$ and $\textsf{tid}_{r2}$ exit \textsf{ReadBlock}. }
+% \label{fig:prereclaim}
+% \end{figure}
+% In figure \ref{fig:prereclaim}, $\textsf{tid}_{r1}$ and $\textsf{tid}_{r2}$ exit \textsf{ReadBlock} so that \textsf{Free} can be called to reclaim the memory. Once \textsf{Free} returns, the memory location is reclaimed as shown in figure \ref{fig:reclaimed}. 
+% \begin{figure}[H]
+% \centering
+% \begin{tikzpicture}[>=stealth',node distance=1.5cm,semithick,auto]
+% \tikzstyle{hollow node}=[circle,draw,inner sep=1.5]
+% \tikzstyle{sub node}=[triangle,draw,inner sep=1]
+% \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+
+% \tikzset{
+% 	red node/.style={rectangle,draw=red,fill=red,inner sep=1.5},
+% 	blue node/.style={rectangle,draw=black,inner sep=1.5},
+% 	reader node/.style={circle,draw=black,inner sep=1},
+% 	writer node/.style={circle,draw=green,inner sep=1}
+% }
+
+%       \node[solid node] (R) {$R$};
+%       \node[hollow node] (5) [right of=R] {$5$};
+%       \node[hollow node] (8) [right of=5] {$8$};
+%       \node[hollow node] (2) [right of=8] {$2$};
+%       \node[hollow node] (11) [right of=2] {$11$};
+% %      \node[hollow node] (4) [right of=11] {$4$};
+
+%     \path[->]  (R) edge node {} (5);
+%     \path[->]  (5) edge node {} (8);
+%     \path[->]  (8) edge node {} (2);
+%  %   \path[->]  (11) edge node {} (4);
+%     \path[->] (2) edge node {} (11);
+% ;
+% \end{tikzpicture}
+% \caption{ Reclaimed the node 1}
+% \label{fig:reclaimed}
+% \end{figure}
+% Another interesting mutation on the heap of the \textsf{RCU} bag is \emph{fresh-node-linking} case which shows up in \emph{add} method. The mutator thread, $t_{mut}$, allocates a fresh node, $n$, in the heap-(\emph{add:8})-and links the newly allocated node the list-(\emph{add:17}).
+% \begin{figure}[H]
+% \centering
+% \begin{tikzpicture}[>=stealth',node distance=1.5cm,semithick,auto]
+% \tikzstyle{hollow node}=[circle,draw,inner sep=1]
+% \tikzstyle{sub node}=[triangle,draw,inner sep=1]
+% \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+
+% \tikzset{
+% 	red node/.style={rectangle,draw=black,fill=red,inner sep=1.5},
+% 	blue node/.style={rectangle,draw=black,inner sep=1.5},
+% 	reader node/.style={circle,draw=black,inner sep=1},
+% 	writer node/.style={circle,draw=black,inner sep=1}
+% }
+
+%       \node[solid node] (R) {$R$};
+%       \node[hollow node] (5) [right of=R] {$5$};
+
+%       \node[hollow node] (8) [right of=5] {$8$};
+%       \node[hollow node] (2) [right of=8] {$2$};
+%       \node[hollow node] (1) [right of=2] {$1$};
+%       \node[hollow node] (11) [right of=1] {$11$};
+%       \node[reader node] (r1) [above left of= 1]  {$n$};
+     
+
+%     \path[->]   (R) edge node {} (5)
+%     		(5) edge node {} (8)
+%      		(8) edge node {} (2)
+%     		(1) edge node {} (11)
+% 		(2) edge node {} (1)
+% 		(r1) edge[dash dot] node {$\textsf{tid}_{mut}$} (1)
+
+% ;
+% \end{tikzpicture}
+% \caption{$\textsf{tid}_{mut}$ linkes the fresh node $n$.}
+% \label{fig:freshlist}
+% \end{figure}
+% We see in figure \ref{fig:freshlist} that the linked list is in a state where there exists two entry points, $R$ and $n$, to it. This seems to be a violation of well-formedness of the linked list at first. However, the dash-dot type--\emph{fresh}--of link in between fresh node and \textsf{RCU} data structure still preserves well-formedness as straight arrows are the only types--\emph{iterator}-- that one can use to access to the \textsf{RCU} data structure. The dash-dot type turns into a stright arrow in figure \ref{fig:freshlistlinked} once the freshly allocated node, $n$, is linked to the \textsf{RCU} list.
+% \begin{figure}[H]
+% \centering
+% \begin{tikzpicture}[>=stealth',node distance=1.5cm,semithick,auto]
+% \tikzstyle{hollow node}=[circle,draw,inner sep=1]
+% \tikzstyle{sub node}=[triangle,draw,inner sep=1]
+% \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+
+% \tikzset{
+% 	red node/.style={rectangle,draw=black,fill=red,inner sep=1.5},
+% 	blue node/.style={rectangle,draw=black,inner sep=1.5},
+% 	reader node/.style={circle,draw=black,inner sep=1},
+% 	writer node/.style={circle,draw=black,inner sep=1}
+% }
+
+%       \node[solid node] (R) {$R$};
+%       \node[hollow node] (5) [right of=R] {$5$};
+
+%       \node[hollow node] (8) [right of=5] {$8$};
+%       \node[hollow node] (2) [right of=8] {$2$};
+%       \node[hollow node] (1) [right of=2] {$1$};
+%       \node[hollow node] (11) [right of=1] {$11$};
+%       \node[reader node] (r1) [above left of= 1]  {$n$};
+     
+
+%     \path[->]   (R) edge node {} (5)
+%     		(5) edge node {} (8)
+%      		(8) edge node {} (2)
+%     		(1) edge node {} (11)
+% 		(2) edge node {} (r1)
+% 		(r1) edge node {} (1)
+
+% ;
+% \end{tikzpicture}
+% \caption{$n$ returned from fresh to rcu heap node.}
+% \label{fig:freshlistlinked}
+% \end{figure}

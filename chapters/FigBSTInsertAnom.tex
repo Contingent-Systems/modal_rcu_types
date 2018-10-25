@@ -1,0 +1,75 @@
+
+\begin{figure}
+\centering 
+\noindent
+\begin{subfigure}{.5\linewidth}
+\centering
+\begin{tikzpicture}[scale=1]
+
+
+\tikzstyle{hollow node}=[circle,draw,inner sep=1.5]
+\tikzstyle{sub node}=[triangle,draw,inner sep=1.5]
+\tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+
+\tikzset{
+  red node/.style = {rectangle,draw=red,fill=red,inner sep=2.2},
+  treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
+  subtree/.style  = {isosceles triangle, draw=black, align=center, minimum height=0.5cm, minimum width=0.5cm, shape border rotate=90, anchor=north},
+  succn/.style = {circle,draw=purple,fill=purple,inner sep=0.2},
+  blue node/.style = {rectangle,draw=blue,inner sep=2.5}
+}
+
+    \node[hollow node]       (K)     [below right of = Inf]   { };
+    \node[subtree]           (t1)    [below left of=K]       {$T_{1}$};
+    \node[hollow node]           (gk)    [below right of=K]      { };
+    \node[hollow node]             (kp)    [below left of=gk]      {$k$};
+    
+    \path[->]  
+	     (K)     edge node {} (t1)
+                (K)     edge node {} (gk)
+                (gk)    edge node {} (kp)
+;
+
+\end{tikzpicture}
+\caption{\textsf{Delete} of the node with key $k$}
+\label{fig:insertanom1.1}
+\end{subfigure}%
+\noindent
+\begin{subfigure}{.5\linewidth}
+\centering
+\begin{tikzpicture}[scale=1]
+
+\tikzstyle{hollow node}=[circle,draw,inner sep=1.5]
+\tikzstyle{sub node}=[triangle,draw,inner sep=1.5]
+\tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+
+\tikzset{
+  red node/.style = {rectangle,draw=red,fill=red,inner sep=2.2},
+  treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
+  subtree/.style  = {isosceles triangle, draw=black, align=center, minimum height=0.5cm, minimum width=0.5cm, shape border rotate=90, anchor=north},
+  succn/.style = {circle,draw=purple,fill=purple,inner sep=0.2},
+  blue node/.style = {rectangle,draw=blue,inner sep=2.5}
+}
+
+    \node[hollow node]       (K)     [below right of = Inf]   { };
+    \node[subtree]           (t1)    [below left of=K]       {$T_{1}$};
+    \node[hollow node]           (gk)    [below right of=K]      { };
+    \node[hollow node]             (kp)    [below left of=gk]      {$k$};
+    \node[hollow node]          (dm)  [below right of  = kp] {$ $};
+    \path[->]  
+	     (K)     edge node {} (t1)
+                (K)     edge node {} (gk)
+                (kp)    edge node {} (dm)
+;
+
+\end{tikzpicture}
+\captionof{figure}{Inserting a node to a wrong location due to an overlapping \textsf{Delete} operation}
+\label{fig:insertanom1.2}
+\end{subfigure}
+\caption{Motivation  for synchronising mutator threads}
+\label{fig:insertanom}
+\end{figure}
+
+
+
+

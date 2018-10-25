@@ -1,0 +1,98 @@
+\section{Types and Rules for \textsf{RCU} Read Section}
+\label{appendix:readtypes}
+\begin{figure}[!htb]
+%\begin{subfigure}[b]{.4\linewidth}
+\begin{mathpar}
+  \tau_{local} := \textsf{rcuItr} \and
+\fbox{$\Gamma \vdash_{R} \alpha \dashv \Gamma'$} \and
+\inferrule[\scriptsize(T-Root)]
+{ y \notin \textsf{FV}(\Gamma) }
+{\Gamma\,,r:\textsf{rcuRoot}\,,y:\textsf{undef} \vdash y = r \dashv y: \textsf{rcuItr}\,,r:\textsf{rcuRoot}\,,\Gamma}
+\and
+\inferrule[\scriptsize(T-ReadS)]
+{
+z \notin  \textsf{FV}(\Gamma)
+}
+{
+\Gamma\,, z:\_ \, , x:\textsf{rcuItr}\vdash z=x \dashv  x:\textsf{rcuItr} \, , z:\textsf{rcuItr}\, , \Gamma
+}
+\and
+\inferrule[\scriptsize(T-ReadH)]
+{
+ z \notin \textsf{FV}(\Gamma)
+}
+{
+ \Gamma\, , z: \_ \, ,  x:\textsf{rcuItr} \, \N   \vdash
+ 	z=x.f
+ \dashv  x:\textsf{rcuItr} \, ,z:\textsf{rcuItr}  \, , \Gamma
+}
+\and
+\inferrule[\scriptsize(ToRCURead)]
+{
+ \Gamma\, , y : \textsf{rcuItr} \vdash_R \bar{s} \dashv \Gamma' \quad \textsf{FType}(f)=\textsf{RCU}
+}
+{
+\Gamma \vdash \textsf{RCURead}\, x.f \textsf{ as }y\textsf{ in } \{ \bar{s} \}
+}
+\and
+\fbox{$\Gamma \vdash_{M,R} \bar{s} \dashv \Gamma'$} \and
+\inferrule[\scriptsize(T-Loop1)]
+{
+\Gamma(x) = \textsf{bool} \and
+\Gamma \vdash \bar{s} \dashv \Gamma 
+}
+{
+\Gamma \vdash \textsf{while}(x)\{\bar{s}\} \dashv  \Gamma
+}
+\and
+\inferrule[\scriptsize(T-Branch2)]
+{
+\Gamma(x)= \textsf{bool} \\
+ \Gamma \vdash \bar{s}_1 \dashv\Gamma' \and \Gamma \vdash \bar{s}_2 \dashv \Gamma'
+}
+{
+\Gamma \vdash \textsf{if}(x) \textsf{ then } \bar{s}_1  \textsf{ else } \bar{s}_2 \dashv \Gamma'
+}
+\and
+\inferrule[\scriptsize(T-Seq)]
+{
+\Gamma_1 \vdash \bar{s_1} \dashv   \Gamma_2  \qquad   \Gamma_2 \vdash_{M,R} \bar{s_2} \dashv   \Gamma_3
+}
+{
+\Gamma_1  \vdash_{M,R} \bar{s_1} \; ; \; \bar{s_2} \dashv  \Gamma_3
+}
+\and
+\inferrule[\scriptsize(T-Par)]
+{
+ \Gamma_1 \vdash_{R} \bar{s_1} \dashv   \Gamma'_1  \qquad   \Gamma_2 \vdash_{M,R} \bar{s_2} \dashv   \Gamma'_2
+}
+{
+ \Gamma_1, \; \Gamma_2  \vdash \bar{s_1} || \bar{s_2} \dashv  \Gamma'_1 \; , \Gamma'_2
+}
+\and
+\inferrule[\scriptsize(T-Exchange)]
+{
+ \Gamma, \, y:T' , \, x:T, \, \Gamma' \vdash \bar{s} \dashv   \Gamma''
+}
+{
+\Gamma, \, x:T , \, y:T' , \, \Gamma' \vdash \bar{s} \dashv   \Gamma''
+}
+\and
+\inferrule[\scriptsize(T-Conseq)]
+{
+ \Gamma \subt \Gamma'  \and \Gamma' \vdash \bar{s} \dashv \Gamma'' \and \Gamma'' \subt \Gamma'''
+}
+{
+ \Gamma \vdash \bar{s} \dashv \Gamma'''
+}
+\and
+\inferrule[\scriptsize(T-Skip)]
+{
+}
+{
+ \Gamma \vdash_{M,R} \textsf{skip} \dashv   \Gamma
+}
+\end{mathpar}
+\caption{Type Rules for \textsf{Read} critical section for \textsf{RCU} Programming and standard type rules}
+\label{fig:tssr}
+\end{figure}

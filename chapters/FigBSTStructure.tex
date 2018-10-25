@@ -1,0 +1,34 @@
+\begin{figure}
+\centering
+\begin{tikzpicture}[scale=1, node distance = 1.5cm]
+\tikzstyle{hollow node}=[circle,draw,inner sep=1.5]
+\tikzstyle{sub node}=[triangle,draw,inner sep=1.5]
+\tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+
+\tikzset{
+  red node/.style = {rectangle,draw=red,fill=red,inner sep=2.2},
+  treenode/.style = {circle, draw=black, align=center, minimum size=0.1cm},
+  subtree/.style  = {isosceles triangle, draw=black, align=center, minimum height=0.5cm, minimum width=0.5cm, shape border rotate=90, anchor=north},
+  succn/.style = {circle,draw=purple,fill=purple,inner sep=0.2},
+  blue node/.style = {rectangle,draw=blue,inner sep=2.5}
+}
+    \node[solid node]        (R)                           {$R$};
+    \node[hollow node]       (Inf)   [below right of = R]     {$\infty$};
+    \node[hollow node]       (K)     [below right of = Inf]   {$k$};
+    \node[subtree]           (lk)    [below left of=K]       {$<k$};
+    \node[subtree]           (gk)    [below right of=K]      {$>k$};
+    \node[succn]             (sc)    [below left of=gk]      {$S$};
+   
+    \path[->]   (R)     edge node {} (Inf)
+                (Inf)   edge node {} (K)
+                (K)     edge node {} (lk)
+                (K)     edge node {} (gk)
+                (gk)    edge node {} (sc)
+;
+\end{tikzpicture}
+\caption{Structure of a Binary Search Tree.}
+\label{fig:rbtree}
+\end{figure}
+
+%%
+

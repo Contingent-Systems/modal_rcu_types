@@ -1,0 +1,145 @@
+\begin{figure}[H]
+\centering 
+\noindent
+\begin{subfigure}[b]{.4\linewidth}
+\centering
+\begin{tikzpicture}[scale=1]
+\tikzstyle{hollow node}=[circle,draw,inner sep=1.5]
+\tikzstyle{sub node}=[triangle,draw,inner sep=1.5]
+\tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+\tikzset{
+  red node/.style = {rectangle,draw=red,inner sep=1.5},
+  treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
+  subtree/.style  = {isosceles triangle, draw=black, align=center, minimum height=0.5cm, minimum width=0.5cm, shape border rotate=90, anchor=north},
+  succn/.style = {circle,draw=purple,fill=purple,inner sep=0.2},
+  blue node/.style = {rectangle,draw=blue,inner sep=1.5}
+}
+
+    \node[hollow node]       (r)     []   { };
+    \node[subtree]           (t1)    [below left of=r]       {$T_{1}$};
+    \node[hollow node]           (k)    [below right of=r]      {$k$};
+    \node[subtree]             (kl)    [below left of=k]      {$T_{2}$};
+\node[hollow node]          (kr)    [below right of = k]  { };
+    \node[hollow node]             (krl)         [below left of = kr]        {$k'$};
+    \node[subtree]          (krr)       [below right of = kr]           {$T_{3}$};
+    \path[->]  
+	     (r)     edge node {} (t1)
+                (r)     edge node {} (k)
+                (k)    edge node {} (kl)
+	     (k)    edge node {} (kr)
+	    (kr)    edge node {}  (krl)
+                (kr)     edge node {} (krr)
+;
+\end{tikzpicture}
+\caption{Node $k$ with its successor $k'$}
+\label{fig:del2.1}
+\end{subfigure}\quad
+\begin{subfigure}[b]{.4\linewidth}
+\centering
+\begin{tikzpicture}[scale=1]
+\tikzstyle{hollow node}=[circle,draw,inner sep=1.5]
+\tikzstyle{sub node}=[triangle,draw,inner sep=1.5]
+\tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+
+\tikzset{
+  red node/.style = {circle,draw=red,inner sep=1.5},
+  treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
+  subtree/.style  = {isosceles triangle, draw=black, align=center, minimum height=0.25cm, minimum width=0.25cm, shape border rotate=90, anchor=north},
+  succn/.style = {circle,draw=purple,fill=purple,inner sep=0.2},
+  blue node/.style = {circle,draw=blue,inner sep=1.5}
+}
+
+    \node[hollow node]       (r)     []   { };
+    \node[subtree]           (t1)    [below left of=r]       {$T_{1}$};
+    \node[hollow node]           (k)    [below right of=r]      {$k$};
+    \node[blue node]            (kp1) [right of = k]   {$f'$};    
+    \node[subtree]             (kl)    [below left of=k]      {$T_{2}$};
+\node[hollow node]          (kr)    [below right of = k]  { };
+    \node[hollow node]             (krl)         [below left of = kr]        {$k'$};
+    \node[subtree]          (krr)       [below right of = kr]           {$T_{3}$};
+    \path[->]  
+	     (r)     edge node {} (t1)
+                (r)     edge node {} (k) 
+                (k)    edge node {} (kl)
+	     (k)    edge node {} (kr)
+	    (kr)    edge node {}  (krl)
+                (kr)     edge node {} (krr)
+                (kp1)   edge[dashed,draw=blue] node {} (kr)
+	     (kp1)    edge[dashed,draw=blue] node {} (kl)
+;
+\end{tikzpicture}
+\caption{Duplicating $k'$ with a fresh variable $f'$}
+\label{fig:del2.2}
+\end{subfigure}
+\begin{subfigure}[b]{.4\linewidth}
+\centering
+\begin{tikzpicture}[scale=1]
+\tikzstyle{hollow node}=[circle,draw,inner sep=1.5]
+\tikzstyle{sub node}=[triangle,draw,inner sep=1.5]
+\tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+
+\tikzset{
+  red node/.style = {circle,draw=red,inner sep=1.5},
+  treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
+  subtree/.style  = {isosceles triangle, draw=black, align=center, minimum height=0.5cm, minimum width=0.5cm, shape border rotate=90, anchor=north},
+  succn/.style = {circle,draw=purple,fill=purple,inner sep=0.2},
+  blue node/.style = {circle,draw=blue,inner sep=1.5}
+}
+
+    \node[hollow node]       (r)     []   { };
+    \node[subtree]           (t1)    [below left of=r]       {$T_{1}$};
+    \node[red node]           (k)    [below right of=r]      {$k$};
+    \node[hollow node]            (kp1) [right of = k]   {$f'$};    
+    \node[subtree]             (kl)    [below left of=k]      {$T_{2}$};
+\node[hollow node]          (kr)    [below right of = k]  { };
+    \node[hollow node]             (krl)         [below left of = kr]        {$k'$};
+    \node[subtree]          (krr)       [below right of = kr]           {$T_{3}$};
+    \path[->]  
+	     (r)     edge node {} (t1)
+                (r)     edge node {} (kp1) 
+                (k)    edge[dashed,draw=red] node {} (kl)
+	     (k)    edge[dashed,draw=red] node {} (kr)
+	    (kr)    edge node {}  (krl)
+                (kr)     edge node {} (krr)
+                (kp1)   edge node {} (kr)
+	     (kp1)    edge node {} (kl)
+;
+\end{tikzpicture}
+\caption{ Unlinking $k$ via linking fresh variable  $f'$.}
+\label{fig:del2.3}
+\end{subfigure}\quad
+\begin{subfigure}[b]{.4\linewidth}
+\centering
+\begin{tikzpicture}[scale=1]
+\tikzstyle{hollow node}=[circle,draw,inner sep=1.5]
+\tikzstyle{sub node}=[triangle,draw,inner sep=1.5]
+\tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+
+\tikzset{
+  red node/.style = {rectangle,draw=red,inner sep=1.5},
+  treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
+  subtree/.style  = {isosceles triangle, draw=black, align=center, minimum height=0.5cm, minimum width=0.5cm, shape border rotate=90, anchor=north},
+  succn/.style = {circle,draw=purple,fill=purple,inner sep=0.2},
+  blue node/.style = {rectangle,draw=blue,inner sep=1.5}
+}
+
+    \node[hollow node]       (r)     []   { };
+    \node[subtree]           (t1)    [below left of=r]       {$T_{1}$};
+    \node[hollow node]            (kp1) [below right of = r]   {$f'$};    
+    \node[subtree]             (kl)    [below left of=kp1]      {$T_{2}$};
+    \node[hollow node]          (kr)    [below right of = kp1]  { };
+    \node[subtree]          (krr)       [below right of = kr]           {$T_{3}$};
+    \path[->]  
+	     (r)     edge node {} (t1)
+         (r)     edge node {} (kp1) 
+         (kr)     edge node {} (krr)
+         (kp1)   edge node {} (kr)
+	     (kp1)    edge node {} (kl)
+;
+\end{tikzpicture}
+\captionof{figure}{Reclamation of $k$ after waiting all readers on it.}
+\label{fig:del2.4}
+\end{subfigure}
+\caption{\textsf{Delete} of the node with two children}
+\label{fig:del2}
+\end{figure}

@@ -1,0 +1,185 @@
+
+\section{Red-Black Tree with RCU Types}
+Red-Black(RB)  tree is an important data structure which is used in many performance critical system (e.g. Operating Systems). RB Trees are used in implementation of dictionaries which is a set of key-value pairs with \textsf{Insert}, \textsf{Delete}, \textsf{Read} operations. \textsf{Insert}, \textsf{Delete} are \textsf{update} operations, \textsf{Read} is a \textsf{look up} operation. A RB Tree keeps key-value pairs as its internal nodes, with totally ordered keys.RB Tree shown in Figure \ref{fig:rbtree} has $(k,v)$ as its internal node and all value $v$, \textsf{Value((key,value)) = v}, of a node has a unique key $k$, \textsf{Key((key,value)) = k},  which never changes. In RB Tree, all descendants in  the left sub-tree of $v$ have keys larger than the key of $v$. The successor of node $v$ is the node with the smallest key among nodes with keys larger than or equal to key of $v$ which is the purple node in Figure \ref{fig:rbtree}. 
+\input{RBTreeStructure.tex}
+RB Trees are mainly used in components where read-only transactions are intensive. RCU is a programming-pattern which scales up performance when read-only operations are intensive. Naturally, exploration of rb-tree implementation with RCU pattern resulted in many studies:
+\begin{itemize}
+\item \href{http://www.pdx.edu/sites/www.pdx.edu.computer-science/files/tr1006.pdf}{Relativistic Red-Black Tree}. First relativistic RBTree paper.
+\item \href{http://www.cs.technion.ac.il/~mayaarl/full-version.pdf}{ArbelAttiyaConcurrent Updates} . Fine grain updates.
+\end{itemize}
+In this section, we present the implementation of rb-tree with types that we propose and show proofs of memory safety and some linearisability properties. General correctness properties that we expect from a rb-tree are:
+\begin{itemize}
+\item An in order traversal of a consistent tree will always give values of the tree sorted
+\item Lookups will always find a node that exists in the tree
+\end{itemize}
+Thinking rb-tree from RCU perspective does not make implementation more complicated than normally it is.  A concurrent setting with RCU technique is basically includes:
+\begin{itemize} 
+\item \textsf{\textbf{Readers}}. With RCU technique developing a reader is almost as easy as developing a non-concurrent reader.  The only restrictions placed on readers are that they do not hold any references to the data structure outside critical section.
+\item \textsf{\textbf{Mutators}}. Lock-free proceeding of \textsf{Readers} can be provided with keeping Red-Black tree consistent by \textsf{Mutators}. 
+\item Mutator must not allow a reader to see partial changes to a node. Mutator use copy-on-update to make all changes to a private copy of the node, then atomically switch the new node with the old one.
+\item The termination position of a search is defined to be the last node whose value is examined by the search before it is terminated. If a search for a value $v$ is terminated at node $n$ at  time $t$ then it search for value $v$ will always terminate at node $n$ for all searches when we isolate tree from updates
+\item Readers must not get lost when the structure of the tree is changed. In Figure \ref{fig:succmoveanom}, assume that there exists a reader looking for node with key \textsf{k'} concurrently with a mutator thread which moves successor of \textsf{k}, \textsf{k'},as a result of \textsf{Delete} operation performed on \textsf{k}  then the reader will get lost and return false for \textsf{Read} operation on \textsf{k'} even it exists in the tree.
+\item  Temporarily having the same item in the tree multiple times won't affect the lookups. A unique value is returned if first copy encountered and another unique value can be returned if second copy is encountered.
+\item Only nodes which are  no longer reachable  by an existing search or  future search will be garbage collected and all such nodes will be garbage collected, Figure \ref{fig:del2}
+\end{itemize}
+\subsection{Red-Black Tree Implementation}
+RB-Tree implementation has three functions:
+\begin{itemize}
+\item \textsf{Insert}$(key,value)$ adds $(key,value)$ pair to the tree as a leaf; returns $true$ if $key$ is not in the set and $false$ otherwise
+\item \textsf{Delete}$(key)$ removes $(key,value)$ pair  from tree; returns $true$ if $key$ is in the tree and $false$ otherwise
+\item \textsf{Read}$(key)$ returns $val$ if $(key,value)$ is in the set; otherwise it returns $false$
+\end{itemize}
+\paragraph{Read}Explain code in general and anomaly caused by the part of the code.
+\input{RBTreeSuccMoveAnom.tex}
+\paragraph{Insert} Explain code in general and anomaly caused by the part of the code.
+\input{RBTreeInsertAnom.tex}
+\paragraph{Delete} Explain code in general and anomaly caused by the part of  the code.
+\input{RBTreeDeleteOneChildAnom.tex}
+\input{RBTReeDeleteTwoChildAnom.tex}
+\begin{table}[]
+	\begin{tabular}{ c c }
+		Read & Update \\		
+\begin{lstlisting}
+struct node_p{
+  int key;
+  struct node_p* child[2];
+  int value;
+}
+
+node_p<rcu> root;
+	
+data Read(int key){
+  data result;	
+  rcuRead{
+    node_p<rcuIterator> itr; 
+    itr=root;
+    int itrKey = itr->key; 
+        
+    while(itr != NULL && 
+	itrKey != key ){
+
+      if(itrKey > key)
+	  itr = itr->child[0]
+       if(itrKey < key)
+          itr = itr->child[1];
+	if(itr != NULL) 
+         itrKey = itr->key;
+    }
+    result = itr->value;
+  }
+  return result;
+}
+\end{lstlisting} &		
+\begin{lstlisting}
+//Adds a node as leaf
+void Insert(int key, int val){
+ rcuMutate{
+   node_p <rcuIterator> itr;
+   node_p<rcuIterator> prev;
+   prev = root;
+   itr = prev->child[0]; //right
+   itrKey = itr->key;
+   direction = 0;
+   int itrKey = itr->key;
+
+   while (itr != NULL && 
+          itrKey != key)
+   {
+    prev = itr;
+    if (itrKey > key){
+     itr = itr->child[0];
+     direction = 0;
+    }
+    if (itrKey < key){
+     itr = itr->child[1];
+     direction = 1;
+    }
+    if (itr!=NULL) 
+     itrKey = itr->key ;
+  }
+    if(itr != NULL)
+     return false;
+
+    // Add fresh node as leaf  
+    node = new(key,val)
+    prev->child[direction] = node
+  }
+  return true;
+}
+		\end{lstlisting} 
+	\end{tabular}
+	
+\caption{RCU-Red-Black Tree Implementation.}
+\label{tab:rcurbtree}
+\end{table}
+
+\begin{table}[]
+	\begin{tabular}{ c }
+		Update\\		
+\begin{lstlisting}
+void Delete(int key){  
+ rcuMutate{  
+   node_p<rcuIterator> prev = root;
+   node_p <rcuIterator> itr  itr = prev->child[0]; //right;
+   itrKey = itr->key;
+   direction = 0;
+   int itrKey = itr->key;  
+   while (itr != NULL && itrKey != key){
+    prev = itr;
+    if (itrKey > key){ itr = itr->child[0]; direction = 0;}
+    if (itrKey < key){ itr = itr->child[1]; direction = 1;}
+    if (itr!=NULL) 
+     itrKey = itr->key ;
+   }
+   if(itr == NULL)//Not found
+    return false;
+   // One child
+   if(itr->child[0] == NULL){ prev->child[direction] = itr->child[1]; return true;}
+   if(itr->child[1] == NULL){ prev->child[direction] = itr->child[0]; return true;}
+   //Two children
+   node_p<rcuIterator>  prevSucc = itr;  
+   node_p<rcuIterator>  succ = itr->child[1];
+   node_p<rcuIterator>  next = succ->child[0]; 
+   while ( next!= NULL){
+    prevSucc = succ;
+    succ = next;
+    next = next->child[0];
+   }
+   node = new(succ->key); // Update
+   new->child[0]=curr->child[0];
+   new->child[1]=curr->child[1];
+   prev->child[direction]=new ;    
+  } //rcuMutate ends
+  asyncDelayedFree(Clean, prevSucc, itr, succ);   
+ return true;
+}
+\end{lstlisting} 
+	\end{tabular} \hfill	
+\caption{RCU-Red-Black Tree Delete implementation.}
+\label{tab:rcurbtreedel}
+\end{table}
+\begin{table}[]
+	\begin{tabular}{ c }
+		Async Free\\
+\begin{lstlisting}
+void Clean(node_p prev, node_p curr, node_p succ)
+{
+ // succ is the right child of curr
+ if (prev == curr){
+  new->child[1]=succ->child[1];
+ }
+ prev->child[0] = succ->child[1];
+}
+\end{lstlisting}
+	\end{tabular} \hfill	
+\caption{RCU-Red-Black Tree Clean function for removing old successor.}
+\label{tab:rcurbtreecln}
+\end{table}
+\subsection{Proof for RCU RB-Tree}
+\section{Conclusion}
+\section{Related Work Notes}
+Aspect-Oriented Linearizability Proofs:
+Thomas A. Henzinger, Ali Sezgin, and Viktor Vafeiadis
+
+
+Implicit ownership types for memory management

@@ -1,0 +1,77 @@
+
+\begin{figure}[H]
+\centering 
+\noindent
+\begin{subfigure}{.5\linewidth}
+\centering
+\begin{tikzpicture}[scale=1]
+
+\tikzstyle{hollow node}=[circle,draw,inner sep=1.5]
+\tikzstyle{sub node}=[triangle,draw,inner sep=1.5]
+\tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+
+\tikzset{
+  red node/.style = {rectangle,draw=red,fill=red,inner sep=2.2},
+  treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
+  subtree/.style  = {isosceles triangle, draw=black, align=center, minimum height=0.5cm, minimum width=0.5cm, shape border rotate=90, anchor=north},
+  succn/.style = {circle,draw=purple,fill=purple,inner sep=0.2},
+  blue node/.style = {rectangle,draw=blue,inner sep=2.5}
+}
+
+    \node[hollow node]       (r)     []   { };
+    \node[subtree]           (t1)    [below left of=r]       {$T_{1}$};
+    \node[hollow node]           (k)    [below right of=r]      {$k$};
+    \node[hollow node]             (kl)    [below left of=k]      { };
+   \node[hollow node]            (n)     [below right of = k] {null};
+    \node[subtree]             (kll)         [below left of = kl]        {$T_{2}$};
+    \node[subtree]          (klr)       [below right of = kl]           {$T_{3}$};
+    \path[->]  
+	     (r)     edge node {} (t1)
+                (r)     edge node {} (k)
+                (k)    edge node {} (kl)
+                (k)    edge node {} (n)
+	    (kl)    edge node {}  (kll)
+                (kl)     edge node {} (klr)
+;
+\end{tikzpicture}
+\caption{Node with key $k$}
+\label{fig:del1.1}
+\end{subfigure}%
+\noindent
+\begin{subfigure}{.5\linewidth}
+\centering
+\begin{tikzpicture}[scale=1]
+\tikzstyle{hollow node}=[circle,draw,inner sep=1.5]
+\tikzstyle{sub node}=[triangle,draw,inner sep=1.5]
+\tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+
+\tikzset{
+  red node/.style = {circle,draw=red,inner sep=1.5},
+  treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
+  subtree/.style  = {isosceles triangle, draw=black, align=center, minimum height=0.5cm, minimum width=0.5cm, shape border rotate=90, anchor=north},
+  succn/.style = {circle,draw=purple,fill=purple,inner sep=0.2},
+  blue node/.style = {rectangle,draw=blue,inner sep=2.5}
+}
+
+    \node[hollow node]       (r)     []   { };
+    \node[subtree]           (t1)    [below left of=r]       {$T_{1}$};
+    \node[red node]           (k)    [below right of=r]      {$k$};
+    \node[hollow node]             (kl)    [below left of=k]      { };
+ \node[hollow node]            (n)     [below right of = k] {null};
+    \node[subtree]             (kll)         [below left of = kl]        {$T_{2}$};
+    \node[subtree]          (klr)       [below right of = kl]           {$T_{3}$};
+    \path[->]  
+	     (r)     edge node {} (t1)
+                (r)     edge node {} (kl)
+                (k)    edge[dashed, draw=red] node {} (kl)
+              (k)    edge[dashed, draw=red] node {} (n)
+	    (kl)    edge node {}  (kll)
+                (kl)     edge node {} (klr)
+;
+\end{tikzpicture}
+\captionof{figure}{Unlink $k$}
+\label{fig:del1.2}
+\end{subfigure}
+\caption{\textsf{Delete} of the node with one child}
+\label{fig:del1}
+\end{figure}

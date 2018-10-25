@@ -1,0 +1,2133 @@
+%!TEX root = ../paper.tex
+\section{Soundness Proof of Atomic and Structural Program Actions}
+\subsection{Proof of Lemmas}
+\label{sec:prooflemmas}
+\begin{lemma}[Well Formed Composition]
+\label{lem:wf-composition}
+Any successful composition of two well-formed logical states is well-formed:\[\forall_{x,y,z}\ldotp \mathsf{WellFormed}(x) \implies \mathsf{WellFormed}(y) \implies x\bullet y = z \implies \mathsf{WellFormed(z)}\]
+\end{lemma}
+\begin{proof}
+By assumption, we know that \textsf{Wellformed}(x) and \textsf{Wellformed}(y) hold. We need to show that composition of two well-formed states preserves well-formedness which is to show that for all $z$ such that $x\bullet y = z$, \textsf{Wellformed}(z) holds.
+  Both $x$ and $y$ have compontents $((s_x,h_x,l_x,rt_x,R_x,B_x),O_x,U_x,T_x,F_x)$ and $((s_y,h_y,l_y,rt_y,R_y,B_y),O_y,U_y,T_y,F_y)$, respectively. $\bullet_s$ operator over stacks $s_x$ and $s_y$ enforces $dom(s_x) \cap dom(s_y) = \emptyset$ which enables to make sure that wellformed mappings in $s_x$ does not violate wellformed mappings in $s_y$ when we union these mappings for $s_z$. Same argument applies for $\bullet_F$ operator over $F_x$ and $F_y$. Disjoint unions of wellformed $R_x$ with wellformed $R_y$ and wellformed $B_x$ with wellformed $B_y$ preserves wellformedness in composition as it is disjoint union of different wellformed elements of sets. Wellformed unions of $O_x$ with $O_y$,  $U_x$ with $U_y$  and $T_x$ with $T_y$ preserve wellformedness. When we compose $h_x(s(x,tid),f)$ and $h_y(s(x,l),f)$, it is easy to show that we preserve wellformedness if both threads agree on the heap location. Otherwise, if the heap location is undefined for one thread but a value for the other thread then composition considers the value. If a heap location is undefined for both threads then this heap location is also undefined for the location. All the cases for heap composition still preserves the wellformedness from the assumption that $x$ and $y$ are wellformed. 
+  \end{proof}
+\begin{lemma}[Valid $\mathcal{R}_0$ Interference]
+For any $m$ and $m'$, if $\mathsf{WellFormed}(m)$ and $m\mathcal{R}_0m'$, then $\mathsf{WellFormed}(m')$.
+\end{lemma}
+\begin{proof}
+  By assumption, we know that $m = (s,h,l,rt,R,B),O,U,T,F)$ is wellformed. We also know that $m'= (s',h',l',rt',R',B'),O',U',T',F')$ is related to $m$ via $R_{0}$. By assumptions in $R_{0}$ and semantics, we know that $O$,$R$,$T$ and $U$ which means that these components do not have any effect on wellformedness of the $m$. In addition, change on stack, $s$, does not affect the wellformedness as
+\[\forall x,t \in T \ldotp s(x,t) = s'(x,t) \]
+Moreover, from semantics we know that $l$ and $h$ can only be changed by writer thread and from $R_0$
+\[l  \in  T \rightarrow (h = h' \land l=l')\]
+\[  l\in T\rightarrow F=F'\]
+and by assumptions from the lemma($\mathsf{WellFormed}(m)$.\textbf{RINFL}) we can conclude that $F$,$l$ and $h$ do not have effect on wellformedness of the $m$.
+\end{proof}
+\begin{lemma}[Stable Environment Denotation-M]\label{lemma:stblw}
+For any \emph{closed} environment $\Gamma$ (i.e., $\forall x\in\mathsf{dom}(\Gamma)\ldotp, \mathsf{FV}(\Gamma(x))\subseteq\mathsf{dom}(\Gamma)$):
+\[
+\mathcal{R}(\llbracket\Gamma\rrbracket_{\mathsf{M},tid})\subseteq\llbracket\Gamma\rrbracket_{\mathsf{M},tid}
+\]
+Alternatively, we say that environment denotation is \emph{stable} (closed under $\mathcal{R}$).
+\end{lemma}
+\begin{proof}
+  By induction on the structure of $\Gamma$.  The empty case holds trivially.  In the other case where $\Gamma=\Gamma',x:T$, we have by the inductive hypothesis that
+  \[\llbracket\Gamma'\rrbracket_{\mathsf{M},tid}\] is stable, and must show that
+  \[\llbracket\Gamma'\rrbracket_{\mathsf{M},tid}\cap\llbracket{x:\tau}\rrbracket_{tid}\] is as well.  This latter case proceeds by case analysis on $T$.
+
+We know that $O$, $U$, $T$, $R$, $s$ and $rt$ are preserved by $R_0$. By unfolding the type environment in the assumption we know that $tid = l$. So we can derive conclusion for preservation of $F$ and $h$ and $l$ by
+\[l  \in  T \rightarrow (h = h' \land l=l')\]
+\[  l\in T\rightarrow F=F'\]
+Cases in which denotations, $\llbracket x:T \rrbracket$, touching these \emph{R$_0$ preserved} maps are trivial to show.
+  \begin{case} - \textsf{unlinked}, \textsf{undef}, $\textsf{rcuFresh}\, \N$ and \textsf{freeable} trivial.
+\begin{case} - $\textsf{rcuItr}\,\rho\,\N$: All the facts we know so far from $R_0$, $tid=l$ and additional fact we know from $R_0$:
+  \[\forall tid,o\ldotp\textsf{iterator} \, tid \in O(o) \rightarrow o \in dom(h) \]
+  \[\forall tid,o\ldotp\textsf{iterator} \, tid \in O(o) \rightarrow o \in dom(h')\]
+  prove this case.
+  \end{case}
+  \end{case}
+  \begin{case} - \textsf{root}: All the facts we know so far from $R_0$, $tid=l$ and additional fact we know from $R_0$:
+    \[ \forall tid,o\ldotp\textsf{root} \, tid \in O(o) \rightarrow o \in dom(h) \]
+    \[ \forall tid,o\ldotp\textsf{root} \, tid \in O(o) \rightarrow o \in dom(h') \]
+    prove this case.
+    \end{case}
+\end{proof}
+\begin{lemma}[Stable Environment Denotation-R]
+For any \emph{closed} environment $\Gamma$ (i.e., $\forall x\in\mathsf{dom}(\Gamma)\ldotp, \mathsf{FV}(\Gamma(x))\subseteq\mathsf{dom}(\Gamma)$):
+\[
+\mathcal{R}(\llbracket\Gamma\rrbracket_{\mathsf{R},tid})\subseteq\llbracket\Gamma\rrbracket_{\mathsf{R},tid}
+\]
+Alternatively, we say that environment denotation is \emph{stable} (closed under $\mathcal{R}$).
+\end{lemma}
+\begin{proof}
+Proof is similar to one for Lemma \ref{lemma:stblw} where there is only one simple case, $\llbracket x:\textsf{rcuItr} \rrbracket$. 
+\end{proof}
+\begin{theorem}[Axiom Soundness]
+For each axiom, $\Gamma_{1} \vdash_{\textsf{RMO}} \alpha \dashv \Gamma_{2}$, we must show
+\[
+\forall m\ldotp   \llbracket \alpha \rrbracket  (\lfloor \llbracket \Gamma_{1} \rrbracket_{tid}  * \{m\} \rfloor )\subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{tid} * \mathcal{R}(\{m\}) \rfloor
+\]
+\end{theorem}
+\begin{proof}
+By case analysis on the atomic action $\alpha$ followed by inversion on typing derivation.
+\end{proof}
+
+Type soundness proceeds according to the requirements of the Views Framework, primarily embedding each type judgment into the Views logic:
+\begin{lemma}\label{lemma:embedr}
+\[  \forall\Gamma,C,\Gamma',\mathit{t}\ldotp\Gamma\vdash_R C\dashv \Gamma' \Rightarrow
+\llbracket\Gamma\rrbracket_\mathit{t}\cap\llbracket{R}\rrbracket_t\vdash \llbracket C\rrbracket_\mathit{t}\dashv\llbracket\Gamma'\rrbracket_\mathit{t}\cap\llbracket{R}\rrbracket_t
+\]
+\end{lemma}
+\begin{proof}
+  Proof is similar to the one for Lemma \ref{lemma:embedw} except the denotation for type system definition is $\llbracket R \rrbracket_t = \{\{((s,h,l,rt,R,B),O,U,T,F)| t \in R \}$ which shrinks down the set of all logical states to the one that can only be defined by types($\textsf{rcuItr}$) in read type system. 
+  \end{proof}
+\begin{lemma}\label{lemma:embedw}
+  \[
+\forall\Gamma,C,\Gamma',\mathit{t}\ldotp\Gamma\vdash_M C\dashv \Gamma' \Rightarrow
+\llbracket\Gamma\rrbracket_\mathit{t}\cap\llbracket{M}\rrbracket_t\vdash \llbracket C\rrbracket_\mathit{t}\dashv\llbracket\Gamma'\rrbracket_\mathit{t}\cap\llbracket{M}\rrbracket_t
+\]
+\end{lemma}
+\begin{proof}
+  Induction on derivation of $\Gamma \vdash_M C \dashv \Gamma'$ and then inducting on the type of first element of the environment. For the nonempty case, $\Gamma'',x:T$ we do case analysis on $T$. Type environment for write-side actions includes only: $\textsf{rcuItr} \, \rho \, \N$, $\textsf{undef}$, $\textsf{rcuFresh}$, $\textsf{unlinked}$ and $\textsf{freeable}$. Denotations of these types include the constraint $t=l$ and other constraints specific to the type's denotation. The set of logical state defined by the denotation of the type is \emph{subset} of intersection of the set of logical states defined by $\llbracket M \rrbracket_{t} \cap \llbracket x:T \rrbracket_{t}$ which shrinks down the logical states defined by  $\llbracket M \rrbracket_{t}= \{((s,h,l,rt,R,B),O,U,T,F)| t = l\}$ to the set of logical states defined by denotation $\llbracket x:T \rrbracket_t$.
+  \end{proof}
+\begin{lemma}[Write-Side Critical Section Lifting]
+\label{lem:crit-lifting}
+For each $\alpha$ whose semantics does not affect the write lock, if
+\[\forall m\ldotp   \llbracket \alpha \rrbracket  (\lfloor \llbracket \Gamma_{1} \rrbracket_{tid}  * \{m\} \rfloor )\subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{tid} * \mathcal{R}(\{m\}) \rfloor\]
+then
+%\[\forall m\ldotp   \llbracket \alpha \rrbracket  (\lfloor \llbracket \Gamma_{1} \rrbracket_{\textsf{R},tid}  * \{m\} \rfloor )\subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{\textsf{R},tid} * \mathcal{R}(\{m\}) \rfloor\]
+\[\forall m\ldotp   \llbracket \alpha \rrbracket  (\lfloor \llbracket \Gamma_{1} \rrbracket_{\textsf{M},tid}  * \{m\} \rfloor )\subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{\textsf{M},tid} * \mathcal{R}(\{m\}) \rfloor\]
+\end{lemma}
+\begin{proof}
+Each of these shared actions $\alpha$ preserves the lock  component of the physical state, the only component constrained by $\llbracket-\rrbracket_{M,tid}$ beyond $\llbracket-\rrbracket_{tid}$.
+For the read case, we must prove from the assumed subset relationship that for an aritrary $m$:
+\[\llbracket \alpha \rrbracket  (\lfloor \llbracket \Gamma_{1} \rrbracket_{tid}\cap\llbracket\textsf{M}\rrbracket_{tid}  * \{m\} \rfloor )\subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{tid}\cap\llbracket\textsf{M}\rrbracket_{tid} * \mathcal{R}(\{m\}) \rfloor\]
+By assumption, transitivity of $\subseteq$, and the semantics for the possible $\alpha$s,
+the left side of this containment is already a subset of
+\[\lfloor \llbracket \Gamma_{2} \rrbracket_{tid} * \mathcal{R}(\{m\}) \rfloor\]
+What remains is to show that the intersection with $\llbracket\mathsf{M}\rrbracket_{tid}$ is preserved by the atomic action.
+This follows from the fact that none of the possible $\alpha$s modifies the global lock.
+\end{proof}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Complete Memory Axioms}
+\label{sec:memaxioms}
+\begin{enumerate}
+\item{Ownership} invariant in Figure \ref{fig:ownership} invariant asserts that none of the valid heap locations can be observed as undefined.
+\begin{figure}[!htb]
+\[
+\textbf{OW}(\sigma,O,U,T,F) =
+\left\{
+\begin{array}{ll}
+ 	 & \forall_{o,o'f,f'} \ldotp  \sigma.h(o,f) = v \land \sigma.h(o',f') = v \\
+	& \land v \in \textsf{OID}  \land  \textsf{FType}(f) = \textsf{RCU} \implies \\
+ 	&\left\{
+		\begin{array}{cl}
+			&  o=o' \land f=f' \\
+			& \lor\textsf{unlinked} \in O(o) \\
+		  & \lor \textsf{unlinked} \in O(o') \\
+                  & \lor \textsf{freeable} \in O(o)\\
+                  & \lor \textsf{freeable} \in O(o')\\
+		        & \lor \textsf{fresh} \in O(o)) \\
+                        & \lor \textsf{fresh} \in O(o')
+		\end{array}
+		\right.%\} 
+\end{array}
+\right.%\}
+\]
+\caption{Ownership}
+\label{fig:ownership}
+\end{figure}
+\item{Reader-Writer-Iterators-CoExistence} invariant in Figure \ref{fig:rwitrexistence} asserts that  if a heap location is not undefined then all reader threads and the writer thread may observe the heap location as \textsf{iterator}. Observations that the writer thread can make specifically are \textsf{fresh}, \textsf{unlinked} or \textsf{freeable}. Semantic denotation of the \textsf{freeable} observation asserts that the observed heap location is in the free list and and there exists no thread holding a reference to it. If some references from the reader threads to an observed heap location in the free list may exist -- captured by \textsf{unlinked} state -- then these threads \textit{bound} the writer thread for the reclamation of the heap location.
+\begin{figure}[!htb]
+\[
+\textbf{RWOW}(\sigma,O,U,T,F)=
+\left\{
+\begin{array}{ll}
+	 \forall x,tid,o \ldotp \sigma.s(x,tid) = o  
+         \land (x,tid) \notin U \implies \\ \left\{
+		\begin{array}{ll}
+ 			& \textsf{iterator } \, tid \in O(o) \\
+ 		  & \lor (\sigma.l=tid \land (\textsf{unlinked} \in O(o) ) \\
+		  & \lor (\sigma.l=tid  \land \textsf{freeable} \in O(o)))  \\
+       & \lor (\sigma.l=tid \land \textsf{fresh} \in O(o))     
+		\end{array}
+	\right.%\}
+\end{array}
+\right.%\}
+\]
+\caption{Reader-Writer-Iterator-Coexistence-Ownership}
+\label{fig:rwitrexistence}
+\end{figure}
+\item{Alias-With-Root} invariant in Figure \ref{fig:aliaswithroot} asserts that the unique root location can only be aliased with thread local references through which the unique root location is observed as \textsf{iterator}.
+\begin{figure}[!htb]
+\[
+\textbf{AWRT}(\sigma,O,U,T,F)=
+\left\{
+(\forall_{y,tid} \ldotp h^{*}(\sigma.rt,\epsilon) = s(y,tid)  \implies \textsf{iterator}\, tid \in O(s(y,tid)))
+	\right.%\}
+\]
+\caption{Alias with Unique Root}
+\label{fig:aliaswithroot}
+\end{figure}
+\item{Iterators-Free-List} invariant in Figure \ref{fig:itrfreelist} asserts that if a heap location is observed as \textsf{iterator} by a thread -- $tid$ -- and it is in free list with a set of bounding threads -- $T'$ -- then $tid$ is an element of this set of bounding threads.
+\begin{figure}[!htb]
+\[
+\textbf{IFL}(\sigma,O,U,T,F)=
+\left\{
+	\forall tid, o \ldotp  \textsf{iterator} \, tid \in O(o)  \land \forall_{T'\subseteq T} \ldotp \sigma.F([o \mapsto T'])  \implies tid \in T' 
+\right.%\}
+\]
+\caption{Iterators-Free-List}
+\label{fig:itrfreelist}
+\end{figure}
+\item{Unlinked-Reachability} invariant in Figure \ref{fig:unlinkreach} asserts that if a heap node is observed as \textsf{unlinked}, all heap locations from which you can reach to the \textsf{unlinked} one are also unlinked or in the free list.
+\begin{figure}[!htb]
+\[
+\textbf{ULKR}(\sigma,O,U,T,F) =
+\left\{
+\begin{array}{ll}
+  \forall o \ldotp \textsf{unlinked} \in O(o) \implies \\
+  \left\{
+	\begin{array}{cl}
+	  \forall o',f '\ldotp \sigma.h(o',f') = o \implies \\
+          \left\{
+			\begin{array}{cl}
+				&\textsf{unlinked} \in O(o') \lor\\
+				& \textsf{freeable} \in O(o')
+			\end{array}
+		\right.%\}
+	\end{array}
+	\right.%\}
+\end{array}
+\right.%\}
+\]
+\caption{Unlinked-Reachability}
+\label{fig:unlinkreach}
+\end{figure}
+\item{Free-List-Reachability} invariant in Figure \ref{fig:freelistchain} asserts that if a heap location -- $o$ is in the free list then all heap locations -- $o'$ -- from which you can reach to the one in the free list are also in the free list. The set of threads -- $T'$ -- referencing to $o'$ are included in the set of threads($T$) referencing to the $o$.
+\begin{figure}[!htb]
+\[
+\textbf{FLR}(\sigma,O,U,T,F) =
+\left\{
+\begin{array}{ll}
+  \forall o \ldotp F([o \mapsto T]) \implies \\
+  \left\{
+   		\begin{array}{cl}
+		  \forall o',f' \ldotp \sigma.h(o',f') = o \implies \\
+                \left\{
+   \begin{array}{cl}
+   	 		&\exists_{T'\subseteq T} \ldotp  F([o'\mapsto T']) 
+   \end{array}
+   \right.
+                  \end{array}
+ 	\right.%\}
+\end{array}
+\right.%\}
+\]
+\caption{Free-List-Reachability}
+\label{fig:freelistchain}
+\end{figure}
+\item{Mutator-Iterator-Unlinked} invariant in Figure \ref{fig:mutunliked} states that  writer thread cannot observe a heap location as \textsf{unlinked}. It captures the fact that there exists a single writer that can mutate the heap at a time.
+\begin{figure}[!htb]
+\[
+\textbf{WULK}(\sigma,O,U,T,F) =
+\left\{
+\begin{array}{ll}
+\forall o \ldotp \textsf{iterator} \, \sigma.l \in O(o)  \implies \textsf{unlinked} \notin O(o)
+\end{array}
+\right.%\}
+\]
+\caption{Writer-Unlink}
+\label{fig:mutunliked}
+\end{figure}
+\item{Fresh-Reachable} invariant in Figure \ref{fig:freach} states that there exists no heap location that can reach to a freshly allocated heap location together with fact on nonexistence of aliases to it.
+\begin{figure}[!htb]
+  \[
+  \textbf{FR}(\sigma,O,U,T,F) =
+ \begin{array}{ll}
+   \forall_{tid,x,o} \ldotp (\sigma.s(x,tid) = o \land \textsf{fresh} \in O(o) ) \implies \\
+	\begin{array}{cl}
+          (\forall_{y,o',f',tid'}. (h(o',f') \neq o) \lor  (s(y,tid) \neq)  o \lor (tid'\neq tid \implies s(y,tid') \neq o ))
+        \end{array}
+        \end{array}
+\]
+\caption{Fresh-Reachable}
+\label{fig:freach}
+\end{figure}
+
+\item{Fresh-By-Mutator} invariant in Figure \ref{fig:fmut} states that heap allocation can be done only by writer thread.
+  \begin{figure}[!htb]
+  \[
+\textbf{WF}(\sigma,O,U,T,F) =
+ \forall_{tid,x,o} \ldotp (\sigma.s(x,tid) = o \land \textsf{fresh} \in O(o) ) \implies  tid = \sigma.l 
+\]
+\caption{Fresh-Writer}
+\label{fig:fmut}
+  \end{figure}
+\item{Fresh-Not-Reader} invariant in Figure \ref{fig:fnotreader} states that heap location allocated freshly cannot be observed as \textsf{unlinked} or \textsf{iterator}.
+  \begin{figure}[!htb]
+  \[
+\textbf{FNR}(\sigma,O,U,T,F) =
+ \forall_{o} \ldotp (\textsf{fresh} \in O(o) ) \implies  (\forall_{x,tid} \ldotp \textsf{iterator}\,tid  \notin O(o)  ) \land \textsf{unlinked} \notin O(o) 
+\]
+\caption{Fresh-Not-Reader}
+\label{fig:fnotreader}
+  \end{figure}
+\item{Fresh-Points-Iterator} invariant in Figure \ref{fig:fsinglefield} states that any field of fresh allocated object can only be set to point heap node which can be observed as \textsf{iterator} (not \textsf{unlinked or freeable}).  This invariant captures the fact $\N = \N'$ asserted in the type rule for fresh node linking(\textsc{T-LinkF}). 
+  \begin{figure}[!htb]
+  \[
+\textbf{FPI}(\sigma,O,U,T,F) =
+ \forall_{o} \ldotp (\textsf{fresh} \in O(o)  \land \exists_{f,o'}\ldotp h(o,f)=o') \implies (\forall_{tid} \ldotp  \textsf{iterator}\,tid \in O(o')) 
+\]
+\caption{Fresh-Points-Iterator}
+\label{fig:fsinglefield}
+  \end{figure}
+   
+\item{Writer-Not-Reader} invariant in Figure \ref{fig:wnr} states that a writer thread identifier can not be a reader thread identifier.
+  \begin{figure}[!htb]
+    \[
+\textbf{WNR}(\sigma,O,U,T,F) =
+\left\{
+\begin{array}{ll}
+ \sigma.l \notin \sigma.R
+\end{array}
+\right.%\}
+\]
+    \caption{Writer-Not-Reader}
+\label{fig:wnr}
+  \end{figure}
+  \item{Readers-Iterator} invariant in the Figure \ref{fig:riter} states that a reader threads can only make \textsf{iterators} observation on a heap location.
+  \begin{figure}[!htb]
+    \[
+\textbf{RITR}(\sigma,O,U,T,F) =
+\left\{
+\begin{array}{ll}
+ \forall_{tid \in \sigma.R,o}\ldotp \textsf{iterator} \, tid \in O(o) 
+\end{array}
+\right.%\}
+\]
+    \caption{Writer-Not-Reader}
+\label{fig:riter}
+  \end{figure}
+\item{Readers-In-Free-List} invariant in Figure \ref{fig:readerinflist} states that for any mapping from a location to a set of threads in the free list we know the fact that  this set of threads is a subset of bounding threads( which itself is subset of reader threads).
+\begin{figure}[!htb]
+  \[
+\textbf{RINFL}(\sigma,O,U,T,F) =
+\left\{
+\begin{array}{ll}
+  \forall_{o} \ldotp F([o \mapsto T]) \implies T \subseteq \sigma.B
+\end{array}
+\right.%\}
+\]
+\caption{Readers-In-Free-List}
+\label{fig:readerinflist}
+\end{figure}
+\item{Heap-Domain} invariant in the Figure \ref{fig:dreachable} defines the domain of the heap.
+\begin{figure}[!htb]
+\[
+\textbf{HD}(\sigma,O,U,T,F) =
+\forall_{o,f',o'} \ldotp  \sigma.h(o,f) = o' \implies  o' \in dom(\sigma.h)
+\]
+    \caption{Heap-Domain}
+\label{fig:dreachable}
+\end{figure}
+\item{Unique-Root} invariant in Figure \ref{fig:uroot} states that a heap location which is observed as \textsf{root} has no incoming edges from any nodes in the domain of the heap and all nodes accessible from root is is observed as \textsf{iterator}. This invariant is part of enforcement for \emph{acyclicity}.
+  \begin{figure}[!htb]
+\[
+\textbf{UNQRT}(\sigma,O,U,T,F) =
+  \left\{ \begin{array}{ll}
+ \forall_{\rho \neq \epsilon} \ldotp \textsf{iterator} \, tid \in O( h^{*}(\sigma.rt,\rho) \land \lnot(\exists_{f'} \ldotp \sigma.rt = h( h^{*}(\sigma.rt,\rho),f'))
+\end{array} \right.%\}
+\]
+    \caption{Unique-Root}
+\label{fig:uroot}
+\end{figure}
+\item{Unique-Path} invariant in Figure \ref{fig:upath} states that every node is reachable from root node with an unique path. This invariant is a part of \emph{wellshapedness}(e.g. acyclicity) enforcement on the heap layout of the data structure. The justification for having this invariant is explained in \textbf{ULKR}.
+  \begin{figure}[!htb]
+\[
+\textbf{UNQR}(\sigma,O,U,T,F) =
+\left\{
+\begin{array}{ll}
+    \forall_{\rho, \rho'}  \ldotp  h^{*}(\sigma.rt,\rho) \neq h^{*}(\sigma.rt, \rho') \implies  \rho \neq \rho' 
+\end{array}
+\right.%\}
+\]
+\caption{Unique-Reachable}
+\label{fig:upath}
+\end{figure}
+\end{enumerate}
+ Each of these memory invariants captures different aspects of validity of the memory under \textsf{RCU} setting, $\textsf{WellFormed}(\sigma,O,U,T,F) $, is defined as conjunction of all memory axioms.
+
+ \subsection{Soundness Proof of Atoms}
+ \label{lem:lematom}
+ In this section, we do proofs to show the soundness of each type rule for each atomic actions.
+ \begin{lemma}[\textsc{Unlink}]\small
+   \label{lemma:unlink}
+\begin{align*}
+  \llbracket x.f_1:=r \rrbracket (\lfloor \llbracket \Gamma, \, x:\mathsf{rcuItr}\,\rho\,\N ( [f_1 \rightharpoonup  z]), z:\mathsf{rcuItr} \, \rho' \,\N'([ f_2 \rightharpoonup r]), \;
+  r:\mathsf{rcuItr} \, \rho'' \,\N'' \rrbracket_{M,tid} * \{m\}\rfloor)     \subseteq \\
+                                                              \lfloor \llbracket \Gamma, \,  x:\mathsf{rcuItr} \, \rho \, \N( f_1 \rightharpoonup z \setminus r),\;
+                                                              z:\mathsf{unlinked}, \;
+                                                              r:\mathsf{rcuItr} \, \rho' \, \N'' \rrbracket  * \mathcal{R}(\{m\})\rfloor
+\end{align*}
+ \end{lemma}
+ \begin{proof}
+We assume
+\begin{gather}\label{ahu1}
+  \begin{aligned}
+    (\sigma, O, U, T, F) \, \in &  \llbracket \Gamma, \, x:\mathsf{rcuItr}\,\rho\,\N ,\, z:\mathsf{rcuItr} \, \rho' \,\N', \\
+    &r:\mathsf{rcuItr} \, \rho'' \,\N'' \rrbracket_{M,tid} * \{m\}
+    \end{aligned} \\
+\textsf{WellFormed}(\sigma,O,U,T,F)
+\label{ahu2}
+\end{gather}
+
+From assumptions in the type rule of \textsc{T-UnlinkH} we assume that
+\begin{gather}
+  \rho.f_1=\rho' \text{ and } \rho'.f_2=\rho'' \text{ and } \N(f_1) = z \text{ and } \N'(f_2)=r
+    \label{ahu4} \\
+\forall_{f\in dom(\N')} \ldotp f\neq f_2 \implies  \N'(f) = \textsf{null}
+      \label{ahu5} \\
+\begin{array}{l}\footnotesize
+\forall_{n\in \Gamma,m,\N''', p''',f}\ldotp n:\textsf{rcuItr}\,\rho'''\,\N'''([f\rightharpoonup m]) \implies %\arcr
+\left\{\begin{array}{l}
+((\neg\mathsf{MayAlias}(\rho''',\{\rho,\rho',\rho''\})  ) \land (m\not\in\{z,r\} ) ) \arcr
+\land (\forall_{\rho''''\neq \epsilon} \ldotp \neg\mathsf{MayAlias}(\rho''', \rho''.\rho'''') )
+\end{array}\right.
+\end{array}
+        \label{ahu6}
+\end{gather}
+We split the composition in  \ref{ahu1} as 
+\begin{gather} \label{ahu11}
+  \begin{aligned}
+    (\sigma_1, O_{1}, U_{1}, T_{1},F_1 ) \in  &\llbracket \Gamma, \, x:\mathsf{rcuItr}\,\rho\,\N ,\, z:\mathsf{rcuItr} \, \rho' \,\N',\\
+    &r:\mathsf{rcuItr} \, \rho'' \,\N'' \rrbracket_{M,tid} \end{aligned}\\
+\label{ahu12}
+(\sigma_2, O_{2}, U_{2}, T_{2},F_2) = m
+\\
+\label{ahusig}
+\sigma_1 \bullet_s \sigma_2 = \sigma \\
+\label{ahu13}
+O_{1} \bullet_{O} O_{2} = O
+\\
+\label{ahu14}
+U_{1} \cup U_{2} = U
+\\
+\label{ahu15}
+T_{1} \cup T_{2} = T
+\\
+\label{ahff}
+F_{1} \uplus F_2 = F
+\\
+\label{ahu16}
+\textsf{WellFormed}(\sigma_1,O_{1},U_{1},T_{1},F_1)
+\\
+\label{ahu17}
+\textsf{WellFormed}(\sigma_2,O_{2},U_{2},T_{2},F_2)
+\end{gather}
+
+We must show  $\exists_{\sigma'_1,\sigma'_2, O'_{1}, O'_{2}, U'_{1}, U'_{2}, T'_{1}, T'_{2}, F'_1,F'_2}$ such that
+\begin{gather}\label{phu5}
+\begin{aligned}
+(\sigma_1',O'_{1},U'_{1}, T'_{1},F'_1)  \in \llbracket \Gamma, \,  x:\mathsf{rcuItr} \, \rho \,\N([f_1 \rightharpoonup r]) ,\, z:\mathsf{unlinked}, r:\mathsf{rcuItr} \, \rho' \, \N'' \rrbracket_{M,tid}
+\end{aligned}\\
+\\
+\label{phuN}
+\N(f_1)= r
+\\
+\label{phu6}
+(\sigma_2',O'_{2},U'_{2}, T'_{2}, F'_2) \in \mathcal{R}(\{m\})
+\\
+\label{ahusig'}
+\sigma'_1 \bullet_s \sigma'_2 = \sigma' \\
+\label{phu7}
+O'_{1} \bullet_{O} O'_{2} = O'
+\\
+\label{phu8}
+U'_{1} \cup U'_{2} = U'
+\\
+\label{phu9}
+T'_{1} \cup T'_{2} = T'
+\\
+\label{phff}
+F'_{1} \uplus F'_2 = F'
+\\
+\label{phu10}
+\textsf{WellFormed}(\sigma_1',O'_{1},U'_{1},T'_{1},F'_1) \\
+\label{phu11}
+\textsf{WellFormed}(\sigma_2',O'_{2},U'_{2},T'_{2},F'_2)
+\end{gather}
+We also know from operational semantics that the machine state has changed as
+\begin{gather}\label{ahus}
+\sigma_1' =  \sigma_1[h(s(x,tid),f_1 ) \mapsto s(r,tid) ]
+\end{gather}
+and \ref{ahus} is determined by operational semantics. 
+
+The only change in the observation map is on $s(y,tid)$ from $\textsf{iterator}\;tid$ to $\textsf{unliked}$
+\begin{gather}\label{ahus1}
+  O'_1 =  O_1(s(y,tid))[\textsf{iterator}\;tid \mapsto \textsf{unlinked}]
+\end{gather}
+\ref{ahus2} follows from \ref{ahu1}
+\begin{gather}\label{ahus2}
+  T_1 = \{tid\} \text{ and } tid = \sigma.l
+\end{gather}
+
+$\sigma'_1$ is determined by operational semantics. The undefined map, free list and $T_1$ need not change so we can pick $U'_1$ as $U_1$, $T'_1$ as $T_1$ and $F'_1$ as $F_1$. Assuming \ref{ahu11} and choices on maps makes $(\sigma_1',O'_{1},U'_{1}, T'_{1})$ in denotation
+\[\llbracket \Gamma, \,  x:\mathsf{rcuItr} \, \rho \,\N([ f \rightharpoonup r]), z:\mathsf{unlinked}, r:\mathsf{rcuItr} \, \rho' \, \N'' \rrbracket_{M,tid}\]
+
+In the rest of the proof, we prove \ref{phu10}, \ref{phu11} and show the composition of $(\sigma'_1, O'_1, U'_1,T'_1,F'_1)$ and  $(\sigma'_2, O'_2, U'_2,T'_2,F'_2)$. To prove \ref{phu10}, we need to show that each of the memory axioms in Section \ref{sec:memaxioms} holds for the state $(\sigma',O'_1,U_1',T_1',F'_1)$.
+
+Let $o_x$ be $\sigma.s(x,tid)$, $o_y$ be $\sigma.s(y,tid)$ and $o_z$ be $\sigma.s(z,tid)$.
+\begin{case}\label{unqr} - \textbf{UNQR} \ref{ahus3} and \ref{ahus4} follow from framing assumption(\ref{ahu4}-\ref{ahu6}), denotations of the precondition(\ref{ahu11}) and \ref{ahu16}.\textbf{UNQR}
+  \begin{gather}\label{ahus3}
+    \rho \neq \rho' \neq \rho'' 
+  \end{gather}
+and   
+  \begin{gather}\label{ahus4}
+    o_x \neq o_y \neq o_z 
+  \end{gather}
+  where $o_x$, $o_y$ and $o_z$ are equal to $\sigma.h^{*}(\sigma.rt,\rho)$, $\sigma.h^{*}(\sigma.rt,\rho,f_1)$ and $\sigma.h^{*}(\sigma.rt,\rho.f_1.f_2)$ respectively and they($o_x,o_y,o_z$ and $\rho,\rho'$) are unique.
+
+We must prove 
+\begin{gather}\label{phuc1}
+     h'^{*}(\sigma.rt,\rho) \neq h'^{*}(\sigma.rt, \rho.f_1)  \implies \rho \neq \rho.f_1 
+\end{gather}
+to show that uniqueness is preserved.
+
+We know from operational semantics that root has not changed so
+\[\sigma.rt = \sigma'.rt\]
+
+From denotations (\ref{phu5}) we know that all heap locations reached by following $\rho$ and $\rho.f_1$ are observed as $\textsf{iterator}\, tid$ including the final reached heap locations($\textsf{iterator}\,tid \in O'_1(\sigma'.h^{*}(\sigma.rt,\rho))$ and $\textsf{iterator}\,tid \in O_1'(\sigma'.h^{*}(\sigma.rt,\rho.f_1))$). \ref{phuN} is determined directly by operational semantics.
+
+$\textsf{unlinked}\in O'_1(o_y)$ follows from \ref{ahus1} and \ref{ahus} which makes path $\rho.f_1.f_2$ invalid(from denotation(\ref{phu5}), all heap locations reaching to  $O_1'(o_r)$ from root($\sigma.rt$) are observed as  $\textsf{iterator}\, tid$ so this proves that  $\textsf{unlinked}\in O'_1(o_y)$)  cannot be observed on the path to the $o_r$ which implies that $f_2$ cannot be part of the path and uniqueness of the paths to $o_x$ and $o_r$ is preserved. So we conclude \ref{ahus5} and \ref{ahus6}
+  \begin{gather}\label{ahus5}
+    \rho \neq \rho'
+  \end{gather}
+    \begin{gather}\label{ahus6}
+    o_x \neq o_y \neq o_z 
+  \end{gather}
+from which \ref{phuc1} follows.
+\end{case}
+\begin{case} - \textbf{OW} By \ref{ahu16}.\textbf{OW}, \ref{ahus}, \ref{ahus1}.
+\end{case}
+\begin{case} - \textbf{RWOW} By \ref{ahu16}.\textbf{RWOW}, \ref{ahus} and \ref{ahus1}.
+\end{case}
+\begin{case} - \textbf{IFL} By \ref{ahu16}.\textbf{WULK}, \ref{ahu16}.\textbf{RINFL}, \ref{ahu16}.\textbf{IFL}, \ref{ahus1} and choice of $F'_1$.
+\end{case}
+\begin{case} - \textbf{FLR} By choice of $F'_1$ and \ref{ahu16}. 
+\end{case}
+\begin{case} - \textbf{WULK} By \ref{phu5},  \ref{ahus1} and \ref{ahus2}.
+\end{case}
+\begin{case} - \textbf{WF}, \textbf{FPI} and \textbf{FR} Trivial.
+\end{case}
+\begin{case} - \textbf{AWRT} By \ref{phu5}.
+\end{case}
+\begin{case} - \textbf{HD} By \ref{phu10}.\textbf{OW}(proved), \ref{ahu16}.\textbf{HD}  and \ref{ahus}. 
+\end{case}
+\begin{case} - \textbf{WNR} By \ref{ahu16}.\textbf{WNR}, \ref{ahus}, \ref{ahus1} and \ref{ahus2}.
+\end{case}
+\begin{case} - \textbf{RINFL} By \ref{phu5}, \ref{ahu16}.\textbf{RINFL}, choice of $F'_1$ and \ref{ahus}.
+\end{case}
+\begin{case} - \textbf{ULKR} We must prove \ref{phuc2}
+  \begin{gather}\label{phuc2}
+    \begin{aligned}
+      \forall_{o',f'} \ldotp \sigma'.h(o',f') = o_y \implies & \textsf{unlinked} \in O'_1(o')  \\
+      &\lor (\textsf{freeable} \in O'_1(o'))
+      \end{aligned}
+\end{gather}
+which follows from \ref{phu5}, \ref{ahu16}.\textbf{OW}, operational semantics(\ref{ahus}) and \ref{ahus1}. If $o'$ were observed as \textsf{iterator} then that would conflict with \ref{phu10}.\textbf{UNQR}. 
+\end{case}
+\begin{case} - \textbf{UNQRT}: By \ref{ahu16}.\textbf{UNQRT}, \ref{ahus1} and \ref{ahus}.
+\end{case}
+To prove \ref{phu6} we need to show interference relation
+\[(\sigma, O_2, U_2, T_2,F_2) \mathcal{R} (\sigma', O'_2, U'_2, T'_2,F'_2)  \]
+which by definition means that we must show 
+\begin{gather}\label{phu17}
+  \sigma_2.l  \in  T_2 \rightarrow (\sigma_2.h =\sigma'_2.h \land \sigma_2.l=\sigma'_2.l)\\
+  \label{phu18}
+  l\in T_2\rightarrow F_2=F_2'\\
+  \label{phu20}
+  \forall tid,o\ldotp\textsf{iterator} \, tid \in O_2(o) \rightarrow o \in dom(\sigma_2.h) \\
+  \label{phu21}
+  \forall tid,o\ldotp\textsf{iterator} \, tid \in O_2(o) \rightarrow o \in dom(\sigma'_2.h) \\
+  \label{phu22}
+  O_2 = O_2' \land U_2 = U_2' \land T_2 = T_2' \land \sigma_2.R = \sigma'_2.R \land \sigma_2.rt = \sigma'_2.rt \\
+  \label{phu23}
+  \forall x, t \in T_2 \ldotp \sigma_2.s(x,t) = \sigma'_2.s(x,t) \\
+  \label{phurt1}
+  \forall tid,o\ldotp\textsf{root} \, tid \in O(o) \rightarrow o \in dom(h) \\
+  \label{phurt2}
+  \forall tid,o\ldotp\textsf{root} \, tid \in O(o) \rightarrow o \in dom(h') 
+\end{gather}
+To prove all relations (\ref{phu17}-\ref{phu23}) we assume \ref{ahus2} which is to assume $T_2$ as subset of reader threads. Let $\sigma'_2$ be $\sigma_2$. $O_2$ need not change so we pick $O'_2$  as $O_2$. Since $T_2$ is subset of reader threads, we pick $T_2$ as  $T'_2$. We pick $F'_2$ as $F_2$.
+
+\ref{phu17} and \ref{phu18} follow from \ref{ahus2} and choice of $F_2'$. \ref{phurt1}, \ref{phurt2} and \ref{phu22} are determined by choice of $\sigma'_2$, operational semantic and choices made on maps related to the assertions.
+
+By assuming \ref{ahu17} we show \ref{phu11}. \ref{phu20} and \ref{phu21} follow trivially. \ref{phu23} follows from choice of $\sigma'_2$, \ref{ahus} and \ref{ahus2}. 
+
+To prove \ref{phu7} consider two cases: $O'_1 \cap O'_2 = \emptyset$ and $O'_1 \cap O'_2 \neq \emptyset$. The first case is trivial. The second case is where we consider 
+\[
+\textsf{iterator}\,tid \in O'_2(o_y)
+\]
+We also know from \ref{ahus1} that
+\[\textsf{unliked} \in O'_1(o_y)\]
+Both together with \ref{ahu13} and \ref{phu5} proves \ref{phu7}.
+
+To show \ref{ahusig'} we consider two cases: $\sigma'_1.h \cap \sigma'_2.h = \emptyset$ and $\sigma'_1.h \cap \sigma'_2.h \neq \emptyset$. First is trivial. Second follows from \ref{phu10}.\textbf{OW}-\textbf{HD} and \ref{phu11}.\textbf{OW}-\textbf{HD}. \ref{phu8}, \ref{phu9} and \ref{phff} are trivial by choices on related maps and semantics of composition operations on them. All compositions shown let us to derive conclusion for $(\sigma'_1, O'_1, U'_1, T'_1,F'_1) \bullet (\sigma'_2, O'_2, U'_2, T'_2,F'_2) $.
+   \end{proof}
+ \begin{lemma}[\textsc{LinkFresh}]
+   \label{lemma:linkf}
+   \begin{align*}
+  \llbracket p.f := n \rrbracket (\lfloor \llbracket \Gamma,\,
+ p:\textsf{rcuItr}\, \rho \, \N \, ,
+  r:\textsf{rcuItr}\, \rho' \, \N' \, , n:\textsf{rcuFresh} \, \N''\rrbracket_{M,tid} * \{m\}\rfloor)  \subseteq \\
+  \lfloor \llbracket \Gamma \,,p:\textsf{rcuItr}\, \rho \, \N([f \rightharpoonup r \setminus  n]) \, , n:\textsf{rcuItr}\, \rho' \, \N'' \, ,r:\unlinked \rrbracket  * \mathcal{R}(\{m\})\rfloor
+\end{align*}
+ \end{lemma}
+ \begin{proof}
+ We assume
+\begin{gather}\label{ahu1f}
+  \begin{aligned}
+    (\sigma, O, U, T,F) \, \in &  \llbracket \Gamma,\,
+ p:\textsf{rcuItr}\, \rho \, \N \, ,
+  r:\textsf{rcuItr}\, \rho' \, \N' \, , n:\textsf{rcuFresh} \, \N'' \rrbracket_{M,tid} * \{m\}
+    \end{aligned} \\
+\textsf{WellFormed}(\sigma,O,U,T,F)
+\label{ahu2f}
+\end{gather}
+From assumptions in the type rule of \textsc{T-LinkF} we assume that
+\begin{gather}
+\textsf{FV}(\Gamma) \cap \{p,r,n\}  =\emptyset 
+  \label{ahu3f} \\
+\rho.f  = \rho' \text{ and } \N(f) = r
+    \label{ahu4f} \\
+\N' = \N''
+\label{ahu5f} \\
+\begin{aligned}
+\forall_{x \in \Gamma, \N''', \rho'',f',y} \ldotp (x:\textsf{rcuItr}\,\rho''\,\N'''([f'\rightharpoonup y])) \implies (\neg\mathsf{MayAlias}(\rho'',\{\rho,\rho'\}) \land (y\neq o  ))  
+\label{ahu6f}
+  \end{aligned}
+\end{gather}
+We split the composition in  \ref{ahu1f} as 
+\begin{gather} \label{ahu11f}
+  \begin{aligned}
+    (\sigma_1, O_{1}, U_{1}, T_{1} ,F_1) \in & \llbracket \Gamma,\,
+ p:\textsf{rcuItr}\, \rho \, \N \, ,
+  r:\textsf{rcuItr}\, \rho' \, \N' \, , n:\textsf{rcuFresh} \, \N'' \rrbracket_{M,tid} \end{aligned}\\
+\label{ahu12f}
+(\sigma_2, O_{2}, U_{2}, T_{2},F_2) = m
+\\
+\label{ahu13f}
+O_{1} \bullet_{O} O_{2} = O
+\\
+\label{ahusigf}
+\sigma_1 \bullet_s \sigma_2 = \sigma \\
+\label{ahu14f}
+U_{1} \cup U_{2} = U
+\\
+\label{ahu15f}
+T_{1} \cup T_{2} = T
+\\
+\label{ahufff}
+F_1 \uplus F_2 = F
+\\
+\label{ahu16f}
+\textsf{WellFormed}(\sigma_1,O_{1},U_{1},T_{1},F_1)
+\\
+\label{ahu17f}
+\textsf{WellFormed}(\sigma_2,O_{2},U_{2},T_{2},F_2)
+\end{gather}
+We must show $\exists_{\sigma'_1, \sigma'_2, O'_{1}, O'_{2}, U'_{1}, U'_{2}, T'_{1}, T'_{2}, F'_1, F'_2}$ such that
+\begin{gather}\label{phu5f}
+\begin{aligned}
+(\sigma_1',O'_{1},U'_{1}, T'_{1},F'_1)  \in \llbracket p:\textsf{rcuItr}\, \rho \, \N \, , n:\textsf{rcuItr}\, \rho' \, \N'' \, , r:\unlinked\, ,  \Gamma \rrbracket_{M,tid}
+\end{aligned}
+\\
+\label{phuNf}
+\N(f)=n 
+\\
+\label{phu6f}
+(\sigma_2',O'_{2},U'_{2}, T'_{2}, F'_2) \in \mathcal{R}(\{m\})
+\\
+\label{phu7f}
+O'_{1} \bullet_{O} O'_{2} = O'
+\\
+\label{ahusigf'}
+\sigma'_1 \bullet_s \sigma'_2 = \sigma' \\
+\label{phu8f}
+U'_{1} \cup U'_{2} = U'
+\\
+\label{phu9f}
+T'_{1} \cup T'_{2} = T'
+\\
+\label{phufff}
+F'_1 \uplus F'_2 = F'
+\\
+\label{phu10f}
+\textsf{WellFormed}(\sigma_1',O'_{1},U'_{1},T'_{1},F'_1) \\
+\label{phu11f}
+\textsf{WellFormed}(\sigma_2',O'_{2},U'_{2},T'_{2},F'_2)
+\end{gather}
+We also know from operational semantics that the machine state has changed as
+\begin{gather}\label{ahusf}
+\sigma_1' =  \sigma_1[h(s(p,tid),f ) \mapsto s(n,tid) ]
+\end{gather}
+\ref{phuNf} is determined directly from operational semantics.
+
+We know that changes in observation map are
+\begin{gather}\label{ahus1f}
+O'_1 =  O_1(s(r,tid))[\textsf{iterator}\;tid \mapsto \textsf{unlinked}]
+\end{gather}
+and
+\begin{gather}\label{ahus2f}
+O'_1 =  O_1(s(n,tid))[\textsf{fresh} \mapsto \textsf{iterator}\,tid]
+\end{gather}
+
+\ref{ahus3f} follows from \ref{ahu1f}
+\begin{gather}\label{ahus3f}
+  T_1 = \{tid\} \text{ and } tid = \sigma.l
+\end{gather}
+Let $T'_1$ be $T_1$, $F'_1$ be $F_1$ and $\sigma'_1$ be determined by operational semantics. The undefined map need not change so we can pick $U'_1$ as $U_1$. Assuming \ref{ahu11f} and choices on maps makes $(\sigma_1',O'_{1},U'_{1}, T'_{1})$ in denotation
+\[\llbracket p:\textsf{rcuItr}\, \rho \, \N(f \rightharpoonup r \setminus n) \, , n:\textsf{rcuItr}\, \rho' \, \N'' \, , r:\unlinked\, ,  \Gamma \rrbracket_{M,tid}\]
+
+In the rest of the proof, we prove \ref{phu10f}, \ref{phu11f} and show the composition of $(\sigma'_1, O'_1, U'_1,T'_1)$ and  $(\sigma'_2, O'_2, U'_2,T'_2)$. To prove \ref{phu10f}, we need to show that each of the memory axioms in Section \ref{sec:memaxioms} holds for the state $(\sigma',O'_1,U_1',T_1')$.
+
+\begin{case}\label{unqrf} - \textbf{UNQR} 
+Let $o_p$ be $\sigma.s(p,tid)$, $o_r$ be $\sigma.s(r,tid)$ and $o_n$ be $\sigma.s(n,tid)$. 
+  \ref{ahus3f} and \ref{ahus4f} follow from framing assumption(\ref{ahu3f}-\ref{ahu6f}), denotations of the precondition(\ref{ahu11f}), \ref{ahu16}.\textbf{FR} and \ref{ahu16f}.\textbf{UNQR}
+  \begin{gather}\label{ahusbf}
+    \rho \neq \rho.f \neq \forall_{\N'([f_i \rightharpoonup x_i])}\ldotp \rho.f.f_i
+  \end{gather}
+and   
+  \begin{gather}\label{ahus4f}
+    o_p \neq o_r \neq o_n \neq o_i \text{  where  } o_i=h(o_r,f_i)
+  \end{gather}
+where $o_p$,  $o_r$ are  $\sigma.h^{*}(\sigma.rt,\rho)$, $\sigma.h^{*}(\sigma.rt,\rho.f)$ respectively and they(heap locations in \ref{ahus4f} and paths in \ref{ahusbf}) are unique(From \ref{ahu16f}.\textbf{FR}, we assume that there exists no field alias/path alias to heap location freshly allocated $o_n$). 
+
+We must prove 
+\begin{gather}\label{phuc1f}
+    \rho \neq \rho.f \neq \rho.f.f_i \iff \sigma'.h^{*}(\sigma.rt,\rho) \neq \sigma'.h^{*}(\sigma.rt, \rho.f) )  \neq \sigma'.h^{*}(\sigma.rt, \rho.f.f_i) )
+\end{gather}
+
+We know from operational semantics that root has not changed so
+\[\sigma.rt = \sigma'.rt\]
+
+From denotations (\ref{phu5f}) we know that all heap locations reached by following $\rho$ and $\rho.f$ are observed as $\textsf{iteartor}\,tid$ including the final reached heap locations($\textsf{iterator}\,tid \in O'_1(\sigma'.h^{*}(\sigma.rt,\rho))$, $\textsf{iterator}\,tid \in O'_1(\sigma'.h^{*}(\sigma.rt,\rho.f))$ and $\textsf{iterator}\,tid \in O'_1(\sigma'.h^{*}(\sigma.rt,\rho.f.f_i))$). The preservation of uniqueness follows from \ref{ahus1f}, \ref{ahus2f}, \ref{ahusf} and \ref{ahu16f}.\textbf{FR}.
+
+from which we conclude \ref{ahus5f} and \ref{ahus6f}
+  \begin{gather}\label{ahus5f}
+    \rho \neq \rho.f \neq \rho.f.f_i
+  \end{gather}
+    \begin{gather}\label{ahus6f}
+    o_p \neq o_n \neq o_r 
+  \end{gather}
+from which \ref{phuc1f} follows.
+\end{case}
+\begin{case} - \textbf{OW} By \ref{ahu16f}.\textbf{OW}, \ref{ahusf}, \ref{ahus1f} and \ref{ahus2f}.
+\end{case}
+\begin{case} - \textbf{RWOW} By \ref{ahu16f}.\textbf{RWOW}, \ref{ahusf}, \ref{ahus1f} and \ref{ahus2f}
+\end{case}
+\begin{case} - \textbf{AWRT} Trivial.
+\end{case}
+\begin{case} - \textbf{IFL}  By \ref{ahu16f}.\textbf{WULK}, \ref{ahus1f}, \ref{ahus2f} choice of $F'_1$ and operational semantics.
+\end{case}
+\begin{case} - \textbf{FLR} By choice of $F'_1$ and \ref{ahu16f}. 
+\end{case}
+\begin{case} - \textbf{FPI} By \ref{phu5f}.
+\end{case}
+\begin{case} - \textbf{WULK} Determined by operational semantics By \ref{ahu16f}.\textbf{WULK}, \ref{ahus1f}, \ref{ahus2f} and operational semantics.
+\end{case}
+\begin{case} - \textbf{WF} and \textbf{FR} Trivial.
+\end{case}
+\begin{case} - \textbf{HD} 
+\end{case}
+\begin{case} - \textbf{WNR} By \ref{ahus3f} and operational semantics.
+\end{case}
+\begin{case} - \textbf{RINFL} Determined by operational semantics(\ref{ahusf}) and \ref{ahu16f}.\textbf{RINFL}.
+\end{case}
+\begin{case} - \textbf{ULKR} We must prove 
+  \begin{gather}\label{phuc2f}
+\begin{aligned}
+\forall_{o',f'} \ldotp \sigma'.h(o',f') = o_r \implies &\textsf{unlinked} \in O'_1(o') \\
+ & \textsf{freeable} \in O'_1(o')
+                \end{aligned}
+\end{gather}
+which follows from \ref{phu5f}, \ref{ahu16f}.\textbf{OW} and determined by operational semantics(\ref{ahusf}), \ref{ahus1f}, \ref{ahus2f}.  If $o'$ were observed as \textsf{iterator} then that would conflict with \ref{phu10f}.\textbf{UNQR}.
+\end{case}
+\begin{case} - \textbf{UNQRT} By \ref{ahu16f}.\textbf{UNQRT}, \ref{ahus1f}, \ref{ahus2f} and \ref{ahusf}.
+\end{case}
+
+To prove \ref{phu6f}, we need to show  interference relation
+\[(\sigma, O_2, U_2, T_2,F_2) \mathcal{R} (\sigma', O'_2, U'_2, T'_2,F'_2)  \]
+which by definition means that we must show 
+\begin{gather}\label{phu17f}
+  \sigma_2.l  \in  T_2 \rightarrow (\sigma_2.h =\sigma'_2.h \land \sigma_2.l=\sigma'_2.l)\\
+  \label{phu18f}
+  l\in T_2\rightarrow F_2=F_2'\\
+  \label{phu20f}
+  \forall tid,o\ldotp\textsf{iterator} \, tid \in O_2(o) \rightarrow o \in dom(\sigma_2.h) \\
+  \label{phu21f}
+  \forall tid,o\ldotp\textsf{iterator} \, tid \in O_2(o) \rightarrow o \in dom(\sigma'_2.h) \\
+  \label{phu22f}
+  O_2 = O_2' \land U_2 = U_2' \land T_2 = T_2' \land \sigma_2.R = \sigma'_2.R \land \sigma_2.rt = \sigma'_2.rt \\
+  \label{phu23f}
+  \forall x, t \in T_2 \ldotp \sigma_2.s(x,t) = \sigma'_2.s(x,t) \\
+    \label{phufrt1}
+  \forall tid,o\ldotp\textsf{root} \, tid \in O(o) \rightarrow o \in dom(h) \\
+  \label{phufrt2}
+  \forall tid,o\ldotp\textsf{root} \, tid \in O(o) \rightarrow o \in dom(h') 
+\end{gather}
+To prove all relations (\ref{phu17f}-\ref{phu23f}) we assume \ref{ahus3f} which is to assume $T_2$ as subset of reader threads. Let $\sigma'_2$ be $\sigma_2$, $F'_2$ be $F_2$. $O_2$ need not change so we pick $O'_2$  as $O_2$. Since $T_2$ is subset of reader threads, we pick $T_2$ as  $T'_2$. By assuming \ref{ahu17f}  we show \ref{phu11f}. \ref{phu20f} and \ref{phu21f} follow trivially. \ref{phu23f} follows from choice of $\sigma'_2$,  \ref{ahusf} and \ref{ahus3f}.
+
+\ref{phu17f} and \ref{phu18f} follow from \ref{ahus3f} and choice of $F_2'$. \ref{phu22f}, \ref{phufrt1} and \ref{phufrt2} are determined by  choice of $\sigma'_2$, operational semantics and choices made on maps related to the assertions.
+
+To prove \ref{phu7f} consider two cases: $O'_1 \cap O'_2 = \emptyset$ and $O'_1 \cap O'_2 \neq \emptyset$. The first case is trivial. The second case is where we consider \ref{intersect1} and \ref{intersect2}
+\begin{gather}\label{intersect1}
+\textsf{iterator}\,tid \in O'_2(o_r)
+\end{gather}
+From \ref{ahus1f} we know that
+\[\textsf{unliked} \in O'_1(o_r)\]
+Both together with \ref{ahu13f} and \ref{phu5f} proves \ref{phu7f}.
+
+For case \ref{intersect2}
+\begin{gather}\label{intersect2}
+\textsf{fresh} \in O_2(o_n)
+\end{gather}
+From \ref{ahus2f} we know that
+\[\textsf{iterator}\, tid \in O'_1(o_n)\]
+Both together with \ref{ahu13f} and \ref{phu5f} proves \ref{phu7f}.
+
+To show \ref{ahusigf'} we consider two cases: $\sigma'_1 \cap \sigma'_2 = \emptyset$ and $\sigma'_1 \cap \sigma'_2 \neq \emptyset$. First is trivial. Second follows from \ref{phu10f}.\textbf{OW}-\textbf{HD} and \ref{phu11f}.\textbf{OW}-\textbf{HD}. \ref{phu8f}, \ref{phufff} and \ref{phu9f} are trivial by choices on related maps and semantics of the composition operators for these maps. All compositions shown  let us to derive conclusion for $(\sigma'_1, O'_1, U'_1, T'_1,F'_1) \bullet (\sigma'_2, O'_2, U'_2, T'_2,F'_2) $.
+ \end{proof}
+ \begin{lemma}[\textsc{ReadStack}]
+   \label{lemma:readstack}
+\begin{align*}
+  \llbracket z:=x \rrbracket (\lfloor \llbracket \Gamma\,, z:\_ \, ,\rcuitrT{x}{G}{k}{k+1}{\_} \rrbracket_{M,tid} * \{m\}\rfloor)  \subseteq \\
+                                                              \lfloor \llbracket \Gamma\,, \rcuitrT{x}{G}{k}{k+1}{\_}\, , \rcuitrT{z}{G}{k}{k+1}{\_}  \rrbracket  * \mathcal{R}(\{m\})\rfloor
+\end{align*}
+ \end{lemma}
+ \begin{proof}
+We assume
+\begin{gather}\label{ahu1sr}
+  \begin{aligned}
+    (\sigma, O, U, T,F) \, \in &  \llbracket \Gamma\,, z:\_ \, ,\rcuitrT{x}{G}{k}{k+1}{\_} \rrbracket_{M,tid} * \{m\}
+    \end{aligned} \\
+\textsf{WellFormed}(\sigma,O,U,T,F)
+\label{ahu2sr}
+\end{gather}
+From the assumption in the type rule of \textsc{T-ReadS} we assume that
+\begin{gather}
+\textsf{FV}(\Gamma) \cap \{z\}  =\emptyset 
+  \label{ahu3sr}
+\end{gather}
+We split the composition in  \ref{ahu1sr} as 
+\begin{gather} \label{ahu11sr}
+  \begin{aligned}
+    (\sigma, O_{1}, U_{1}, T_{1} ,F_1) \in & \llbracket  \Gamma\,, z:\_ \, ,\rcuitrT{x}{G}{k}{k+1}{\_} \rrbracket_{M,tid} \end{aligned}\\
+\label{ahu12sr}
+(\sigma, O_{2}, U_{2}, T_{2}, F_2) = m
+\\
+\label{ahusigsr}
+\sigma_1 \bullet \sigma_2 = \sigma
+\\
+\label{ahu13sr}
+O_{1} \bullet_{O} O_{2} = O
+\\
+\label{ahu14sr}
+U_{1} \cup U_{2} = U
+\\
+\label{ahu15sr}
+T_{1} \cup T_{2} = T
+\\
+\label{ahusrf}
+F_1 \uplus F_2 = F
+\\
+\label{ahu16sr}
+\textsf{WellFormed}(\sigma_1,O_{1},U_{1},T_{1},F_1)
+\\
+\label{ahu17sr}
+\textsf{WellFormed}(\sigma_2,O_{2},U_{2},T_{2},F_2)
+\end{gather}
+We must show $\exists_{\sigma'_1, \sigma'_2, O'_{1}, O'_{2}, U'_{1}, U'_{2}, T'_{1}, T'_{2}, F'_1 , F'_2}$ such that
+\begin{gather}\label{phu5sr}
+\begin{aligned}
+(\sigma',O'_{1},U'_{1}, T'_{1}, F'_1)  \in \llbracket \Gamma\,, \rcuitrT{x}{G}{k}{k+1}{\_}\, , \rcuitrT{z}{G}{k}{k+1}{\_}  \rrbracket_{M,tid}
+\end{aligned}\\
+\label{phu6sr}
+(\sigma',O'_{2},U'_{2}, T'_{2}, F'_2) \in \mathcal{R}(\{m\})
+\\
+\label{ahusigsr'}
+\sigma'_1 \bullet \sigma'_2 = \sigma'
+\\
+\label{phu7sr}
+O'_{1} \bullet_{O} O'_{2} = O'
+\\
+\label{phu8sr}
+U'_{1} \cup U'_{2} = U'
+\\
+\label{phu9sr}
+T'_{1} \cup T'_{2} = T'
+\\
+\label{phusrf}
+F'_1 \uplus F'_2 = F'
+\\
+\label{phu10sr}
+\textsf{WellFormed}(\sigma_1',O'_{1},U'_{1},T'_{1},F'_1) \\
+\label{phu11sr}
+\textsf{WellFormed}(\sigma_2',O'_{2},U'_{2},T'_{2}, F'_2)
+\end{gather}
+
+Let $s(x,tid)$ be $o_x$. We also know from operational semantics that the machine state has changed as 
+\begin{gather}\label{ahussr}
+\sigma' =  \sigma[s(z,tid) \mapsto o_x ]
+\end{gather}
+
+We know that there exists no change in the observation of heap locations
+\begin{gather}\label{ahus1sr}
+O'_1 =  O_1
+\end{gather}
+
+\ref{ahus2sr} follows from \ref{ahu1sr}
+\begin{gather}\label{ahus2sr}
+  T_1 = \{tid\} \text{ and } tid = \sigma.l
+\end{gather}
+
+$\sigma'_1$ is determined by operational semantics. The undefined map, $T_1$ and free list need not change so we can pick $U'_1$ as $U_1$, $T'_1$  as $T_1$ and $F'_1$ as $F_1$. Assuming \ref{ahu11sr} and choices on maps makes $(\sigma_1',O'_{1},U'_{1}, T'_{1})$ in denotation
+\[\llbracket \Gamma\,, \rcuitrT{x}{G}{k}{k+1}{\_}\, , \rcuitrT{z}{G}{k}{k+1}{\_}  \rrbracket_{M,tid}\]
+
+In the rest of the proof, we prove \ref{phu10sr}, \ref{phu11sr} and show the composition of $(\sigma'_1, O'_1, U'_1,T'_1,F'_1)$ and  $(\sigma'_2, O'_2, U'_2,T'_2,F'_2)$. \ref{phu10sr} follows from \ref{ahu16sr} trivially.
+
+To prove \ref{phu6sr}, we need to show interference relation
+\[(\sigma, O_2, U_2, T_2,F_2) \mathcal{R} (\sigma', O'_2, U'_2, T'_2,F'_2)  \]
+which by definition means that we must show 
+\begin{gather}\label{phu17sr}
+  \sigma_2.l  \in  T_2 \rightarrow (\sigma_2.h =\sigma'_2.h \land \sigma_2.l=\sigma'_2.l)\\
+  \label{phu18sr}
+  l\in T_2\rightarrow F_2=F_2'\\
+  \label{phu20sr}
+  \forall tid,o\ldotp\textsf{iterator} \, tid \in O_2(o) \rightarrow o \in dom(\sigma_2.h) \\
+  \label{phu21sr}
+  \forall tid,o\ldotp\textsf{iterator} \, tid \in O_2(o) \rightarrow o \in dom(\sigma'_2.h) \\
+  \label{phu22sr}
+  O_2 = O_2' \land U_2 = U_2' \land T_2 = T_2'\land \sigma_2.R_2 = \sigma_2'.R_2 \land \sigma_2.rt = \sigma'_2.rt \\
+  \label{phu23sr}
+  \forall x, t \in T_2 \ldotp \sigma_2.s(x,t) = \sigma'_2.s(x,t)  \\
+    \label{phusrrt1}
+  \forall tid,o\ldotp\textsf{root} \, tid \in O(o) \rightarrow o \in dom(h) \\
+  \label{phusrrt2}
+  \forall tid,o\ldotp\textsf{root} \, tid \in O(o) \rightarrow o \in dom(h') 
+\end{gather}
+To prove all relations (\ref{phu17sr}-\ref{phu23sr}) we assume \ref{ahus2sr} which is to assume $T_2$ as subset of reader threads. Let $\sigma'_2$ be $\sigma_2$. $O_2$ need not change so we pick $O'_2$  as $O_2$. We pick $F'_2$ as $F_2$. Since $T_2$ is subset of reader threads, we pick $T_2$ as  $T'_2$. By assuming \ref{ahu17sr}  we show \ref{phu11sr}. \ref{phu20sr}, \ref{phu21sr}, \ref{phusrrt1} and \ref{phusrrt2} follow trivially. \ref{phu23sr} follows from choice of $\sigma'_2$ and \ref{ahussr}(determined by operational semantics).
+
+ \ref{phu17sr} and \ref{phu18sr} follow from \ref{ahus2sr} and choice of $F_2'$. \ref{phu22sr}, \ref{phusrrt1} and \ref{phusrrt2} are determined by choice of $\sigma'_2$, operational semantics and choices made on maps related to the assertions.
+
+\ref{phu7sr}-\ref{phusrf} are  trivial by choices on related maps and semantics of the composition operators for these maps. \ref{ahusigsr'} follows trivially from \ref{ahusigsr}. All compositions shown  let us to derive conclusion for $(\sigma'_1, O'_1, U'_1, T'_1,F'_1) \bullet (\sigma'_2, O'_2, U'_2, T'_2,F'_2) $ trivial.
+ \end{proof}
+  \begin{lemma}[\textsc{ReadHeap}]
+   \label{lemma:readheap}
+\begin{align*}
+  \llbracket z:=x.f \rrbracket (\lfloor \llbracket \Gamma\, , z:\_ \, ,  x:\textsf{rcuItr} \, \rho \, \N  \rrbracket_{M,tid} * \{m\}\rfloor)  \subseteq \\
+                                                              \lfloor \llbracket \Gamma\,,  x:\textsf{rcuItr} \, \rho \, \N[f\mapsto z]\, ,z:\textsf{rcuItr} \, \rho' \, \N_{\emptyset}  \rrbracket  * \mathcal{R}(\{m\})\rfloor
+\end{align*}
+ \end{lemma}
+ \begin{proof}
+We assume
+\begin{gather}\label{ahu1hr}
+  \begin{aligned}
+    (\sigma, O, U, T,F) \, \in &  \llbracket \Gamma\,, z:\textsf{rcuItr}\,\_ \, ,\rcuitrT{x}{G}{k}{k+1}{\_} \rrbracket_{M,tid} * \{m\}
+    \end{aligned} \\
+\textsf{WellFormed}(\sigma,O,U,T,F)
+\label{ahu2hr}
+\end{gather}
+From the assumption in the type rule of \textsc{T-ReadH} we assume that
+\begin{gather}
+\textsf{FV}(\Gamma) \cap \{z\}  =\emptyset 
+\label{ahu3hr} \\
+\rho.f = \rho' 
+\label{ahu4hr} \\
+\end{gather}
+We split the composition in  \ref{ahu1hr} as 
+\begin{gather} \label{ahu11hr}
+  \begin{aligned}
+    (\sigma_1, O_{1}, U_{1}, T_{1} ,F_1) \in & \llbracket  \Gamma\,, z:\textsf{rcuItr}\,\_ \, ,\rcuitrT{x}{G}{k}{k+1}{\_} \rrbracket_{M,tid} \end{aligned}\\
+\label{ahu12hr}
+(\sigma_2, O_{2}, U_{2}, T_{2},F_2) = m
+\\
+\label{ahusighr}
+\sigma_1 \bullet \sigma_2 = \sigma
+\\
+\label{ahu13hr}
+O_{1} \bullet_{O} O_{2} = O
+\\
+\label{ahu14hr}
+U_{1} \cup U_{2} = U
+\\
+\label{ahu15hr}
+T_{1} \cup T_{2} = T
+\\
+\label{ahuhrf}
+F_1 \uplus F_2 = F
+\\
+\label{ahu16hr}
+\textsf{WellFormed}(\sigma_1,O_{1},U_{1},T_{1})
+\\
+\label{ahu17hr}
+\textsf{WellFormed}(\sigma_2,O_{2},U_{2},T_{2})
+\end{gather}
+We must show $\exists_{\sigma'_1, \sigma'_2, O'_{1}, O'_{2}, U'_{1}, U'_{2}, T'_{1}, T'_{2},F'_1 ,F'_2}$ such that
+\begin{gather}\label{phu5hr}
+\begin{aligned}
+(\sigma',O'_{1},U'_{1}, T'_{1},F_1)  \in \llbracket \Gamma\,,  x:\textsf{rcuItr} \, \rho \, \N[f\mapsto z]\, ,z:\textsf{rcuItr} \, \rho' \, \N_{\emptyset} \rrbracket_{M,tid}
+\end{aligned}
+\\
+\label{phuNhr}
+\N(f) = z
+\\
+\label{phu6hr}
+(\sigma',O'_{2},U'_{2}, T'_{2}, F_2) \in \mathcal{R}(\{m\})
+\\
+\label{ahusighr'}
+\sigma'_1 \bullet \sigma'_2 = \sigma'
+\\
+\label{phu7hr}
+O'_{1} \bullet_{O} O'_{2} = O'
+\\
+\label{phu8hr}
+U'_{1} \cup U'_{2} = U'
+\\
+\label{phu9hr}
+T'_{1} \cup T'_{2} = T'
+\\
+\label{phuhrf}
+F'_1 \uplus F'_2 = F'
+\\
+\label{phu10hr}
+\textsf{WellFormed}(\sigma_1',O'_{1},U'_{1},T'_{1}) \\
+\label{phu11hr}
+\textsf{WellFormed}(\sigma_2',O'_{2},U'_{2},T'_{2})
+\end{gather}
+
+Let $h(s(z,tid),f)$ be $o_z$. We also know from operational semantics that the machine state has changed as
+\begin{gather}\label{ahushr}
+\sigma_1' =  \sigma_1[s(x,tid) \mapsto o_z]
+\end{gather}
+\ref{phuNhr} is determined directly from operational semantics.
+
+We know that there exists no change in the observation of heap locations
+\begin{gather}\label{ahus1hr}
+O'_1 =  O_1
+\end{gather}
+
+\ref{ahus2hr} follows from \ref{ahu1hr}
+\begin{gather}\label{ahus2hr}
+  T_1 = \{tid\} \text{ and } tid = \sigma.l
+\end{gather}
+
+$\sigma'_1$ is determined by operational semantics. The undefined map, free list and $T_1$ need not change so we can pick $U'_1$ as $U_1$, $F'_1$ as $F_1$ and $T'_1$ and $T_1$. Assuming \ref{ahu11hr} and choices on maps makes $(\sigma_1',O'_{1},U'_{1}, T'_{1})$ in denotation
+\[ \llbracket \Gamma\,,  x:\textsf{rcuItr} \, \rho \, \N[f\mapsto z]\, ,z:\textsf{rcuItr} \, \rho' \, \N_{\emptyset} \rrbracket_{M,tid}\]
+
+In the rest of the proof, we prove \ref{phu10hr}, \ref{phu11hr} and show the composition of $(\sigma'_1, O'_1, U'_1,T'_1)$ and  $(\sigma'_2, O'_2, U'_2,T'_2)$. 
+
+To prove \ref{phu6hr}, we need to show that each of the memory axioms in Section \ref{sec:memaxioms} holds for the state $(\sigma',O'_1,U_1',T_1')$.
+\begin{case} - \textbf{UNQR} By \ref{ahushr}, \ref{ahu16hr}.\textbf{UNQR} and $\sigma.rt = \sigma.rt'$.
+\end{case}
+\begin{case} - \textbf{OW} By \ref{ahushr}, \ref{ahus1hr} and \ref{ahu16hr}.\textbf{OW}
+\end{case}
+\begin{case} - \textbf{RWOW} By \ref{ahushr}, \ref{ahus1hr} and \ref{ahu16hr}.\textbf{RWOW}
+\end{case}
+\begin{case} - \textbf{AWRT} Trivial. 
+\end{case}
+\begin{case} - \textbf{IFL}  By \ref{phu5hr}, \ref{ahu16hr}.\textbf{WULK}, \ref{ahus1hr}, choice of $F'_1$ and operational semantics.
+\end{case}
+\begin{case} - \textbf{FLR}  By operational semantics(\ref{ahushr}), choice for $F'_1$ and \ref{ahu16hr}. 
+\end{case}
+\begin{case} - \textbf{WULK}  By \ref{ahu16hr}.\textbf{WULK}, \ref{ahus1hr} and operational semantics($\sigma.l = \sigma.l'$).
+\end{case}
+\begin{case} - \textbf{WF}, \textbf{FNR}, \textbf{FPI} and \textbf{FR} Trivial.
+\end{case}
+\begin{case} - \textbf{HD} 
+\end{case}
+\begin{case} - \textbf{WNR} By \ref{ahus2hr} and operational semantics($\sigma.l = \sigma.l'$).
+\end{case}
+\begin{case} - \textbf{RINFL} By operational semantics(\ref{ahushr}) bounding threads have not changed. We choose $F'_1$ as $F_1$. These two together with \ref{ahu16hr} shows \textbf{RINFL}. 
+\end{case}
+\begin{case} - \textbf{ULKR} Trivial. 
+\end{case}
+\begin{case} - \textbf{UNQRT}  By \ref{ahu16hr}.\textbf{UNQRT}, \ref{ahus1hr} and \ref{ahushr}.
+\end{case}
+
+To prove \ref{phu6hr}, we need to show interference relation
+\[(\sigma, O_2, U_2, T_2,F_2) \mathcal{R} (\sigma', O'_2, U'_2, T'_2,F'_2)  \]
+which by definition means that we must show 
+\begin{gather}\label{phu17hr}
+  \sigma_2.l  \in  T_2 \rightarrow (\sigma_2.h =\sigma'_2.h \land \sigma_2.l=\sigma'_2.l)\\
+  \label{phu18hr}
+  l\in T_2\rightarrow F_2=F_2'\\
+  \label{phu20hr}
+  \forall tid,o\ldotp\textsf{iterator} \, tid \in O_2(o) \rightarrow o \in dom(\sigma_2.h) \\
+  \label{phu21hr}
+  \forall tid,o\ldotp\textsf{iterator} \, tid \in O_2(o) \rightarrow o \in dom(\sigma'_2.h) \\
+  \label{phu22hr}
+  O_2 = O_2' \land U_2 = U_2' \land T_2 = T_2'\land \sigma_2.R_2 = \sigma_2'.R_2 \land \sigma_2.rt = \sigma'_2.rt \\
+  \label{phu23hr}
+  \forall x, t \in T_2 \ldotp \sigma_2.s(x,t) = \sigma'_2.s(x,t) \\
+ \label{phuhrrt1}
+  \forall tid,o\ldotp\textsf{root} \, tid \in O(o) \rightarrow o \in dom(h) \\
+  \label{phuhrrt2}
+  \forall tid,o\ldotp\textsf{root} \, tid \in O(o) \rightarrow o \in dom(h') 
+\end{gather}
+To prove all relations (\ref{phu17hr}-\ref{phu23hr}) we assume \ref{ahus2hr} which is to assume $T_2$ as subset of reader threads.  Let $\sigma'_2$ be $\sigma_2$ and $F'_2$ be $F_2$. $O_2$ need not change so we pick $O'_2$  as $O_2$. Since $T_2$ is subset of reader threads, we pick $T_2$ as  $T'_2$. By assuming \ref{ahu17hr}  we show \ref{phu11hr}. \ref{phu20hr} and \ref{phu21hr} follows trivially. \ref{phu23hr} follows from choice of $\sigma'_2$ and \ref{ahushr}(determined by operational semantics).
+
+\ref{phu17hr} and \ref{phu18hr} follow from \ref{ahus2hr} and choice of $F_2'$.\ref{phu22hr}, \ref{phuhrrt1} and \ref{phuhrrt2} are determined by choice of $\sigma'_2$, operational semantics and choices made on maps related to the assertions. 
+
+\ref{phu7hr}-\ref{phuhrf} are trivial by choices on related maps and semantics of the composition operators for these maps. \ref{ahusighr'} follows trivially from \ref{ahusighr}. All compositions shown let us to derive conclusion for $(\sigma'_1, O'_1, U'_1, T'_1,F'_1) \bullet (\sigma'_2, O'_2, U'_2, T'_2,F'_2) $.
+ \end{proof}
+ \begin{lemma}[\textsc{WriteFreshField}]
+   \label{lemma:writef}
+   \begin{align*}
+  \llbracket p.f := z \rrbracket (\lfloor \llbracket \Gamma, p:\textsf{rcuFresh}\,\N'_{f,\emptyset},\; x:\textsf{rcuItr}\;\; \rho \;\; \N \rrbracket_{M,tid} * \{m\}\rfloor)  \subseteq \\
+  \lfloor \llbracket \Gamma \,, \rcunf{p}{f}{z} \, , x:\textsf{rcuItr}\, \rho \, \N([f\rightharpoonup z]) \rrbracket  * \mathcal{R}(\{m\})\rfloor
+\end{align*}
+ \end{lemma}
+ \begin{proof}
+ We assume
+\begin{gather}\label{ahu1wf}
+  \begin{aligned}
+    (\sigma, O, U, T,F) \, \in &  \llbracket \Gamma, p:\textsf{rcuFresh}\,\N'_{f,\emptyset},\; x:\textsf{rcuItr}\;\; \rho \;\; \N \rrbracket_{M,tid} * \{m\}
+    \end{aligned} \\
+\textsf{WellFormed}(\sigma,O,U,T,F)
+\label{ahu2wf}
+\end{gather}
+From the assumption in the type rule of \textsc{T-WriteFH} we assume that
+\begin{gather}
+z:\textsf{rcuItr}\,\rho.f\,\_ \text{ and } \N(f) = z \text{ and } f \notin dom(\N')
+\label{ahu4wf} 
+\end{gather}
+
+We split the composition in  \ref{ahu1wf} as 
+\begin{gather} \label{ahu11wf}
+  \begin{aligned}
+    (\sigma, O_{1}, U_{1}, T_{1},F_1 ) \in & \llbracket  \Gamma, p:\textsf{rcuFresh}\,\N'_{f,\emptyset},\; x:\textsf{rcuItr}\;\; \rho \;\; \N \rrbracket_{M,tid} \end{aligned}\\
+\label{ahu12wf}
+(\sigma, O_{2}, U_{2}, T_{2}, F_2) = m
+\\
+\label{ahusigwf}
+\sigma_1 \bullet \sigma_2 = \sigma
+\\
+\label{ahu13wf}
+O_{1} \bullet_{O} O_{2} = O
+\\
+\label{ahu14wf}
+U_{1} \cup U_{2} = U
+\\
+\label{ahu15wf}
+T_{1} \cup T_{2} = T
+\\
+\label{ahuwff}
+F_1 \uplus F_2 = F
+\\
+\label{ahu16wf}
+\textsf{WellFormed}(\sigma_1,O_{1},U_{1},T_{1},F_1)
+\\
+\label{ahu17wf}
+\textsf{WellFormed}(\sigma_2,O_{2},U_{2},T_{2}, F_2)
+\end{gather}
+We must show $\exists_{\sigma'_1, \sigma'_2, O'_{1}, O'_{2}, U'_{1}, U'_{2}, T'_{1}, T'_{2},F'_1 , F'_2}$ such that
+\begin{gather}\label{phu5wf}
+\begin{aligned}
+(\sigma',O'_{1},U'_{1}, T'_{1},F'_1)  \in \llbracket \Gamma \,, \rcunf{p}{f}{z} \, , x:\textsf{rcuItr}\, \rho \, \N([f\rightharpoonup z]) \rrbracket_{M,tid}
+\end{aligned}
+\\
+\label{phuNwf}
+\N(f) = z \land \N'(f) = z
+\\
+\label{phu6wf}
+(\sigma',O'_{2},U'_{2}, T'_{2},F'_2) \in \mathcal{R}(\{m\})
+\\
+\label{ahusigwf'}
+\sigma'_1 \bullet \sigma'_2 = \sigma'
+\\
+\label{phu7wf}
+O'_{1} \bullet_{O} O'_{2} = O'
+\\
+\label{phu8wf}
+U'_{1} \cup U'_{2} = U'
+\\
+\label{phu9wf}
+T'_{1} \cup T'_{2} = T'
+\\
+\label{phuwff}
+F'_1 \uplus F'_2 = F'
+\\
+\label{phu10wf}
+\textsf{WellFormed}(\sigma_1',O'_{1},U'_{1},T'_{1}, F'_1) \\
+\label{phu11wf}
+\textsf{WellFormed}(\sigma_2',O'_{2},U'_{2},T'_{2}, F'_2)
+\end{gather}
+
+We also know from operational semantics that the machine state has changed as
+\begin{gather}\label{ahuswf}
+\sigma' =  \sigma[h(s(p,tid),f) \mapsto s(z,tid)]
+\end{gather}
+
+There exists no change in the observation of heap locations
+\begin{gather}\label{ahus1wf}
+O'_1 =  O_1
+\end{gather}
+
+\ref{ahus2wf} follows from \ref{ahu1wf}
+\begin{gather}\label{ahus2wf}
+  T_1 = \{tid\} \text{ and } tid = \sigma.l
+\end{gather}
+
+$\sigma'_1$ is determined by operational semantics. The undefined map, free list, $T_1$ need not change so we can pick $U'_1$ as $U_1$, $T'_1$ as $T_1$ and $F'_1$ as $F_1$. Assuming \ref{ahu11wf} and choices on maps makes $(\sigma_1',O'_{1},U'_{1}, T'_{1})$ in denotation
+\[\llbracket \Gamma \,, \rcunf{p}{f}{z} \, , x:\textsf{rcuItr}\, \rho \, \N([f\rightharpoonup z]) \rrbracket_{M,tid}\]
+
+In the rest of the proof, we prove \ref{phu10wf} and \ref{phu11wf} and show the composition of $(\sigma'_1, O'_1, U'_1,T'_1,F'_1)$ and  $(\sigma'_2, O'_2, U'_2,T'_2,F'_2)$. To prove \ref{phu10wf}, we need to show that each of the memory axioms in Section \ref{sec:memaxioms} holds for the state $(\sigma',O'_1,U_1',T_1',F'_1)$.
+\begin{case} - \textbf{UNQR} By \ref{ahu16wf}.\textbf{UNQR}, \ref{phu10wf}.\textbf{FR}(proved) and $\sigma.rt = \sigma.rt'$.
+\end{case}
+\begin{case} - \textbf{OW} By \ref{ahuswf},\ref{ahus1wf} and \ref{ahu16wf}.\textbf{OW}
+\end{case}
+\begin{case} - \textbf{RWOW} By \ref{ahuswf}, \ref{ahus1wf} and \ref{ahu16wf}.\textbf{RWOW}
+\end{case}
+\begin{case} - \textbf{AWRT} Trivial. 
+\end{case}
+\begin{case} - \textbf{IFL}  By \ref{ahu16wf}.\textbf{WULK}, \ref{ahus1wf}, choice of $F'_1$ and operational semantics.
+\end{case}
+\begin{case} - \textbf{FLR}  By operational semantics(\ref{ahuswf}), choice of $F'_1$ and \ref{ahu16wf}. 
+\end{case}
+\begin{case} - \textbf{WULK}  By \ref{ahu16wf}.\textbf{WULK}, \ref{ahus1wf} and operational semantics($\sigma.l = \sigma.l'$).
+\end{case}
+\begin{case} - \textbf{WF} By \ref{ahu16wf}.\textbf{WF}, \ref{ahus2wf}, \ref{ahus1wf} and operational semantics(\ref{ahuswf}).
+\end{case}
+\begin{case} - \textbf{FR} By \ref{ahu16wf}.\textbf{FR}, \ref{ahus2wf}, \ref{ahus1wf} and operational semantics(\ref{ahuswf}).
+\end{case}
+\begin{case} - \textbf{FNR} By \ref{ahu16wf}.\textbf{FNR}, \ref{ahus2wf}, \ref{ahus1wf} and operational semantics(\ref{ahuswf}).
+\end{case}
+\begin{case} - \textbf{FPI} By \ref{ahu16wf}.\textbf{FPI}, \ref{ahu11wf} and \ref{ahu4wf}
+\end{case} 
+\begin{case} - \textbf{HD} 
+\end{case}
+\begin{case} - \textbf{WNR} By \ref{ahus2wf} and operational semantics($\sigma.l = \sigma.l'$).
+\end{case}
+\begin{case} - \textbf{RINFL} By operational semantics(\ref{ahuswf} - bounding threads have not changed), choice of $F'_1$ and \ref{ahu16wf}. 
+\end{case}
+\begin{case} - \textbf{ULKR} Trivial. 
+\end{case}
+\begin{case} - \textbf{UNQRT} By \ref{ahu16wf}.\textbf{UNQRT}, \ref{ahus1wf} and \ref{ahuswf}.
+\end{case}
+
+To prove \ref{phu6wf}, we need to show interference relation
+\[(\sigma, O_2, U_2, T_2,F_2) \mathcal{R} (\sigma', O'_2, U'_2, T'_2,F'_2)  \]
+which by definition means that we must show 
+\begin{gather}\label{phu17wf}
+  \sigma_2.l  \in  T_2 \rightarrow (\sigma_2.h =\sigma'_2.h \land \sigma_2.l=\sigma'_2.l)\\
+  \label{phu18wf}
+  l\in T_2\rightarrow F_2=F_2'\\
+  \label{phu20wf}
+  \forall tid,o\ldotp\textsf{iterator} \, tid \in O_2(o) \rightarrow o \in dom(\sigma_2.h) \\
+  \label{phu21wf}
+  \forall tid,o\ldotp\textsf{iterator} \, tid \in O_2(o) \rightarrow o \in dom(\sigma'_2.h) \\
+  \label{phu22wf}
+  O_2 = O_2' \land U_2 = U_2' \land T_2 = T_2'\land \sigma_2.R = \sigma'_2.R \land \sigma_2.rt = \sigma'_2.rt \\
+  \label{phu23wf}
+  \forall x, t \in T_2 \ldotp \sigma_2.s(x,t) = \sigma'_2.s(x,t)\\
+  \label{phuwfrt1}
+  \forall tid,o\ldotp\textsf{root} \, tid \in O(o) \rightarrow o \in dom(h) \\
+  \label{phuwfrt2}
+  \forall tid,o\ldotp\textsf{root} \, tid \in O(o) \rightarrow o \in dom(h') 
+\end{gather}
+To prove all relations (\ref{phu17wf}-\ref{phu23wf}) we assume \ref{ahus2wf} which is to assume $T_2$ as subset of reader threads and \ref{ahu17wf}. Let $\sigma'_2$ be $\sigma_2$ and $F'_2$ be $F_2$. $O_2$ need not change so we pick $O'_2$  as $O_2$. Since $T_2$ is subset of reader threads, we pick $T_2$ as  $T'_2$. By assuming \ref{ahu17wf}  we show \ref{phu11wf}. \ref{phu20wf} and \ref{phu21wf} follows trivially. \ref{phu23wf} follows from choice of $\sigma'_2$ and \ref{ahuswf}(determined by operational semantics).
+
+
+\ref{phu17wf} and \ref{phu18wf} follow from \ref{ahus2wf} and choice of $F_2'$.  \ref{phu22wf} are determined by operational semantics, choice of $\sigma'_2$ and choices made on maps related to the assertions.
+
+\ref{phu8wf}-\ref{phuwff} are trivial by choices on related maps and semantics of the composition operators for these maps. \ref{phuwfrt1} and \ref{phuwfrt2} follow from choice of $\sigma'_2$.
+
+$O'_1 \bullet O'_2 $ follows from \ref{ahu13wf}, \ref{ahus1wf} and choice of $O_2$. 
+
+We assume $\sigma_1.h \bullet \sigma_2.h$. We know from \ref{ahu4wf} that $f \notin dom(\N')$. From \ref{phu5wf}, \ref{phu10wf}-\ref{phu11wf}.\textbf{FNR}, \ref{phu10wf}-\ref{phu11wf}.\textbf{RITR} and \ref{phu10wf}-\ref{phu11wf}.\textbf{WNR} we show $\sigma'_1.h \bullet \sigma'_2.h$ (with choices for other maps in the machine state we show \ref{ahusighr'}). All compositions shown  let us to derive conclusion for $(\sigma'_1, O'_1, U'_1, T'_1) \bullet (\sigma'_2, O'_2, U'_2, T'_2) $.
+ \end{proof}
+\begin{lemma}[\textsc{Sycn}]
+   \label{lemma:syncstop}
+   \begin{align*}
+  \llbracket  \textsf{SyncStart};\textsf{SyncStop} \rrbracket (\lfloor \llbracket \Gamma  \rrbracket_{M,tid} * \{m\}\rfloor)  \subseteq \\
+                                                              \lfloor \llbracket \Gamma[\overline{x:\textsf{freeable}/x:\textsf{unlinked}}] \rrbracket  * \mathcal{R}(\{m\})\rfloor
+\end{align*}
+ \end{lemma}
+ \begin{proof}
+ We assume
+\begin{gather}\label{ahu1st}
+  \begin{aligned}
+    (\sigma, O, U, T,F) \, \in &  \llbracket \Gamma \rrbracket_{M,tid} * \{m\}
+    \end{aligned} \\
+\textsf{WellFormed}(\sigma,O,U,T,F)
+\label{ahu2st}
+\end{gather}
+
+We split the composition in  \ref{ahu1st} as 
+\begin{gather} \label{ahu11st}
+  \begin{aligned}
+    (\sigma, O_{1}, U_{1}, T_{1},F_1 ) \in & \llbracket  \Gamma \rrbracket_{M,tid} \end{aligned}\\
+  \label{ahu12st}
+(\sigma, O_{2}, U_{2}, T_{2},F_2) = m
+\\
+\label{ahusigst}
+\sigma_1 \bullet \sigma_2 = \sigma
+\\
+\label{ahu13st}
+O_{1} \bullet_{O} O_{2} = O
+\\
+\label{ahu14st}
+U_{1} \cup U_{2} = U
+\\
+\label{ahu15st}
+T_{1} \cup T_{2} = T
+\\
+\label{ahustF}
+F_1 \uplus F_2 = F
+\\
+\label{ahu16st}
+\textsf{WellFormed}(\sigma,O_{1},U_{1},T_{1},F_1)
+\\
+\label{ahu17st}
+\textsf{WellFormed}(\sigma,O_{2},U_{2},T_{2},F_2)
+\end{gather}
+We must show $\exists_{\sigma'_1, \sigma'_2, O'_{1}, O'_{2}, U'_{1}, U'_{2}, T'_{1}, T'_{2}},F'_1 ,F'_2$ such that
+\begin{gather}\label{phu5st}
+\begin{aligned}
+(\sigma',O'_{1},U'_{1}, T'_{1},F'_1)  \in \llbracket \Gamma[\overline{x:\textsf{freeable}/x:\textsf{unlinked}}] \rrbracket_{M,tid}
+\end{aligned}\\
+\label{phu6st}
+(\sigma',O'_{2},U'_{2}, T'_{2}, F'_2) \in \mathcal{R}(\{m\})
+\\
+\label{ahusigst'}
+\sigma'_1 \bullet \sigma'_2 = \sigma'
+\\
+\label{phu7st}
+O'_{1} \bullet_{O} O'_{2} = O'
+\\
+\label{phu8st}
+U'_{1} \cup U'_{2} = U'
+\\
+\label{phu9st}
+T'_{1} \cup T'_{2} = T'
+\\
+\\
+\label{phustF}
+F'_1 \uplus F'_2 = F'
+\\
+\label{phu10st}
+\textsf{WellFormed}(\sigma',O'_{1},U'_{1},T'_{1},F'_1) \\
+\label{phu11st}
+\textsf{WellFormed}(\sigma',O'_{2},U'_{2},T'_{2}, F'_2)
+\end{gather}
+We also know from operational semantics that \lstinline|SyncStart| changes
+\begin{gather}\label{ahuB}
+  \sigma_1'.B = \sigma_1.B[\emptyset \mapsto R]
+\end{gather}
+Then \lstinline|SyncStop| changes it to $\emptyset$ so there exists no change in $B$ after \lstinline|SyncStart|;\lstinline|SyncStop|. So there is no change in machine state.
+\begin{gather}\label{ahusst}
+\sigma_1' =  \sigma_1
+\end{gather}
+
+There exists no change in the observation of heap locations
+\begin{gather}\label{ahus1st}
+  O'_1 =  O_1(\forall_{x \in \Gamma} \ldotp s(x,tid))[\textsf{unlinked} \mapsto \textsf{freeable}]
+\end{gather}
+and we pick free list to be
+\begin{gather}\label{ahusF}
+ F'_1 = F_1(\forall_{x:\textsf{unlinked} \in \Gamma, T\subseteq R} \ldotp s(x,tid)[ T \mapsto \{\emptyset\} ])
+\end{gather}
+
+\ref{ahus2st} follows from \ref{ahu1st}
+\begin{gather}\label{ahus2st}
+  T_1 = \{tid\} \text{ and } tid = \sigma.l
+\end{gather}
+
+Let $T'_1$ be $T_1$ and $\sigma'_1$(not changed) be determined by operational semantics. The undefined map need not change so we can pick $U'_1$ as $U_1$. Assuming \ref{ahu11st} and choices on maps makes $(\sigma_1',O'_{1},U'_{1}, T'_{1},F'_1)$ in denotation
+\[ \llbracket \Gamma[\overline{x:\textsf{freeable}/x:\textsf{unlinked}}] \rrbracket_{M,tid}\]
+
+In the rest of the proof, we prove \ref{phu10st} and \ref{phu11st} and show the composition of $(\sigma'_1, O'_1, U'_1,T'_1,F'_1)$ and $(\sigma'_2, O'_2, U'_2,T'_2,F'_2)$. To prove \ref{phu10st}, we need to show that each of the memory axioms in Section \ref{sec:memaxioms} holds for the state $(\sigma',O'_1,U_1',T_1',F'_1)$ which is trivial by assuming \ref{ahu16st}. We also know \ref{phu5st}(as we showed the support of state to the denotation).
+
+To prove \ref{phu6st}, we need to show interference relation
+\[(\sigma, O_2, U_2, T_2,F_2) \mathcal{R} (\sigma', O'_2, U'_2, T'_2,F_2')  \]
+which by definition means that we must show 
+\begin{gather}\label{phu17st}
+  \sigma_2.l  \in  T_2 \rightarrow (\sigma_2.h =\sigma'_2.h \land \sigma_2.l=\sigma'_2.l)\\
+  \label{phu18st}
+  l\in T_2\rightarrow F_2=F_2'\\
+  \label{phu20st}
+  \forall tid,o\ldotp\textsf{iterator} \, tid \in O_2(o) \rightarrow o \in dom(\sigma_2.h) \\
+  \label{phu21st}
+  \forall tid,o\ldotp\textsf{iterator} \, tid \in O_2(o) \rightarrow o \in dom(\sigma'_2.h) \\
+  \label{phu22st}
+  O_2 = O_2' \land U_2 = U_2' \land T_2 = T_2'\land \sigma_2.R = \sigma'_2.R \land \sigma_2.rt = \sigma'_2.rt \\
+  \label{phu23st}
+  \forall x, t \in T_2 \ldotp \sigma_2.s(x,t) = \sigma'_2.s(x,t)\\
+    \label{phustrt1}
+  \forall tid,o\ldotp\textsf{root} \, tid \in O(o) \rightarrow o \in dom(h) \\
+  \label{phustrt2}
+  \forall tid,o\ldotp\textsf{root} \, tid \in O(o) \rightarrow o \in dom(h') 
+\end{gather}
+To prove all relations (\ref{phu17st}-\ref{phu23st}) we assume \ref{ahus2st} which is to assume $T_2$ as subset of reader threads and \ref{ahu17st}. Let $\sigma'_2$ be $\sigma_2$. $O_2$ need not change so we pick $O'_2$  as $O_2$. Since $T_2$ is subset of reader threads, we pick $T_2$ as  $T'_2$. By assuming \ref{ahu17st} we show \ref{phu11st}. \ref{phu20st} and \ref{phu21st} follows trivially. \ref{phu23st} follows from choice of $\sigma'_2$ and \ref{ahusst}(determined by operational semantics). 
+
+\ref{phu17st} and \ref{phu18st} follow from \ref{ahus2st}. \ref{phu22st} are determined by choice of $\sigma'_2$ and operational semantics and choices made on maps related to the assertions.
+
+\ref{phu8st}-\ref{phustF} follow from \ref{ahu13st}-\ref{ahustF} trivially by choices on maps of logical state and semantics of composition operators. \ref{ahusigst'} follow from \ref{ahusigst}, \ref{ahusst}-\ref{ahus2st} and choice of $\sigma'_2$. All compositions shown let us to derive conclusion for $(\sigma'_1, O'_1, U'_1, T'_1,F'_1) \bullet (\sigma'_2, O'_2, U'_2, T'_2,F'_2) $ .
+ \end{proof}
+ 
+  \begin{lemma}[\textsc{Alloc}]
+   \label{lemma:alloc}
+\begin{align*}
+  \llbracket x:=new \rrbracket (\lfloor \llbracket \Gamma\, , x:\textsf{undef} \, \rrbracket_{M,tid} * \{m\}\rfloor)  \subseteq \\
+                                                              \lfloor \llbracket \Gamma\,,  x:\textsf{rcuFresh} \, \N_{\emptyset}  \rrbracket  * \mathcal{R}(\{m\})\rfloor
+\end{align*}
+ \end{lemma}
+ \begin{proof}
+We assume
+\begin{gather}\label{ahu1alc}
+  \begin{aligned}
+    (\sigma, O, U, T,F) \, \in &  \llbracket \Gamma\, , x:\textsf{undef} \, \rrbracket_{M,tid} * \{m\}\rfloor) 
+    \end{aligned} \\
+\textsf{WellFormed}(\sigma,O,U,T,F)
+\label{ahu2alc}
+\end{gather}
+
+We split the composition in  \ref{ahu1alc} as 
+\begin{gather} \label{ahu11alc}
+  \begin{aligned}
+    (\sigma, O_{1}, U_{1}, T_{1},F_1 ) \in & \llbracket \Gamma\, , x:\textsf{undef} \, \rrbracket_{M,tid}  \end{aligned}\\
+  \label{ahu12alc}
+(\sigma, O_{2}, U_{2}, T_{2},F_2) = m
+  \\
+  \label{ahualcsig}
+  \sigma_1 \bullet \sigma_2 = \sigma
+  \\
+\label{ahu13alc}
+O_{1} \bullet_{O} O_{2} = O
+\\
+\label{ahu14alc}
+U_{1} \cup U_{2} = U
+\\
+\label{ahu15alc}
+T_{1} \cup T_{2} = T
+\\
+\label{ahualcF}
+F_1 \uplus F_2 = F
+\\
+\label{ahu16alc}
+\textsf{WellFormed}(\sigma,O_{1},U_{1},T_{1},F_1)
+\\
+\label{ahu17alc}
+\textsf{WellFormed}(\sigma,O_{2},U_{2},T_{2},F_2)
+\end{gather}
+We must show $\exists_{O'_{1}, O'_{2}, U'_{1}, U'_{2}, T'_{1}, T'_{2},F'_1, F'_2}$ such that
+\begin{gather}\label{phu5alc}
+\begin{aligned}
+(\sigma',O'_{1},U'_{1}, T'_{1},F'_1)  \in \llbracket \Gamma\,,  x:\textsf{rcuFresh} \, \N_{\emptyset}  \rrbracket 
+\end{aligned}\\
+\label{phu6alc}
+(\sigma',O'_{2},U'_{2}, T'_{2},F'_2) \in \mathcal{R}(\{m\})
+\\
+\label{phualcsig}
+\sigma'_1 \bullet \sigma'_2 = \sigma'
+\\
+\label{phu7alc}
+O'_{1} \bullet_{O} O'_{2} = O'
+\\
+\label{phu8alc}
+U'_{1} \cup U'_{2} = U'
+\\
+\label{phu9alc}
+T'_{1} \cup T'_{2} = T'
+\\
+\label{phualcF}
+F'_1 \uplus F'_2 = F'
+\\
+\label{phu10alc}
+\textsf{WellFormed}(\sigma',O'_{1},U'_{1},T'_{1}) \\
+\label{phu11alc}
+\textsf{WellFormed}(\sigma',O'_{2},U'_{2},T'_{2})
+\end{gather}
+
+From operational semantics we know that $s(y,tid)$ is $\ell$. We also know from operational semantics that the machine state has changed as
+\begin{gather}\label{ahusalc}
+\sigma' =  \sigma[h(\ell) \mapsto \textsf{nullmap} ]
+\end{gather}
+
+There exists no change in the observation of heap locations
+\begin{gather}\label{ahus1alc}
+  O'_1 =  O_1(\ell)[\textsf{undef}\mapsto \textsf{fresh}]
+\end{gather}
+
+\ref{ahus2alc} follows from \ref{ahu1alc}
+\begin{gather}\label{ahus2alc}
+  T_1 = \{tid\} \text{ and } tid = \sigma.l
+\end{gather}
+
+Let $T'_1$ to be $T_1$. Undefined map and free list need not change so we can pick $U'_1$ as $U_1$ and $F'_1$ as $F_1$ and show(\ref{phu5alc}) that $(\sigma',O'_1,U_1',T_1',F'_1)$ is in denotation of
+\[\llbracket \Gamma\,,  x:\textsf{rcuFresh} \, \N_{\emptyset}  \rrbracket \]
+
+In the rest of the proof, we prove \ref{phu10alc}, \ref{phu11alc} and $(\sigma'_1, O'_1, U'_1,T'_1,F'_1)$ and  $(\sigma'_2, O'_2, U'_2,T'_2,F'_2)$. To prove \ref{phu10alc}, we need to show that each of the memory axioms in Section \ref{sec:memaxioms} holds for the state $(\sigma',O'_1,U_1',T_1',F'_1)$.
+
+\begin{case} - \textbf{UNQR} Determined by \ref{phu5alc} and operational semantics($\ell$ is fresh-unique).
+\end{case}
+\begin{case} - \textbf{RWOW}, \textbf{OW} By \ref{phu5alc}
+\end{case}
+\begin{case} - \textbf{AWRT} Determined by operational semantics($\ell$ is fresh-unique). 
+\end{case}
+\begin{case} - \textbf{IFL}, \textbf{ULKR}, \textbf{WULK}, \textbf{RINFL}, \textbf{UNQRT} Trivial.
+\end{case}
+\begin{case} - \textbf{FLR} determined by operational semantics and \ref{phu5alc}.
+\end{case}
+\begin{case} - \textbf{WF} By \ref{ahus2alc}, \ref{phu5alc} and \ref{ahus1alc}. 
+\end{case}
+\begin{case} - \textbf{FR} Determined by operational semantics($\ell$ is fresh-unique).
+\end{case}
+\begin{case} - \textbf{FNR} By \ref{phu5alc} and operational semantics($\ell$ is fresh-unique).
+\end{case}
+\begin{case} - \textbf{FPI} By \ref{phu5alc} and $\N_{f,\emptyset}$.
+\end{case} 
+\begin{case} - \textbf{HD} 
+\end{case}
+\begin{case} - \textbf{WNR} By \ref{ahus2alc}.
+\end{case}
+
+To prove \ref{phu6alc}, we need to show interference relation
+\[(\sigma, O_2, U_2, T_2,F_2) \mathcal{R} (\sigma', O'_2, U'_2, T'_2,F'_2)  \]
+which by definition means that we must show 
+\begin{gather}\label{phu17alc}
+  \sigma_2.l  \in  T_2 \rightarrow (\sigma_2.h =\sigma'_2.h \land \sigma_2.l=\sigma'_2.l)\\
+  \label{phu18alc}
+  l\in T_2\rightarrow F_2=F_2'\\
+  \label{phu20alc}
+  \forall tid,o\ldotp\textsf{iterator} \, tid \in O_2(o) \rightarrow o \in dom(\sigma_2.h) \\
+  \label{phu21alc}
+  \forall tid,o\ldotp\textsf{iterator} \, tid \in O_2(o) \rightarrow o \in dom(\sigma'_2.h) \\
+  \label{phu22alc}
+  O_2 = O_2' \land U_2 = U_2' \land T_2 = T_2'\land \sigma_2.R = \sigma'_2.R \land \sigma_2.rt = \sigma'_2.rt \\
+  \label{phu23alc}
+  \forall x, t \in T \ldotp \sigma_2.s(x,t) = \sigma'_2.s(x,t) \\
+    \label{phualcrt1}
+  \forall tid,o\ldotp\textsf{root} \, tid \in O(o) \rightarrow o \in dom(h) \\
+  \label{phualcrt2}
+  \forall tid,o\ldotp\textsf{root} \, tid \in O(o) \rightarrow o \in dom(h') 
+\end{gather}
+To prove all relations (\ref{phu17alc}-\ref{phualcrt2}) we assume \ref{ahus2alc} which is to assume $T_2$ as subset of reader threads and \ref{ahu17alc}. Let $\sigma'_2$ be $\sigma_2$. $F_2$ and $O_2$ need not change so we pick $O'_2$  as $O_2$ and $F'_2$ as $F_2$. Since $T_2$ is subset of reader threads, we pick $T_2$ as  $T'_2$. By assuming \ref{ahu17alc} and choices on maps we show \ref{phu11alc}. \ref{phu20alc} and \ref{phu21alc} follow trivially. \ref{phu23alc} follows from choice of $\sigma'_2$ and \ref{ahusalc}(determined by operational semantics). \ref{phu7alc}-\ref{phualcF} follow from \ref{ahu13alc}-\ref{ahualcF}, semantics of compositions operators and choices made for maps of the logical state.
+
+\ref{phu17alc} and \ref{phu18alc} follow from \ref{ahus2alc} and choice on $F'_2$. \ref{phu22alc} are determined by operational semantics, operational semantics and choices made on maps related to the assertion.
+
+$\sigma'_1.h \cap \sigma'_2.h = \emptyset$ is determined by operational semantics($\ell$ is unique and fresh). So, \ref{phualcsig} follows from \ref{ahualcsig} and choice of $\sigma'_2$. All compositions shown let us to derive conclusion for  $(\sigma'_1, O'_1, U'_1, T'_1,F'_1) \bullet (\sigma'_2, O'_2, U'_2, T'_2,F'_2) $.
+ \end{proof}
+ \begin{lemma}[\textsc{Free}]
+   \label{lemma:free}
+\begin{align*}
+  \llbracket Free(x) \rrbracket (\lfloor \llbracket x:\textsf{freeable} \rrbracket_{M,tid} * \{m\}\rfloor)  \subseteq \\
+                                                              \lfloor \llbracket x:\textsf{undef} \rrbracket  * \mathcal{R}(\{m\})\rfloor
+\end{align*}
+ \end{lemma}
+ \begin{proof}
+We assume
+\begin{gather}\label{ahu1free}
+  \begin{aligned}
+    (\sigma, O, U, T,F) \, \in &  \llbracket x:\textsf{freeable} \, \rrbracket_{M,tid} * \{m\}\rfloor) 
+    \end{aligned} \\
+\textsf{WellFormed}(\sigma,O,U,T,F)
+\label{ahu2free}
+\end{gather}
+
+We split the composition in  \ref{ahu1free} as 
+\begin{gather} \label{ahu11free}
+  \begin{aligned}
+    (\sigma, O_{1}, U_{1}, T_{1},F_1 ) \in & \llbracket  x:\textsf{freeable}  \rrbracket_{M,tid}  \end{aligned}\\
+  \label{ahu12free}
+(\sigma, O_{2}, U_{2}, T_{2},F_2) = m
+  \\
+  \label{ahufreesig}
+  \sigma_1 \bullet \sigma_2 = \sigma
+  \\
+\label{ahu13free}
+O_{1} \bullet_{O} O_{2} = O
+\\
+\label{ahu14free}U
+_{1} \cup U_{2} = U
+\\
+\label{ahu15free}
+T_{1} \cup T_{2} = T
+\\
+\label{ahufreeF}
+F_1 \uplus F_2 = F
+\\
+\label{ahu16free}
+\textsf{WellFormed}(\sigma,O_{1},U_{1},T_{1},F_1)
+\\
+\label{ahu17free}
+\textsf{WellFormed}(\sigma,O_{2},U_{2},T_{2},F_2)
+\end{gather}
+We must show $\exists_{O'_{1}, O'_{2}, U'_{1}, U'_{2}, T'_{1}, T'_{2},F'_1, F'_2}$ such that
+\begin{gather}\label{phu5free}
+\begin{aligned}
+(\sigma',O'_{1},U'_{1}, T'_{1},F'_1)  \in \llbracket  x:\textsf{undef}  \rrbracket 
+\end{aligned}\\
+\label{phu6free}
+(\sigma',O'_{2},U'_{2}, T'_{2},F'_2) \in \mathcal{R}(\{m\})
+\\
+\label{phufreesig}
+\sigma'_1 \bullet \sigma'_2 = \sigma'
+\\
+\label{phu7free}
+O'_{1} \bullet_{O} O'_{2} = O'
+\\
+\label{phu8free}
+U'_{1} \cup U'_{2} = U'
+\\
+\label{phu9free}
+T'_{1} \cup T'_{2} = T'
+\\
+\label{phufreeF}
+F'_1 \uplus F'_2 = F'
+\\
+\label{phu10free}
+\textsf{WellFormed}(\sigma',O'_{1},U'_{1},T'_{1}) \\
+\label{phu11free}
+\textsf{WellFormed}(\sigma',O'_{2},U'_{2},T'_{2})
+\end{gather}
+
+From operational semantics we know that
+\begin{gather}\label{ahusfree}
+\sigma_1' =  \sigma_1
+\end{gather}
+
+There exists no change in the observation of heap locations
+\begin{gather}\label{ahus1free}
+  O'_1 =  O_1(s(x,tid))[\textsf{freeable}\mapsto \textsf{undef}]
+\end{gather}
+
+\begin{gather}\label{ahus3free}
+  F'_1 = F_1 \setminus \{s(x,tid)\mapsto \{\emptyset\}\}
+  \end{gather}
+
+\begin{gather}\label{ahus4free}
+  U'_1 = U_1 \cup \{(x,tid)\}
+  \end{gather}
+
+\ref{ahus2free} follows from \ref{ahu1free}
+\begin{gather}\label{ahus2free}
+  T_1 = \{tid\} \text{ and } tid = \sigma.l
+\end{gather}
+
+Let $T'_1$ to be $T_1$. All \ref{ahusfree}-\ref{ahus4free} show(\ref{phu5free}) that $(\sigma',O'_1,U_1',T_1',F'_1)$ is in denotation of  
+\[\llbracket  x:\textsf{undef}  \rrbracket \]
+
+In the rest of the proof, we prove \ref{phu10free}, \ref{phu11free}\ref{phu10}, \ref{phu11} and show the composition of $(\sigma'_1, O'_1, U'_1,T'_1,F'_1)$ and  $(\sigma'_2, O'_2, U'_2,T'_2,F'_2)$.. To prove \ref{phu10free}, we need to show that each of the memory axioms in Section \ref{sec:memaxioms} holds for the state $(\sigma',O'_1,U_1',T_1',F'_1)$ and it it trivial by \ref{ahusfree}-\ref{ahus4free} and \ref{phu5free}.
+
+To prove \ref{phu6free}, we need to show interference relation
+\[(\sigma, O_2, U_2, T_2,F_2) \mathcal{R} (\sigma', O'_2, U'_2, T'_2,F'_2)  \]
+which by definition means that we must show 
+\begin{gather}\label{phu17free}
+  \sigma_2.l  \in  T_2 \rightarrow (\sigma_2.h =\sigma'_2.h \land \sigma_2.l=\sigma'_2.l)\\
+  \label{phu18free}
+  l\in T_2\rightarrow F_2=F_2'\\
+  \label{phu20free}
+  \forall tid,o\ldotp\textsf{iterator} \, tid \in O_2(o) \rightarrow o \in dom(\sigma_2.h) \\
+  \label{phu21free}
+  \forall tid,o\ldotp\textsf{iterator} \, tid \in O_2(o) \rightarrow o \in dom(\sigma'_2.h) \\
+  \label{phu22free}
+  O_2 = O_2' \land U_2 = U_2' \land T_2 = T_2'\land \sigma_2.R = \sigma'_2.R \land \sigma_2.rt = \sigma'_2.rt \\
+  \label{phu23free}
+  \forall x, t \in T \ldotp \sigma_2.s(x,t) = \sigma'_2.s(x,t) \\
+    \label{phufreert1}
+  \forall tid,o\ldotp\textsf{root} \, tid \in O(o) \rightarrow o \in dom(h) \\
+  \label{phufreert2}
+  \forall tid,o\ldotp\textsf{root} \, tid \in O(o) \rightarrow o \in dom(h') 
+\end{gather}
+
+To prove all relations (\ref{phu17free}-\ref{phufreert2}) we assume \ref{ahus2free} which is to assume $T_2$ as subset of reader threads and \ref{ahu17alc}. Let $\sigma'_2$ be $\sigma_2$. $F_2$ and $O_2$ need not change so we pick $O'_2$  as $O_2$ and $F'_2$ as $F_2$. Since $T_2$ is subset of reader threads, we pick $T_2$ as  $T'_2$. By assuming \ref{ahu17alc} and choices on maps we show \ref{phu11free}. \ref{phu20free} and \ref{phu21free} follow trivially. \ref{phu23free} follows from choice of $\sigma'_2$ and \ref{ahusfree}(determined by operational semantics). \ref{phu7free}-\ref{phufreeF} follow from \ref{ahu14free}-\ref{ahufreeF}, semantics of composition operators and choices on related maps.
+
+\ref{phu17free} and \ref{phu18free} follow from \ref{ahus2free} and choice on $F'_2$. \ref{phu22free} are determined by operational semantics, choice of $\sigma'_2$ and choices made on maps related to the assertion.
+
+Composition for heap for case $\sigma'_1.h \cap \sigma'_2.h = \emptyset$ is trivial. $\sigma'_1.h \cap \sigma'_2.h \neq \emptyset$ is determined by semantics of heap composition operator $\bullet_h$( $v$ has precedence over \textsf{undef}) and this makes showing \ref{phu7free} straightforward. Since other machine components do not change(determined by operational semantics), \ref{phufreesig} follows from \ref{ahufreesig}, \ref{ahusfree} and choice of $\sigma'_2$. All compositions shown let us to derive conclusion for  $(\sigma'_1, O'_1, U'_1, T'_1,F'_1) \bullet (\sigma'_2, O'_2, U'_2, T'_2,F'_2) $.
+ \end{proof} 
+  \begin{lemma}[\textsc{RReadStack}]
+   \label{lemma:rreadstack}
+\begin{align*}
+  \llbracket z:=x \rrbracket (\lfloor \llbracket \Gamma\,, z:\textsf{rcuItr}\, , x:\textsf{rcuItr} \rrbracket_{R,tid} * \{m\}\rfloor)  \subseteq \\
+                                                              \lfloor \llbracket \Gamma\,, x:\textsf{rcuItr} \, , z:\textsf{rcuItr}  \rrbracket  * \mathcal{R}(\{m\})\rfloor
+\end{align*}
+ \end{lemma}
+  \begin{proof}
+  We assume
+\begin{gather}\label{ahu1srr}
+  \begin{aligned}
+    (\sigma, O, U, T,F) \, \in & \llbracket \Gamma\,, \Gamma\,, z:\textsf{rcuItr}\, , x:\textsf{rcuItr}   \rrbracket_{R,tid} * \{m\}
+    \end{aligned} \\
+\textsf{WellFormed}(\sigma,O,U,T,F)
+\label{ahu2srr}
+\end{gather}
+
+We split the composition in  \ref{ahu1srr} as 
+\begin{gather} \label{ahu11srr}
+  \begin{aligned}
+    (\sigma_1, O_{1}, U_{1}, T_{1},F_1 ) \in & \llbracket \Gamma\,, \Gamma\,, z:\textsf{rcuItr}\, , x:\textsf{rcuItr} \rrbracket_{R,tid} \end{aligned}\\
+  \label{ahu12srr}
+(\sigma, O_{2}, U_{2}, T_{2},F_2) = m
+\\
+\label{ahu13srr}
+O_{1} \bullet_{O} O_{2} = O
+\\
+\label{ahusigsrr}
+\sigma_1 \bullet \sigma_2 = \sigma
+\\
+\label{ahu14srr}
+U_{1} \cup U_{2} = U
+\\
+\label{ahu15srr}
+T_{1} \cup T_{2} = T
+\\
+\label{ahusrrf}
+F_1 \uplus F_2 = F
+\\
+\label{ahu16srr}
+\textsf{WellFormed}(\sigma,O_{1},U_{1},T_{1},F_1)
+\\
+\label{ahu17srr}
+\textsf{WellFormed}(\sigma,O_{2},U_{2},T_{2},F_2)
+\end{gather}
+We must show $\exists_{O'_{1}, O'_{2}, U'_{1}, U'_{2}, T'_{1}, T'_{2},F'_1,F'_2}$ such that
+\begin{gather}\label{phu5srr}
+\begin{aligned}
+(\sigma',O'_{1},U'_{1}, T'_{1},F'_1)  \in\llbracket \Gamma\,, x:\textsf{rcuItr} \, , z:\textsf{rcuItr}   \rrbracket_{R,tid}
+\end{aligned}\\
+\label{phu6srr}
+(\sigma',O'_{2},U'_{2}, T'_{2},F'_2) \in \mathcal{R}(\{m\})
+\\
+\label{phu7srr}
+O'_{1} \bullet_{O} O'_{2} = O'
+\\
+\label{ahusigsrr'}
+\sigma'_1 \bullet \sigma'_2 = \sigma'
+\\
+\label{phu8srr}
+U'_{1} \cup U'_{2} = U'
+\\
+\label{phu9srr}
+T'_{1} \cup T'_{2} = T'
+\\
+\label{phusrrf}
+F'_1 \uplus F'_2 = F'
+\\
+\label{phu10srr}
+\textsf{WellFormed}(\sigma',O'_{1},U'_{1},T'_{1},F'_1) \\
+\label{phu11srr}
+\textsf{WellFormed}(\sigma',O'_{2},U'_{2},T'_{2},F'_2)
+\end{gather}
+
+We also know from operational semantics that the machine state has changed as
+\begin{gather}\label{ahussrr}
+\sigma_1' =  \sigma_1
+\end{gather}
+
+There exists no change in the observation of heap locations
+\begin{gather}\label{ahus1srr}
+  O'_1 =  O_1
+\end{gather}
+
+\ref{ahus2srr} follows from \ref{ahu1srr}
+\begin{gather}\label{ahus2srr}
+  T_1 \subseteq R
+\end{gather}
+
+Let $T'_1$ be $T_1$ and $\sigma'_1$ be determined by operational semantics as $\sigma_1$. The undefined map and free list need not change so we can pick $U'_1$ as $U_1$ and $F'_1$ as $F_1$. Assuming \ref{ahu11srr} and choices on maps makes $(\sigma_1',O'_{1},U'_{1}, T'_{1},F'_1)$ in denotation
+\[ \llbracket \Gamma\,, x:\textsf{rcuItr} \, , z:\textsf{rcuItr}  \rrbracket_{R,tid}\]
+
+In the rest of the proof, we prove \ref{phu10srr}, \ref{phu11srr}\ref{phu10}, \ref{phu11} and show the composition of $(\sigma'_1, O'_1, U'_1,T'_1,F'_1)$ and  $(\sigma'_2, O'_2, U'_2,T'_2,F'_2)$. To prove \ref{phu10srr}, we need to show that each of the memory axioms in Section \ref{sec:memaxioms} holds for the state $(\sigma',O'_1,U_1',T_1',F'_1)$ which is trivial by assuming \ref{ahu16srr} and knowing \ref{ahus2srr}, \ref{ahus1srr} and components of the state determined by operational semantics.
+
+To prove \ref{phu11srr}, we need to show that \textsf{WellFormed}ness is preserved under interference relation
+\[(\sigma, O_2, U_2, T_2,F_2) \mathcal{R} (\sigma', O'_2, U'_2, T'_2,F'_2)  \]
+which by definition means that we must show 
+\begin{gather}\label{phu17srr}
+  \sigma_2.l  \in  T_2 \rightarrow (\sigma_2.h =\sigma'_2.h \land \sigma_2.l=\sigma'_2.l)\\
+  \label{phu18srr}
+  l\in T_2\rightarrow F_2=F_2'\\
+  \label{phu20srr}
+  \forall tid,o\ldotp\textsf{iterator} \, tid \in O_2(o) \rightarrow o \in dom(\sigma_2.h) \\
+  \label{phu21srr}
+  \forall tid,o\ldotp\textsf{iterator} \, tid \in O_2(o) \rightarrow o \in dom(\sigma'_2.h) \\
+  \label{phu22srr}
+  O_2 = O_2' \land U_2 = U_2' \land T_2 = T_2'\land \sigma_2.B = \sigma'_2.B \land \sigma_2.rt = \sigma'_2.rt \\
+  \label{phu23srr}
+  \forall x, t \in T_2 \ldotp \sigma_2.s(x,t) = \sigma'_2.s(x,t) \\
+    \label{phusrrrt1}
+  \forall tid,o\ldotp\textsf{root} \, tid \in O(o) \rightarrow o \in dom(h) \\
+  \label{phusrrrt2}
+  \forall tid,o\ldotp\textsf{root} \, tid \in O(o) \rightarrow o \in dom(h') 
+\end{gather}
+$\sigma_2$, $O_2$, $U_2$ and $T_2$ need not change so that we choose $\sigma'_2$ to be $\sigma'_2$, $O'_2$ to be $O_2$, $U'_2$ to $U_2$ and $T'_2$ to be $T_2$. Let $F'_2$ be $F_2$. These choices make proving \ref{phu17srr}-\ref{phusrrrt2} trivial and  \ref{phu7srr}-\ref{phu9srr} follow from assumptions \ref{ahu13srr}-\ref{ahusrrf}, choices made for related maps and semantics of composition operations. All compositions shown let us derive conclusion for $(\sigma'_1,O'_1,U'_1,T'_1,F'_1) \bullet (\sigma'_2,O'_2,U'_2,T'_2,F'_2)$.
+  \end{proof}
+
+    \begin{lemma}[\textsc{RReadHeap}]
+   \label{lemma:rreadheap}
+\begin{align*}
+  \llbracket z:=x.f \rrbracket (\lfloor \llbracket \Gamma\, , z:\textsf{rcuItr}\, ,  x:\textsf{rcuItr} \rrbracket_{R,tid} * \{m\}\rfloor)  \subseteq \\
+                                                              \lfloor \llbracket \Gamma\,,  x:\textsf{rcuItr} \, ,z:\textsf{rcuItr}   \rrbracket  * \mathcal{R}(\{m\})\rfloor
+\end{align*}
+ \end{lemma}
+    \begin{proof}
+        We assume
+\begin{gather}\label{ahu1hrr}
+  \begin{aligned}
+    (\sigma, O, U, T,F) \, \in &  \llbracket \Gamma\, , z:\textsf{rcuItr}\, ,  x:\textsf{rcuItr} \rrbracket_{R,tid} * \{m\}\rfloor)
+    \end{aligned} \\
+\textsf{WellFormed}(\sigma,O,U,T,F)
+\label{ahu2hrr}
+\end{gather}
+
+We split the composition in  \ref{ahu1hrr} as 
+\begin{gather} \label{ahu11hrr}
+  \begin{aligned}
+    (\sigma_1, O_{1}, U_{1}, T_{1},F_1 ) \in &  \llbracket \Gamma\, , z:\textsf{rcuItr}\, ,  x:\textsf{rcuItr}  \rrbracket_{R,tid} \end{aligned}\\
+  \label{ahu12hrr}
+(\sigma_2, O_{2}, U_{2}, T_{2},F_2) = m
+  \\
+  \label{ahusighrr}
+  \sigma_1 \bullet \sigma_2 = \sigma
+  \\
+\label{ahu13hrr}
+O_{1} \bullet_{O} O_{2} = O
+\\
+\label{ahu14hrr}
+U_{1} \cup U_{2} = U
+\\
+\label{ahu15hrr}
+T_{1} \cup T_{2} = T
+\\
+\label{ahuhrrf}
+F_1 \uplus F_2 = F
+\\
+\label{ahu16hrr}
+\textsf{WellFormed}(\sigma_1,O_{1},U_{1},T_{1},F_1)
+\\
+\label{ahu17hrr}
+\textsf{WellFormed}(\sigma_2,O_{2},U_{2},T_{2},F_2)
+\end{gather}
+We must show  $\exists_{\sigma'_1,\sigma'_2,O'_{1}, O'_{2}, U'_{1}, U'_{2}, T'_{1}, T'_{2},F'_1,F'_2}$ such that
+\begin{gather}\label{phu5fhrr}
+\begin{aligned}
+(\sigma_1',O'_{1},U'_{1}, T'_{1},F'_1)  \in   \lfloor \llbracket \Gamma\,,  x:\textsf{rcuItr} \, ,z:\textsf{rcuItr}  \rrbracket  
+\end{aligned}\\
+\label{phu6hrr}
+(\sigma_2',O'_{2},U'_{2}, T'_{2}, F'_2) \in \mathcal{R}(\{m\})
+\\
+  \label{ahusighrr'}
+  \sigma'_1 \bullet \sigma'_2 = \sigma'
+\\
+\label{phu7hrr}
+O'_{1} \bullet_{O} O'_{2} = O'
+\\
+\label{phu8hrr}
+U'_{1} \cup U'_{2} = U'
+\\
+\label{phu9hrr}
+T'_{1} \cup T'_{2} = T'
+\\
+\label{phu10hrr}
+\textsf{WellFormed}(\sigma_1',O'_{1},U'_{1},T'_{1},F'_1) \\
+\label{phu11hrr}
+\textsf{WellFormed}(\sigma_2',O'_{2},U'_{2},T'_{2},F'_2)
+\end{gather}
+
+Let $h(s(x,tid),f)$ be $o_x$. We also know from operational semantics that the machine state has changed as
+\begin{gather}\label{ahushrr}
+\sigma_1' =  \sigma_1[s(z,tid)\mapsto o_x]
+\end{gather}
+
+There exists no change in the observation of heap locations
+\begin{gather}\label{ahus1hrr}
+  O'_1 =  O_1
+\end{gather}
+
+\ref{ahus2hrr} follows from \ref{ahu1hrr}
+\begin{gather}\label{ahus2hrr}
+  T_1 \subseteq R
+\end{gather}
+Proof is similar to Lemma \ref{lemma:rreadstack}.
+      \end{proof}
+\subsection{Soundness Proof of Structural Program Actions}
+\label{lem:lemstructural}
+In this section, we introduce soundness Theorem \ref{thm:snd} for structural rules of the type system. We consider the cases of the induction on derivation of  $\Gamma \vdash C \dashv \Gamma$ for all type systems,$R,M$.
+
+Although we have proofs for read-side structural rules, we only present proofs for write-side structural type rules in this section as read-side rules are simple versions of write-side rules and proofs for them are trivial and already captured by proofs for write-side structural rools.
+\begin{theorem}[Type System Soundness]
+  \label{thm:snd}
+\[
+\forall_{\Gamma,\Gamma',C}\ldotp \Gamma \vdash C \dashv \Gamma' \implies \llbracket \Gamma \vdash C \dashv \Gamma' \rrbracket 
+\]
+\end{theorem}
+
+\begin{proof}
+  Induction on derivation of $\Gamma \vdash_{M} C \dashv \Gamma$.
+
+  \begin{case}-\textbf{M}: consequence where $C$ has the form $\Gamma \vdash_{M} C \dashv \Gamma'''$.
+    We know
+    \begin{gather}\label{s'l6a1}
+      \Gamma' \vdash_{M}  C \dashv \Gamma'' \\
+      \label{s'l6a2}
+      \Gamma \subt \Gamma'\\
+      \label{s'l6a3}
+      \Gamma'' \subt \Gamma''' \\
+      \label{s'l6a4}
+      \{\llbracket \Gamma' \rrbracket_{M,tid} \}C\{\llbracket \Gamma'' \rrbracket_{M,tid} \}
+    \end{gather}
+
+    We need to show
+    \begin{gather}\label{s'l6p1}
+\{ \llbracket \Gamma \rrbracket_{M,tid} \}C\{\llbracket \Gamma''' \rrbracket_{M,tid}\}
+    \end{gather}
+
+    The $\subt$ relation translated to entailment relation in Views Logic. The relation is established over the action judgement for identity label/transition
+    
+From \ref{s'l6a2} and Lemma \ref{lem:cntxsubt-m} we know 
+\begin{gather}\label{s'l6a6}
+\llbracket \Gamma \rrbracket_{M,tid} \sqsubseteq \llbracket \Gamma' \rrbracket_{M,tid}
+\end{gather}
+
+
+From \ref{s'l6a3} and \ref{lem:cntxsubt-m} we know 
+\begin{gather}\label{s'l6a7}
+\llbracket \Gamma'' \rrbracket_{M,tid} \sqsubseteq \llbracket \Gamma''' \rrbracket_{M,tid}
+\end{gather}
+
+By using \ref{s'l6a6}, \ref{s'l6a7} and \ref{s'l6a4} as antecedentes of Views Logic's consequence rule, we conclude \ref{s'l6p1}.
+  \end{case}
+  
+%%HERE sequence
+  \begin{case}-\textbf{M}: where $C$ is sequence statement. $C$ has the form $C_1;C_2$. Our goal is to prove
+  \begin{gather}
+    \label{sl1p1}
+   \{ \llbracket \Gamma \rrbracket_{M,tid} \} \vdash_{M} C_1;C_2 \dashv \{ \llbracket \Gamma'' \rrbracket_{M,tid} \}
+ \end{gather}
+We know 
+  \begin{gather}\label{sl1a1}
+    \Gamma \vdash_{M} C_1 \dashv \Gamma' \\
+    \label{sl1a2}
+    \Gamma' \vdash_{M} C_2 \dashv \Gamma''\\
+    \label{sl1a3}
+    \{\llbracket \Gamma \rrbracket_{M,tid}\}   C_1  \{ \llbracket \Gamma' \rrbracket_{M,tid}\} \\
+    \label{sl1a4}
+    \{ \llbracket \Gamma' \rrbracket_{M,tid} \}  C_2  \{\llbracket \Gamma'' \rrbracket_{M,tid}\} 
+  \end{gather} 
+  
+  By using \ref{sl1a3} and \ref{sl1a4} as the antecedents for the Views sequencing rule, we can derive the conclusion for \ref{sl1p1}.
+  \end{case}
+  
+  \begin{case}-\textbf{M}: where $C$ is loop statement. $C$ has the form $while\left(x\right)\{C\}$.
+
+     \begin{gather}\label{sl2a1}
+       \Gamma \vdash_{M} C \dashv \Gamma \\
+       \label{sl2a2}
+       \Gamma(x) = \textsf{bool} \\ 
+       \label{sl2a3}
+       \{\llbracket \Gamma \rrbracket_{M,tid} \}  C  \{\llbracket \Gamma \rrbracket_{M,tid}\} 
+     \end{gather}
+    Our goal is to prove
+    \begin{gather}\label{sl2p1}
+      \{\llbracket \Gamma \rrbracket_{M,tid} \} \left(assume\left(x\right);C\right)^{*};assume(\lnot x) \{\llbracket \Gamma \rrbracket_{M,tid} \}
+    \end{gather}
+ We prove \ref{sl2p1} by from the consequence rule, based on the proofs of the following \ref{sl2p2} and \ref{sl2p3}
+    \begin{gather}\label{sl2p2}
+      \{ \llbracket \Gamma \rrbracket_{M,tid} \}\left(assume\left(x\right);C\right)^{*} \{ \llbracket \Gamma \rrbracket_{M,tid} \}
+    \end{gather}
+    \begin{gather}\label{sl2p3}
+      \{ \llbracket \Gamma \rrbracket_{M,tid} \}assume\left(\lnot x\right)\{ \llbracket \Gamma \rrbracket_{M,tid} \}
+    \end{gather}
+    
+   The poof of \ref{sl2p2} follows from Views Logic's proof rule for assume construct by using
+      \[\{\llbracket\Gamma \rrbracket_{M,tid}\} assume\left(x\right) \{\llbracket \Gamma \rrbracket_{M,tid} \}\]
+      as antecedant. We can use this antecedant together with the antecedent we know from \ref{sl2a3}
+      \[\{\llbracket \Gamma \rrbracket_{M,tid} \}C\{\llbracket \Gamma \rrbracket_{M,tid}\}\]
+      as antecedents to the Views Logic's proof rule for sequencing. Then we use the antecedent
+      \[ \{\llbracket \Gamma \rrbracket_{M,tid} \}assume\left(x\right);C\{\llbracket \Gamma \rrbracket_{M,tid} \}\] to the proof rule for nondeterministic looping.
+  
+    The proof of \ref{sl2p3} follows from Views Logic's proof rule for assume construct by using the
+    \[ \{ \llbracket \Gamma \rrbracket_{M,tid} \}assume\left(\lnot x\right)\{ \llbracket \Gamma \rrbracket_{M,tid} \}\] as the antecedent.
+  \end{case}
+  \begin{case}-\textbf{M}: where $C$ is a loop statement. $C$ has the form $while(x.f\neq \texttt{null})\{C\}$
+    Proof is similar to the one for \textsc{T-Loop1}. 
+  \end{case}
+  \begin{case}-\textbf{M}: case where $C$ is branch statement. $C$ has the form $if\left(e\right)then\{C_1\}else\{C_2\}$.
+      \begin{gather}\label{sl4a1}
+       \Gamma, x:\textsf{rcuItr}\;\rho\;\N([f_1 \rightharpoonup z]) \vdash_{M} C_1 \dashv \Gamma' \\
+       \label{sl4a2}
+       \Gamma, x:\textsf{rcuItr}\;\rho\;\N([f_2 \rightharpoonup z]) \vdash_{M} C_2 \dashv \Gamma' \\
+       \label{sl4a4}
+       \{\llbracket \Gamma, \,  x:\textsf{rcuItr}\;\rho\;\N([f_1 \rightharpoonup z]) \rrbracket_{M,tid} \}  C_1  \{\llbracket \Gamma' \rrbracket_{M,tid}\}\\
+        \label{sl4a5}
+       \{\llbracket \Gamma , \, x:\textsf{rcuItr}\;\rho\;\N([f_2 \rightharpoonup z]) \rrbracket_{M,tid} \}  C_2  \{\llbracket \Gamma' \rrbracket_{M,tid}\}
+      \end{gather}
+      
+    Our goal is to prove
+    \begin{gather}\label{sl4p1}
+      \begin{array}{l}
+      \{\llbracket \Gamma,x:\textsf{rcuItr}\;\rho\;\N([f_1 | f_2 \rightharpoonup z]) \rrbracket_{M,tid} \} \\
+      y = x.f_1;\left(assume\left(z = y\right);C_1\right)+\left(assume\left(y \neq z\right);C_2 \right)\\
+      \{\llbracket \Gamma' \rrbracket_{M,tid} \}
+      \end{array}
+    \end{gather}
+    where the desugared form includes a fresh variable y. We use fresh variables just for desugaring and they are not included in any type context.
+    We prove\ref{sl4p1} from the consequence rule  of Views Logic based on the proofs of the following \ref{sl4p2} and \ref{sl4p3}
+    \begin{gather}\label{sl4p2}
+      \begin{array}{l}
+      \{\llbracket\Gamma,   x:\textsf{rcuItr}\;\rho\;\N([f_1 | f_2 \rightharpoonup z])\rrbracket_{M,tid}\} \\
+      \left(assume\left(z = y\right);C_1\right)+\left(assume\left(y \neq z\right);C_2 \right) \\
+      \{\llbracket \Gamma' \rrbracket_{M,tid}\}
+      \end{array}
+    \end{gather}
+    and
+    \begin{gather}\label{sl4p3}\begin{array}{l}
+      \{\llbracket \Gamma,   x:\textsf{rcuItr}\;\rho\;\N[f_1 | f_2 \rightharpoonup z] \rrbracket_{M,tid}\} \\
+      y = x.f_1\\
+      \{\llbracket \Gamma,   x:\textsf{rcuItr}\;\rho\;\N([f_1 | f_2 \rightharpoonup z]) \llbracket_{M,tid} \cap \llbracket x:\textsf{rcuItr}\;\rho\;\N([f_1 \rightharpoonup y]) \rrbracket_{M,tid} \}
+      \end{array}
+      \end{gather}
+
+    \ref{sl4p3} is trivial from the fact that y is a fresh variable and it is not included in any type context and just used for desugaring.
+
+    We prove \ref{sl4p2} from the branch rule of Views Logic based on the proofs of the following \ref{sl4p4} and \ref{sl4p5}
+    \begin{gather}\label{sl4p4}
+      \begin{array}{l}
+        \{\llbracket \Gamma, x:\textsf{rcuItr}\;\rho\;\N([f_1 | f_2 \rightharpoonup z]) \rrbracket_{M,tid} \cap \\
+        \llbracket x:\textsf{rcuItr}\;\rho\;\N([f_1 \rightharpoonup y]) \rrbracket_{M,tid} \}\\
+      \left(assume\left(z = y\right);C_1\right)\\
+      \{\llbracket \Gamma' \rrbracket_{M,tid}\}
+      \end{array}
+    \end{gather}
+    and
+    \begin{gather}\label{sl4p5}
+      \begin{array}{l}
+        \{\llbracket \Gamma, x:\textsf{rcuItr}\;\rho\;\N([f_1 | f_2 \rightharpoonup z]) \rrbracket_{M,tid} \cap\\
+        \llbracket x:\textsf{rcuItr}\;\rho\;\N([f_1 \rightharpoonup y]) \rrbracket_{M,tid} \}\\
+        \left(assume\left(z \neq y\right);C_2\right)\\
+      \llbracket \Gamma' \rrbracket_{M,tid}\}
+      \end{array}
+    \end{gather}
+    We show \ref{sl4p4} from Views Logic's proof rule for the assume construct by using 
+      \[
+      \begin{array}{l}
+        \{\llbracket \Gamma, x:\textsf{rcuItr}\;\rho\;\N([f_1 | f_2 \rightharpoonup z]) \rrbracket_{M,tid} \cap \\
+        \llbracket x:\textsf{rcuItr}\;\rho\;\N([f_1 \rightharpoonup y]) \rrbracket_{M,tid} \} \\
+        assume\left(y=z\right)\\
+        \{\llbracket \Gamma, x:\textsf{rcuItr}\;\rho\;\N([f_1 \rightharpoonup z]) \rrbracket_{M,tid} \}
+      \end{array}
+      \]
+      as the antecedent. We can use this antecedent together with 
+      \[ \{\llbracket \Gamma, x:\textsf{rcuItr}\rho\N([f_1 \rightharpoonup z]) \rrbracket_{M,tid}\} C_1 \{\llbracket\Gamma' \rrbracket_{M,tid}\} \] as antecedents to the View's Logic's proof rule for sequencing.
+    
+We show \ref{sl4p5} from Views Logic's proof rule for the assume construct by using 
+      \[
+      \begin{array}{l}
+      \{\llbracket \Gamma, x:\textsf{rcuItr}\;\rho\;\N([f_1 | f_2 \rightharpoonup z]) \cap\\
+      x:\textsf{rcuItr}\;\rho\;\N([f_1 \rightharpoonup y]) \rrbracket_{M,tid} \}\\
+      assume(x\neq y)\\
+      \{\llbracket  \Gamma,x:\textsf{rcuItr}\;\rho\;\N([f_2 \rightharpoonup z]) \rrbracket_{M,tid} \}
+      \end{array}
+      \]
+      as the antecedent. We can use this antecedent together with 
+      \[ \{\llbracket\Gamma,   x:\textsf{rcuItr}\rho\N([f_2  \rightharpoonup z])\rrbracket_{M,tid}\} C_2 \{\llbracket\Gamma' \rrbracket_{M,tid}\} \]
+      as antecedents to the Views Logic's proof rule for sequencing.
+  \end{case}
+  
+  \begin{case}-\textbf{M}: case where $C$ is branch statement. $C$ has the form $if(x.f == \texttt{null})then\{C_1\}else\{C_2\}$.
+    Proof is similar to one for \textsc{T-Branch1}.
+   \end{case}
+
+\begin{case}-\textbf{O}: parallel where $C$ has the form $\Gamma_1,\Gamma_2\vdash_{O} C_1 || C_2 \dashv \Gamma'_1,\Gamma'_2$
+We know 
+\begin{gather} \label{sl7a1}
+\Gamma_1 \vdash C_1 \dashv \Gamma'_1\\
+\label{sl7a2}
+\Gamma_2 \vdash C_2 \dashv \Gamma'_2\\
+\label{sl7a3}
+\{ \llbracket \Gamma_1 \rrbracket \} C_1 \{ \llbracket \Gamma'_1 \rrbracket\}\\
+\label{sl7a4}
+\{ \llbracket \Gamma_2 \rrbracket \} C_2  \{ \llbracket \Gamma'_2 \rrbracket \}
+\end{gather}
+
+We need to show 
+\begin{gather}\label{sl7p1}
+\{\llbracket \Gamma_1, \Gamma_2 \rrbracket \} C_1 || C_2 \{\llbracket \Gamma'_1, \Gamma'_2 \rrbracket \}
+\end{gather}
+
+By using \ref{sl7a3} and \ref{sl7a4} as antecedents to Views Logic's parallel rule, we can draw conclusion for \ref{sl7p2}
+\begin{gather}\label{sl7p2}
+\{\llbracket \Gamma_1 \rrbracket * \llbracket \Gamma_2 \rrbracket\} C_1 || C_2\{\llbracket \Gamma'_1 \rrbracket * \llbracket \Gamma'_2 \rrbracket\}
+\end{gather}
+
+Showing \ref{sl7p1} requires showing 
+\begin{gather}\label{sl7a5}
+\llbracket \Gamma_1,\Gamma_2 \rrbracket \sqsubseteq \llbracket \Gamma_1\rrbracket * \llbracket  \Gamma_2 \rrbracket
+\end{gather}
+
+\begin{gather}\label{sl7a6}
+\llbracket \Gamma'_1 \rrbracket * \llbracket \Gamma'_2 \rrbracket \sqsubseteq \llbracket \Gamma'_1, \Gamma'_2 \rrbracket
+\end{gather}
+
+By using \ref{sl7a5} and \ref{sl7a6}(trivial to show as "," and "*" for denotation of type contexts are both semantically equivalent to $\cap$) as antecedents to Views Logic's consequence rule, we can conclude \ref{sl7p1}.
+\end{case}
+\begin{case}-\textbf{M} where C has form $\textsf{RCUWrite}\, x.f \text{ as } y \text{ in } \bar{s}$
+  which desugars into
+  \[\textsf{WriteBegin}; x.f:= y ; \bar{s} ;\textsf{WriteEnd}\]
+
+  We assume from the rule \textsc{ToRCUWrite}
+ \begin{gather}\label{dsuga1}
+       \Gamma, y:\textsf{rcuItr}\;\_ \vdash_{M} \bar{s} \dashv \Gamma' \\
+       \label{dsuga2}
+       \textsf{FType}(f) = \textsf{RCU} \\
+       \label{dsuga3}
+       \textsf{NoFresh}(\Gamma') \\
+       \label{dsuga4}
+       \textsf{NoUnlinked}(\Gamma')\\
+        \label{dsuga5}
+       \{\llbracket \Gamma\,, y:\textsf{rcuItr}\;\_ \rrbracket_{M,tid} \}  \bar{s}  \{\llbracket \Gamma' \rrbracket_{M,tid}\}
+      \end{gather}
+      
+    Our goal is to prove
+    \begin{gather}\label{dsugp1}
+      \begin{array}{l}
+      \{\llbracket \Gamma \rrbracket_{M,tid} \} 
+      \textsf{WriteBegin}; x.f:= y  ;\textsf{WriteEnd}
+      \{\llbracket \Gamma' \rrbracket_{M,tid} \}
+      \end{array}
+    \end{gather}
+   Proof starts with application of the sequence rule. Assumptions \ref{dsuga3}-\ref{dsuga4} guarantee that there exists no change in the state(no heap update) due to any action in the body $\bar{s}$ which includes $x.f:=y$. \ref{dsugp1} follows from assumptions \ref{dsuga1}-\ref{dsuga5} trivially.
+\end{case}
+\end{proof}
+%  \end{itemize}
+\begin{lemma}[Context-SubTyping-M]\label{lem:cntxsubt-m}
+\[ \Gamma \subt \Gamma'  \implies \llbracket \Gamma \rrbracket_{M,tid} \sqsubseteq \llbracket  \Gamma' \rrbracket_{M,tid} \]
+\end{lemma}
+\begin{proof}
+  
+Induction on the subtyping derivation. Then inducting on the first entry in the non-empty context(empty case is trivial) which follows from \ref{lem:cntxsubt-m-s}.
+\end{proof}
+\begin{lemma}[Context-SubTyping-R]\label{lem:cntxsubt-r}
+\[ \Gamma \subt \Gamma'  \implies \llbracket \Gamma \rrbracket_{R,tid} \sqsubseteq \llbracket  \Gamma' \rrbracket_{R,tid} \]
+\end{lemma}
+\begin{proof}
+Induction on the subtyping derivation. Then inducting on the first entry in the non-empty context(empty case is trivial) which follows from \ref{lem:cntxsubt-r-s}.
+\end{proof}
+\begin{lemma}[Singleton-SubTyping-M]\label{lem:cntxsubt-m-s}
+  \[ x:T \subt x:T'  \implies \llbracket x:T \rrbracket_{M,tid} \sqsubseteq \llbracket  x:T' \rrbracket_{R,tid} \]
+\end{lemma}
+\begin{proof}
+  Proof by case analysis on structure of $T'$ and $T$. Important case includes the subtyping relation is defined over components of \textsf{rcuItr} type. $T'$ including approximation on the path component
+  \[\rho.f_1 \subt \rho.f_1|f_2\]
+  together with the approximation on the field map
+  \[\N([f_1 \rightharpoonup \_ ]) \subt \N([f_1|f_2 \rightharpoonup \_ ])\]
+  lead to subset inclusion in between a set of states defined by denotation of the $x:T'$ the set of states defined by denotation of the $x:T$(which is also obvious for \textsc{T-Sub}). Reflexive relations and relations capturing base cases in subtyping are trivial to show.
+  \end{proof}
+\begin{lemma}[Singleton-SubTyping-R]\label{lem:cntxsubt-r-s}
+  \[ x:T \subt x:T'  \implies \llbracket x:T \rrbracket_{M,tid} \sqsubseteq \llbracket  x:T' \rrbracket_{M,tid} \]
+\end{lemma}
+\begin{proof}
+  Proof is similar to \ref{lem:cntxsubt-m-s} with a single trivial reflexive derivation relation (\textsc{T-TSub2})
+\[\textsf{rcuItr} \subt \textsf{rcuItr}\]
+  \end{proof}

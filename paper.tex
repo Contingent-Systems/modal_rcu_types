@@ -1,0 +1,1234 @@
+%\documentclass[a4paper,UKenglish]{lipics-v2016}
+% For two-column layout for PPoPP, change 'acmsmall' to 'sigplan'.  Probably also turn on the
+% 'review' option, and the 'anonymous' option if it's DBR
+\documentclass[runningheads]{llncs}
+%This is a template for producing LIPIcs articles.
+%See lipics-manual.pdf for further information.
+%for A4 paper format use option "a4paper", for US-letter use option "letterpaper"
+%for british hyphenation rules use option "UKenglish", for american hyphenation rules use option "USenglish"
+% for section-numbered lemmas etc., use "numberwithinsect"
+\usepackage{microtype}%if unwanted, comment out or use option "draft"
+
+%\graphicspath{{./graphics/}}%helpful if your graphic files are in another directory
+
+%\usepackage[strings]{underscore}
+\usepackage[rawfloats=true]{floatrow} 
+\restylefloat{figure}    
+\DeclareMathSizes{4}{4}{4}{4}
+\usepackage{varwidth}
+\usepackage{lmodern}
+\usepackage{amsfonts}
+\usepackage{amsmath,mathtools}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\usepackage{proof}
+\usepackage{stmaryrd}
+\usepackage{xspace}
+\usepackage{listings}
+\usepackage{comment}
+\usepackage{longtable}
+\usepackage{float}
+\usepackage[section]{placeins}
+\usepackage[toc,page]{appendix}
+\usepackage[export]{adjustbox}
+\usepackage{amssymb}
+\usepackage{graphics,graphicx}
+\usepackage{mathpartir}
+\usepackage{array}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric}
+\usetikzlibrary{arrows.meta,arrows}
+\usetikzlibrary{positioning}
+\usetikzlibrary{calc, shapes, backgrounds}
+\usepackage{verbatim}
+\usepackage{tikz-qtree}
+\usepackage{pgfplots}
+\usepackage{caption,capt-of}
+\usepackage{color}
+
+
+\usepackage{soul}
+\setul{1ex}{0.8ex}
+\definecolor{orange}{rgb}{1,0.5,0}
+\setulcolor{orange}
+\usepackage{subcaption}
+\usepackage{lipsum}
+
+
+\newcommand{\defeq}{\mathbin{\stackrel{\text{def}}{=}}}
+% some stuff for prettier proof outlines
+\newcommand{\havoc}{\textsf{havoc}}
+\newcommand{\specline}[1]{{\color{blue}\left\{#1\right\}}}
+\newcommand{\assertion}[1]{\textsf{assert} {\color{red}\left\{#1\right\}}}
+\newcommand{\proofstepnr}[5][1pt/3pt]{\small \left.
+\begin{array}{l}
+\hdashline[#1]
+\ensuremath{\specline{#2}}\\
+\begin{array}{l}
+#3
+\end{array}\\
+
+\ensuremath{\specline{#5}}\\
+\hdashline[1pt/3pt]
+\end{array}
+\color{green}\right)\hspace{-6pt}{\color{green}-}
+\begin{array}{@{}l@{}}
+#4
+\end{array}
+}
+\newcommand{\proofoutstepnr}[5][1pt/3pt]{\small \left.
+\begin{array}{@{}l@{}}
+\hdashline[#1]
+\ensuremath{\specline{#2}}\\
+\begin{array}{@{\;\;\;}l}
+#3
+\end{array}\\
+\ensuremath{\specline{#5}}\\
+\hdashline[1pt/3pt]
+\end{array}
+\color{green}\right)\hspace{-6pt}{\color{green}-}
+\begin{array}{@{}l@{}}
+#4
+\end{array}
+}
+% \proofoutstep[dash stuff]{pre}{C}{rule}{post}
+\newcommand{\proofoutstep}[5][1pt/3pt]{
+\proofoutstepnr[#1]{#2}
+{#3}
+{\rotatebox[origin=c]{90}{$\begin{array}{@{}c@{}}{}#4\end{array}$}}
+{#5}
+}
+
+\newcommand{\NULL}{\texttt{NULL}}
+\newcommand{\NEW}{\texttt{new}}
+\newcommand{\SKIP}{\texttt{skip}}
+\newcommand{\RESULT}{\texttt{result}}
+\newcommand{\class}{\texttt{class}}
+\newcommand{\where}{\texttt{where}}
+\newcommand{\readable}{\texttt{readable}}
+\newcommand{\writable}{\texttt{writable}}
+\newcommand{\isolated}{\texttt{isolated}}
+\newcommand{\immutable}{\texttt{immutable}}
+\newcommand{\consume}[1]{\texttt{consume}(#1)}
+\newcommand{\consumeiso}[1]{\mathsf{RemIso}(#1)}
+\newcommand{\INT}{\texttt{int}}
+\newcommand{\bool}{\texttt{bool}}
+\newcommand{\this}{\texttt{this}}
+\newcommand{\immutdecl}[1]{\mathsf{ImmutableDeclared}(#1)}
+\newcommand{\IsoOrImm}{\textsf{IsoOrImm}}
+\newcommand{\NonWrit}{\textsf{NoWrit}}
+\newcommand{\db}[1]{\llbracket#1\rrbracket}
+\newcommand{\nil}{\textsf{null}}
+\newcommand{\atom}{\textsf{atom} \mapsto \mstatename \mapsto \mstatename}
+\newcommand{\loc}{\textsf{Loc}}
+\newcommand{\val}{\textsf{Val}}
+\newcommand{\mstatename}{\textsf{MState}}
+\newcommand{\superset}{\mathcal{P}}
+\newcommand{\mstatedecl}{\sigma \in \mstatename \overset{def}{=} s \times h \times l \times rt \times R \times B  \times F }
+\newcommand{\stack}{s \in \var \times \tid \rightharpoonup \loc}
+\newcommand{\heap}{h \in \loc \times \fname \rightharpoonup \val}
+\newcommand{\wlock}{l \in \tid \uplus \textsf{unlocked}}
+\newcommand{\rlock}{R \in \superset(\tid)}
+\newcommand{\fset}{F : \loc \mapsto \superset(\tid) }
+\newcommand{\atomeval}{\db{-}:\atom}
+\newcommand{\rcuwrite}{\textsf{RCUWrite} \text{ x.f as y in }\, \{ \bar{s} \}}
+\newcommand{\rcuread}{\textsf{RCURead} \text{ x.f as y in }\, \{ \bar{s} \}}
+  \newcommand{\desugarread}{ \db{\rcuread}_{\;\;\Downarrow_{\mathrm{tid}}\;\;} \overset{\Delta}{=} \texttt{\textsf{ReadBegin};\, y:= x.f\, ;\textsf{ReadEnd}}}
+  \newcommand{\desugarwrite}{\db{\rcuwrite}_{\;\;\Downarrow_{\mathrm{tid}}\;\;} \overset{\Delta}{=} \texttt{\textsf{WriteBegin} ;\, x.f := y\, ;\textsf{WriteEnd}}}
+    \newcommand{\desugarsync}{\db{\textsf{Sync}}_{\;\;\Downarrow_{\mathrm{tid}}\;\;} \overset{\Delta}{=} \texttt{\textsf{SyncStart};\textsf{SyncStop}}}
+  %\newcommand{\boundpath}{\bar f_{i}^{k} = \forall_{k \in \mathbb{N},i \in \fnameenum} \ldotp  \underbrace{f_{i}^{0} \ldots f_{i}^{k}}_\text{$\mid$ $f_{i}^{0}$ \ldots $f_{i}^{k}$ $\mid$ = k} }
+\newcommand{\subt}{\prec:}
+%typing rules
+ \newcommand{\fname}{\textsf{FName}}
+\newcommand{\fmname}{\textsf{FMap}}
+\newcommand{\uiglobal}{\textsf{UIGlobal}}
+\newcommand{\udef}{\textsf{undef}}
+\newcommand{\unlinked}{\textsf{unlinked}}
+\newcommand{\fresh}{\textsf{fresh}}
+\newcommand{\var}{\textsf{Var}}
+\newcommand{\tid}{\textsf{TID}}
+
+\newcommand{\fmapfieldemp}{\N_{f,\emptyset} = \N \setminus \{f \rightharpoonup \_ \}}
+\newcommand{\fmapname}{\N = \{ f\rightharpoonup  y \mid f \in \fname \; \land \; (y \in \var \lor y \in \{null\}) \}}
+\newcommand{\fmapextend}{  \N(f\rightharpoonup x \setminus y) = \N \setminus \{f \rightharpoonup x\} \cup \{f \rightharpoonup y\} }
+\newcommand{\fmapextendn}{  \N(\cup_{f\rightharpoonup y}) = \N \cup \{f \rightharpoonup y\} }
+\newcommand{\fmapdiff}{\N(\setminus_{f\rightharpoonup y}) = \N - \{f\rightharpoonup y\}}
+\newcommand{\fmapwithf}{\N([f\rightharpoonup  y]) = \N \text{   where  } f \rightharpoonup y \in \N }
+\newcommand{\fmapempty}{\N_{\emptyset} =  \{ \}}
+\newcommand{\codom}{\cod(\N)=\dom(\Gamma)}
+\newcommand{\cod}{\texttt{cod}}
+\newcommand{\dom}{\texttt{dom}}
+%\newcommand{\types}{\tau ::= \textsf{rcu} | \textsf{normal}}
+
+\newcommand{\rpth}{f \in \textsf{FName} 
+     \left\{\begin{array}{cl}
+     \epsilon &    \\
+     f  &  f \in \fname\\
+   f_1 | \ldots | f_n &\forall_{1 \leq i \leq n} \ldotp f_i \in \fname 
+     \end{array}\right\}
+     \quad \text{  where } \textsf{FType(f) = \textsf{RCU}}
+}
+\newcommand{\rextendswith}{\rho^{k}[i] \mapsto f_i \text{  where  } \forall_{0\leq i \leq k} \ldotp f_i \in \fname }
+\newcommand{\extendswith}{\rho[i] \mapsto \rho_{i}^{k} \text{  where  } \forall_{0\leq i \leq n} \ldotp \rho_i^{k} \in \textsf{RelativePath}}
+
+\newcommand{\pth}{\rho \in \textsf{Path}  \qquad \rho ::= \rho_1 \ldots\rho_n  \text{   where  } \forall_{0\leq i \leq n}\ldotp \rho_i \in \textsf{RelativePath} \text{ or } \rho_i \in \textsf{ConcretePath}}
+\newcommand{\cpath}{\forall_{0 \leq i \leq n} \ldotp f_i \in \mathsf{FName} \land l_i \in \textsf{Label} \land \exists_{k\geq0} \ldotp f_i^{l_i} = \overbrace{f_i\ldots f_i}^{k} \land (\forall_{0\leq j \leq n} \ldotp j\neq i \implies l_i \neq l_j) }
+
+
+
+\newcommand{\rpath}{\rho \in \textsf{RelativePath} \quad \rho = (f)^{*} \text{   where  } f \in \textsf{FName} \text{  and  } \exists_{k>=0} \ldotp (f)^{*} = \overbrace{f\ldots f}^\text{k} }
+\newcommand{\falt}{f \in \textsf{AlternatingFName} = f_1 | f_2 | \ldots | f_{n-1} | f_n \text{  where  } \forall_{0\leq i \leq n}\ldotp f_i \in \textsf{FName} }
+
+\newcommand{\lenmap}{\mathcal{L} \in \textsf{LPath} : \rho \mapsto \mathbb{N}}
+\newcommand{\etadecl}{\eta = \{f \mapsto y \mid f \in \fname \land y\in \var \}  }
+\newcommand{\rcunfd}{\textsf{rcuFresh} \,  \N}
+\newcommand{\rcunfdecl}{x : \textsf{rcuFresh} \;\; \N }
+\newcommand{\rcunf}[3]{#1 : \textsf{rcuFresh} \;\; \N(\cup_{ #2 \rightharpoonup #3}) } %x, f , y
+\newcommand{\rcuf}[1]{#1 : \textsf{rcuFresh} \;\;\N } %x, f , y
+\newcommand{\rcunextfresh}[1]{\textsf{rcuFresh} \;\; \N #1 }
+\newcommand{\ftypedecl}{\textsf{FType} : \fname \mapsto \tau}
+\newcommand{\ftype}[2]{\textsf{FType}(f_{#1}) \mapsto \textsf{#2}}
+%%%
+\newcommand{\typedepthdecl}{\textsf{TypeDepth}(x:\text{T}) =  \mid\rho\mid \;\; \texttt{where T} = \textsf{rcuItr} \underset{y}{\mid} \rho \,\, \N }
+%%%
+\newcommand{\rcuonly}{\textsf{RCUOnly}(x) \overset{\texttt{def}}{=} x:T \text{ where } T = \textsf{rcuItr}\_}
+\newcommand{\rcumodonlydecl}{\textsf{RCUModifiedOnly}(C) \overset{\texttt{def}}{=} \forall_{x \in \textsf{Modifies}(C)}\ldotp \textsf{RcuOnly}(x) }
+\newcommand{\rcufilterb}{\textsf{RemRcu} : \Gamma \mapsto \Gamma}
+\newcommand{\rcufilterr}[1]{\textsf{RemRcu} ( #1 ) = \texttt{filter} \, ( \lambda x \ldotp x \neq \textsf{rcuItr \_ } ) \,  #1 }
+\newcommand{\rcufiltera}[1]{\textsf{RemRcu} ( #1 ) }
+%%%Alias
+\newcommand{\aliaswith}[2]{#1 \in \textsf{AliasWith}(#2)}
+\newcommand{\aliaswithdecl}{\textsf{AliasWith}(x) = \{y \mid y:\textsf{rcuItr}\underset{r',k'}{\mid} \rho' \;\; \N' \land \rho = \rho' \land \N = \N' \}  \texttt{  where  }  \rcuitrT{x}{r}{k}{kk}{\_} }
+%%%Framing Type Contexts
+    \newcommand{\wellframed}{
+      \mathsf{WellFramed}(\Gamma,\Delta)\overset{def}{=}
+      \left\{\begin{array}{l}
+      
+        \forall_{z\in dom(\Gamma),f,\rho,y }\ldotp                           z\notin dom(\Delta) \land            z:\textsf{rcuItr}\,\rho\,\N([f\rightharpoonup y]) \implies \\
+                      \left\{ 
+	              \begin{array}{l}
+                        y\notin dom(\Delta) \land y\in dom(\Gamma) \land \forall_{n\in dom(\Delta),\rho',f',m}\ldotp n\notin dom(\Gamma) \land 	\\
+            \left\{
+            \begin{array}{l}
+              n:\textsf{rcuItr}\,\rho'\,\N([f'\rightharpoonup m]) \implies \\
+              \left\{\begin{array}{l}
+              m \notin dom(\Gamma) \land \\
+              m \in dom(\Delta) \land
+              \rho \neq \rho'                    
+              \end{array} \right\}
+            \end{array}\right\}
+     \end{array}\right\}
+         \end{array}\right.      
+      
+}
+
+%%%Framing Type Contexts ends
+\newcommand{\deltaepsilon}{\Delta >= 0 \qquad 0\leq \epsilon \leq \Delta }
+\newcommand{\reduce}[2]{\textsf{InReduction}(#1,#2) = \{ \Gamma' \mid  \Gamma' \preceq_{\varepsilon} \Gamma \} }
+\newcommand{\rename}[2]{\textsf{ContextRename}(#1,#2) = #2 \mapsto #1 }
+%%Sep RCU
+\newcommand{\seprcu}[4]{\textsf{SepLoop}(#1,#2,#3,#4) \overset{\texttt{def}}{=} \text{dom}(#1)\cap \text{dom}(#2) = \emptyset \, \land \, #1\uplus#2= #4 \, \land \, \textsf{RcuModifiedOnly}(#2,#3)}
+\newcommand{\seprcud}[4]{\textsf{SepLoop}(#1,#2,#3,#4)}
+%%
+\newcommand{\seprcub}[5]{\textsf{SepBranch}(#1,#2,#3,#4,#5) \overset{\texttt{def}}{=}
+   \left\{\begin{array}{cl}
+  \text{dom}(#2)\cap \text{dom}(#3) = \emptyset \, \land \, #2\uplus#3=#1 \land \\
+  \textsf{RcuModifiedOnly}(#2,#4) \,\land\, \textsf{RcuModifiedOnly}(#2,#5)\,\land \\
+
+ \end{array}\right\}
+}
+\newcommand{\seprcubd}[5]{\textsf{SepBranch}(#1,#2,#3,#4,#5)}
+%%
+\newcommand{\precgamma}[2]{#1  \preceq #2 \overset{\texttt{def}}{=} \forall_{(x)\in #1}\ldotp x \in #2 \implies  #1 \preceq_{x} #2}
+%%%if branches
+\newcommand{\iffree}{\textsf{if}(\text{e})\{\text{C}\}}
+\newcommand{\ifelse}{\textsf{if}(\text{e})\{\text{C}_1\}\textsf{else}\{\text{C}_2\}}
+%%var  root,k  , k+1 mappedvar
+\newcommand{\rcuitertype}[4]{\textsf{rcuItr}(#1,#2)\;#3\;#4}
+\newcommand{\rcuit}[4]{#1:\textsf{rcuItr}\;\; #3 \;\; #4 }
+\newcommand{\rcuitrT}[5]{#1:\textsf{rcuItr}\;\; \rho \;\; \N }
+\newcommand{\rcuitrn}[5]{#1:\textsf{rcuItr}\;\; \rho \, f \;\; \N }
+\newcommand{\rcuitr}[5]{#1:\textsf{rcuItr}\;\; \rho \;\; \N[f  \rightharpoonup #5] }
+\newcommand{\rcustack}[2]{#1 : \textsf{rcuItr}\underset{#2}{\mid}}
+\newcommand{\afree}[1]{\textsf{asyncDelayedFree}(#1)}
+\newcommand{\allocate}{\textsf{asyncDelayedFree}}
+\newcommand{\typelocal}{\tau_{local}}
+\newcommand{\typeglobal}{\tau_{global}::=\textsf{rcuRoot}  }
+\newcommand{\rcutypes}{ \typelocal ::=   \textsf{undef} \mid \textsf{rcuItr} \,\, \rho \,\, \N \mid \rcunfd \mid \textsf{unlinked}  \mid \textsf{freeable}}
+\newcommand{\typelocalmap}{\textsf{TypeLocal} : \var \mapsto \typelocal}
+\newcommand{\command}[1]{\db{#1} \mstate \commandeq}
+\newcommand{\commandm}[2]{\db{#1} #2 \commandeq}
+
+\newcommand{\mstate}{(s,h,l,R,F)}
+\newcommand{\commandeq}{\;\;\Downarrow_{\mathrm{tid}}\;\;\overset{\Delta}{=}}
+\newcommand{\op}[2]{\begin{array}{rll}\command{#1} & #2\end{array}}
+\newcommand{\opm}[3]{\begin{array}{rll}\commandm{#1}{#2} & #3\end{array}}
+%%%
+\newcommand{\return}[1]{\mathsf{return~\mathit{#1}}}
+\newcommand{\bind}[2]{\mathsf{Bind}(#1;#2)}
+\newcommand{\result}[1]{\mathsf{y = \mathsf{result}}}
+\newcommand{\mbody}[2]{\mathsf{mbody}(#1,#2)}
+\newcommand{\pre}{\textsf{pre}}
+\newcommand{\assume}[1]{\textsf{assume}(#1)}
+\newcommand{\lift}[1]{\lceil #1\rceil}
+\newcommand{\erase}[1]{\lfloor #1\rfloor}
+%%%
+\newcommand{\M}{\ensuremath{\mathcal{M}}}
+\newcommand{\s}{\ensuremath{\mathcal{S}}}
+\newcommand{\R}{\ensuremath{\mathcal{R}}}
+\newcommand{\N}{\ensuremath{\mathcal{N}}}
+\newcommand{\condexpr}{e \in \textsf{CondExpr}}
+%function definitions for paths
+
+\newcommand{\lengthofpath}{$\mid \rho\mid \;=\;
+  \begin{cases}
+      0+ \mid \rho'\mid &  \rho = \rho_{i}^{k}\rho' \text{   where  } 0\leq i  \text{   and   } \rho_{i}^{k} = \epsilon \\
+         k + \mid \rho'\mid & \rho = \rho_{i}^{k}\rho' \text{   where  } 0\leq i
+  \end{cases}$
+
+}
+%%\textsf{Stabilize}(\Gamma,e) = \forall x \in \N[\fname] \ldotp \exists_{f_1,f_2 \in \fname}\ldotp \N[f_1] =  \N[f_2] \implies \N[f_1,f^{*}] \land \N[f_2,f^{*}]
+
+\newcommand{\stabilizenext}{\textsf{StabilizeNext}(a,b,f)}
+\newcommand{\stabilizepath}{\textsf{StabilzePath}(b,f,k)}
+\newcommand{\stabilizecontext}{\textsf{StabilizeContext}(\Gamma,e) =
+    \left\{\begin{array}{cl}
+    e \in \textsf{PointsToExpr} \land
+    \exists_{a,b,f}\ldotp  (a,b,f) = \textsf{PointsToExprMap}(e) \land \\
+  \pi_{\N}(a) = \textsf{StabilizeNextMap}(a,b,f) \land \\
+  \pi_{\rho}(b) = \textsf{StabilizePath}(b,f, \mid \pi_{\rho}(b)\mid ) \land\\
+  \forall_{c \in \Gamma \land \textsf{TypeDepth}(c) >= \textsf{TypeDepth}(b)} \ldotp \pi_{\rho}(c) = \textsf{StabilizePath}(c,f,\mid\pi_{\rho}(c)\mid)
+  \end{array}\right\}
+}
+%%%frame branch
+\newcommand{\alternatingvars}[1]{\textsf{AbstractVars}(#1)}
+\newcommand{\alternatingvarsdecl}{\textsf{AbstractVars}(\Gamma) \;=\; \{ x,y \mid  (x,y)\in \textsf{AbstractPairs}(\Gamma)\}}
+\newcommand{\alternatetype}{ \text{x:}\textsf{rcuItr}\;\; \rho \;\; \N[f^{*}\mapsto y] \qquad   \text{y:}\textsf{rcuItr}\;\; \rho.\rho^{k} \;\; \N \text{    where    } \rho^{k}[k]=f^{*}}
+\newcommand{\alternatingpath}[1]{f^{*} \; = \; f_1 \mid f_2  \; \text{where} \;  (f=f_1) \;\oplus \; ( f=f_2 )  }
+\newcommand{\alternatingpathsdecl}[1]{\textsf{AbstractPairs}(#1) = \; \{ (\text{x},\text{y}) \mid \text{x} \in #1 \land \text{y} \in #1\}}
+\newcommand{\alternatingpaths}[1]{\textsf{AbstractPairs}(#1)}
+\newcommand{\pointstotuple}{\textsf{PointsToTuple}}
+\newcommand{\pointstoexpr}{\textsf{PointsToExpr} = \{ x.f==y  \in \textsf{Expr} \mid \text{x} \in \var \; \land \; \text{y} \in \var \; \land \; f \in \fname \}}
+\newcommand{\pointstopair}[1]{\textsf{PointsTo}(\text{#1})}
+\newcommand{\projectfieldecl}{\pi_{f} : (\text{x},\text{y},f) \mapsto f}
+\newcommand{\projectfield}[1]{\pi_{f}(#1)}
+\newcommand{\projectpairdecl}{\pi_{\var} :(\text{x},\text{y},f) \mapsto (\text{x},\text{y})}
+\newcommand{\projectpair}[1]{\pi_{\var}(#1)} % tuple,f.
+\newcommand{\pointstoexprdecl}{\textsf{PointsToExpr} = \{e \mid  e = (a.f == b) \land \condexpr \land a,b \in \var \land f \in \fname  \} }
+\newcommand{\pointstostmtdecl}{\textsf{PointsToExprMap}: \textsf{PointsToExpr}\mapsto \var \times \var \times \fname}
+\newcommand{\pointstostmt}[1]{\textsf{PointsToExprMap}(#1) }
+\newcommand{\freductionindexdecl}{\textsf{FieldReductionIndex}(\text{C},\text{x},\text{y},\text{irdc})\; = \;
+  \left\{\begin{array}{cl}
+    \forall_{0 \leq  i \leq n} \ldotp &  (x',y',f')_{i}  \in \pointstostmt{C} \land \\
+    &(\text{x},\text{y})= \projectpair{(\text{x}',\text{y}',f')_{i}} \implies\\
+    & \left\{\begin{array}{cl}
+    \exists_{ firdc} \ldotp  & firdc \leq i \land  (firdc = 0 \implies firdc=irdc) \land \\
+     & \left\{\begin{array}{cl}
+    \forall_{0 \leq none \le firdc} \ldotp & (\text{x},\text{y}) \neq \projectpair{(\text{x}',\text{y}',f')_{none})}  \land \\
+    &  firdc = \text{irdc}
+      \end{array}\right\}
+    \end{array}\right\}
+  \end{array}\right\}
+}
+
+\newcommand{\projectsharpdecl}{\Pi_{\varphi_{e}}(f^{*}) \mapsto f_1 \qquad \Pi_{\lnot\varphi_{e}}(f^{*}) \mapsto f_2 }
+\newcommand{\projectsharpdeclback}{\Pi(\varphi_{e})\mapsto e}
+
+\newcommand{\frenamefielddecl}{\textsf{FieldRename}(\text{x},f,f')  \; = \; \text{x:T}[f/f'] }
+
+
+
+
+\newcommand{\freductiondecl}{\textsf{FieldReduction}(\Gamma,\varphi_{e}) \; = \;
+\left\{\begin{array}{cl}
+  \textsf{FieldRename}(\text{x},f^{*},\Pi_{\varphi_{e}}(f^{*})),
+  \textsf{FieldRename}(\text{y},f^{*},\Pi_{\varphi_{e}}(f^{*})) \mid (\text{x},\text{y}) =\projectpair{\pointstostmt{\Pi(\varphi_{e})}}
+\end{array}\right\}
+}
+
+\newcommand{\freductiondeclneq}{\textsf{FieldReduction}(\Gamma,\lnot\varphi_{e}) \; = \;
+\left\{\begin{array}{cl}
+  \textsf{FieldRename}(\text{x},f^{*},\Pi_{\lnot\varphi_{e}}(f^{*})),
+  \textsf{FieldRename}(\text{y},f^{*},\Pi_{\lnot\varphi_{e}}(f^{*})) \mid (\text{x},\text{y}) = \projectpair{\pointstostmt{\Pi(\varphi_{e})}}
+\end{array}\right\}
+  }
+
+
+\newcommand{\gammafieldreduction}[4]{\textsf{ReduceAbstractPaths}(#3,#4,#2,#1) = \forall_{x,y \in \textsf{AbstractVars}(#4)} \ldotp \textsf{FieldReduction}(\text{x},\text{y},\varphi_{#3}) = #2 \land \textsf{FieldReduction}(\text{x},\text{y},\varphi_{#3}) = #1  } % x,y,gamma,c
+\newcommand{\alterinxys}{\text{a:}\textsf{rcuItr}\;\; \rho \;\; \N[f_1\mapsto b] \qquad
+  \text{b:}\textsf{rcuItr}\;\; \rho.f_1 \;\; \N  \text{  or }\text{b:}\textsf{rcuItr}\underset{r}{\mid} \rho.\{...f_1\} \;\; \N \\
+  \text{a:}\textsf{rcuItr}\;\; \rho \;\; \N[f_2\mapsto b] \qquad
+  \text{b:}\textsf{rcuItr}\;\; \rho.f_2 \;\; \N \text{  or  } \text{b:}\textsf{rcuItr}\;\; \rho.\{...f_2\} \;\; \N }
+\newcommand{\reducedpathsdecl}[2]{\textsf{ReducedPaths}(#1,#2)\; = \; \left\{\begin{array}{cll}
+  (a,b) \mid  &\text{a:}\textsf{rcuItr}\;\; \rho \;\; \N[f_1\mapsto b] \in #1 & \\
+  &  \land  \text{b:}\textsf{rcuItr}\;\; \rho.\rho^{k} \;\; \N \in #1  & \text{     where    } \rho^{k}[k]=f_1 \\
+  &  \land  \text{a:}\textsf{rcuItr}\;\; \rho \;\; \N[f_2\mapsto b] \in #2 & \\
+  &  \land \text{b:}\textsf{rcuItr}\;\; \rho.\rho^{k} \;\; \N  \in #2 & \text{     where    } \rho^{k}[k]=f_2
+  \end{array}\right\} }
+\newcommand{\exprTopredDecl}{\textsf{ExprToPredicate}(e) \mapsto \varphi_{e}}
+\newcommand{\reducedvars}{\textsf{ReducedVars}(\Gamma_1,\Gamma_2)}
+\newcommand{\reducedvarsdecl}{\textsf{ReducedVars}(\Gamma_1,\Gamma_2)\;=\; \{\forall_{a,b \in \Gamma_1 \cup \Gamma_2} \ldotp (a,b) \in \textsf{ReducedPaths}(\Gamma_1,\Gamma_2) \}}
+\newcommand{\reducedpaths}[2]{\textsf{ReducedPaths}(#1,#2)}
+\newcommand{\abstractpaths}[4]{\textsf{AbstractPaths}(#1,#2,#3,#4) \; = \; \left\{\begin{array}{cl} a ,b \mid
+
+  \begin{array}{cl}
+ \forall_{a,b \in #1}\ldotp & \textsf{FieldRename}(a,#2,\rewritealternate{#2}{#3}{#4}) \land \\
+  &\textsf{FieldRename}(a,#3,\rewritealternate{#2}{#3}{#4}) \land\\
+  &\textsf{FieldRename}(b,#2,\rewritealternate{#2}{#3}{#4}) \land \\
+  &\textsf{FieldRename}(b,#3,\rewritealternate{#2}{#3}{#4})
+  \end{array}
+   \end{array}\right\}
+ }
+\newcommand{\rewritealternatedecl}[3]{\textsf{AbstractField}(#1,#2,#3) = f^{*} \; \texttt{    where   } f^{*} \;=\;  \frac{\varphi_{#3}}{#1 \mid #2} }
+  \newcommand{\rewritealternate}[3]{\textsf{AbstractField}(#1,#2,#3)}
+\newcommand{\composerename}{\circ \text{  provides composing renaming of types ... removes duplicates? [TODO : May change this, keep this simple, now it is nothing, same as ;]. }}
+
+%%%%%%%
+\newcommand{\p}{\rho}
+
+\newcommand{\ptriple}[3]{\{#1\}#2\{#3\}}
+\newcommand{\atriple}[3]{\begin{array}{l}\{#1\}\\#2\\\{#3\}\end{array}}
+\newcommand{\assert}[1]{\{#1\}}
+\newcommand{\modifies}[1]{\textsf{Modifies}(#1)}
+
+%\usepackage[usenames,dvipsnames]{color}
+\definecolor{framed}{gray}{0.50}
+\newcommand{\framed}[1]{\textcolor{framed}{\assert{#1}}}
+
+% Make sure these are all done
+\usepackage{todonotes}
+
+\newcommand{\iso}[1]{\textrm{\color{magenta}\ensuremath{\llbracket}\textrm{Iso says:} #1\ensuremath{\rrbracket}}}
+\newcommand{\colin}[1]{\textrm{\color{cyan}\ensuremath{\llbracket}\textrm{Colin says:} #1\ensuremath{\rrbracket}}}
+%\newcommand{\tocite}[1]{\textrm{\color{green}$\llbracket$CITE: #1$\rrbracket$}}
+
+\newcommand{\mypar}[1]{\textbf{#1}~\xspace}
+
+\newcommand{\hallocprovided}{
+  \texttt{ provided } s[(y,tid)\mapsto o], \;  h[o \mapsto \texttt{new}] \text{ and } \texttt{ default }(\textsf{FType}(f))\\
+  \lambda o', f  \ldotp  \text{ if }  o = o' \;  \text{ skip } \text{ else }  h(o',f)
+}
+\newcommand{\gcprovided}{
+  \texttt{ provided }  s[(x,tid)\mapsto o], \; (\forall f, o' \ldotp o\neq o' \Rightarrow h(o',f) = h'(o',f))) \\
+  \text{ and } \forall f \ldotp h'(o,f)\; \textsf{ undefined }
+}
+\newcommand{\rcuwbeginprovided}{
+ \textrm{provided }tid \notin R
+}
+\newcommand{\rcurbeginprovided}{
+ \textrm{provided }tid \neq l
+}
+\newcommand{\rcurendprovided}{
+ \textrm{provided } \; F \setminus tid \; \textrm{ as } \; \{ (T \setminus tid \},o) \mid (T,o) \in F \}
+}
+\newcommand{\gc}{
+  \inferrule*[left={\scriptsize(Garbage-Collect)}]{}
+           {
+             \op{\texttt{gcStep}}{(s,h',l,R,F)}
+           }
+}
+%%%
+\newcommand{\rcuwbegin}{
+  \inferrule*[left={\scriptsize(RCU-WriteBegin)}]{}
+           {
+            \opm{\texttt{WriteBegin}}{(s,h,\mathrm{unlocked},R,F)}{(s,h,\mathrm{tid},R,F)}
+           }
+}
+\newcommand{\rcuwend}{
+  \inferrule*[left={\scriptsize(RCU-WriteEnd)}]{}
+           {
+            \opm{\texttt{WriteEnd}}{(s,h,\mathrm{tid},R,F)}{(s,h,\textsf{unlocked},R,F)}
+           }
+}
+\newcommand{\rcurbegin}{
+  \inferrule*[left={\scriptsize(RCU-ReadBegin)}]{}{
+    \opm{\texttt{ReadBegin}}{(s,h,l,R,F)}{(s,h,l,R \uplus \{ \mathrm{tid}\},F)}
+  }
+}
+\newcommand{\rcurend}{
+  \inferrule*[left={\scriptsize(RCU-ReadEnd)}]{}{
+    \opm{\texttt{ReadEnd}}{( s,h,l,R \uplus \{ \mathrm{tid} \},F)}{(s,h,l,R,F \setminus \mathrm{tid}) }
+  }
+}
+
+%%%
+\newcommand{\asyncfree}{
+\inferrule*[left={\scriptsize(Async-Free)}]{}
+           {
+            \op{\texttt{asyncDelayedFree}(x)}{(s,h,l,R,F \uplus \{ (R,S(x))\} )}
+           }
+
+}
+\newcommand{\hallocate}{
+  \inferrule*[left={\scriptsize(Heap-Allocate)}]{}
+             {
+                \op{\texttt{y=new}}{(s,h,l,R,F)}
+             }
+}
+\newcommand{\supdate}{
+  \inferrule*[left={\scriptsize(Stack-Update)}]{}
+           {
+             \op{\texttt{y=x}}{(s[(y,tid) \mapsto (x,tid)],h,l,R,F)}
+           }
+}
+\newcommand{\hread}{
+  \inferrule*[left={\scriptsize(Heap-Read)}]{}
+             {
+               \op{\texttt{y=x.f}}{((s[(y,tid) \mapsto h(s(x,tid),f)],h,l,R,F)}
+             }
+}
+\newcommand{\hupdate}{
+  \inferrule*[left={\scriptsize(Heap-Update)}]{}
+             {
+               \op{\texttt{x.f=y}}{(s,h[s(x,tid),f \mapsto s(y,tid)],l,R,F)}
+             }
+}
+\newcommand{\tuigread}[1][T-UniqueGlobalRead]{
+\infer[\textsc{#1}]{
+  \Gamma \, , y:\_ \vdash_{M,R} y = G \dashv y: \textsf{rcuItr}\;\; \rho \;\; \N_{\emptyset} , \Gamma
+}{
+\begin{array}{c}
+   G : \uiglobal \\
+\end{array}
+}
+}
+
+\newcommand{\tuisread}[1][T-UniqueStackRead]{
+\infer[\textsc{#1}]{
+  \begin{array}{c}
+  \Gamma,\rcuitrn{y}{G}{0}{k+1}{\_} , x:\textsf{\_}  \vdash_{M,R} x = y \dashv  \rcuitrn{x}{y}{1}{2}{\_} , \rcuitrn{y}{G}{0}{1}{\_}, \Gamma \\
+  \end{array}
+}{
+\begin{array}{c}
+   G : \uiglobal \\
+\end{array}
+}
+}
+
+\newcommand{\toverwc}[1][T-OverWrite]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+  \Gamma, x:\textsf{rcuItr}\;\; \rho \;\; \N([f \rightharpoonup \_])  \vdash_{M,R} x = x.f \dashv   x:\textsf{rcuItr}\;\; \rho' \;\; \N(\setminus_{f\rightharpoonup \_})  ,\,  \Gamma \\
+\end{array}
+}{
+\begin{array}{c}
+  \ftype{ }{\textsf{rcu}}  \qquad \mid \rho \mid +1 = \mid \rho' \mid  \\
+\end{array}
+}
+}
+%\qquad \aliaswith{z}{x} \rcuitr{z}{y}{k}{k+1}{x}\,
+
+\newcommand{\treadstack}[1][T-ReadStack]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+  \Gamma, z:{\_}, \rcuitrT{x}{y}{k}{k+1}{\_}   \vdash_{M,R} z=x \dashv  \rcuitrT{x}{y}{k}{k+1}{\_}, \rcuitrT{z}{y}{k}{k+1}{\_} , \Gamma \\
+\end{array}
+}{
+\begin{array}{c}
+ \\
+\end{array}
+}
+}
+
+\newcommand{\treadnext}[1][T-ReadNext]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+  \Gamma, z:{\_},  x:\textsf{rcuItr}\;\; \rho \;\; \N([f\rightharpoonup \_])   \vdash_{M,R} z=x.f \dashv  x:\textsf{rcuItr}\;\; \rho \;\; \N(f\rightharpoonup \_ \setminus z),\;\;z:\textsf{rcuItr}\;\; \rho' \;\; \N \;, \Gamma \\
+\end{array}
+}{
+\begin{array}{c}
+  \ftype{ }{\textsf{rcu}} \qquad \mid \rho \mid + 1 = \mid \rho' \mid \\
+\end{array}
+}
+}
+%%%This is read and assignment for loop
+
+\newcommand{\tloverwc}[1][T-OverLoopWrite]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+  \Gamma,  x:\textsf{rcuItr}\;\; \rho\{...f_{loop}\}_{\Delta} \,\, \N   \vdash_{M,R} x = x.f \dashv   \textsf{rcuItr}\;\; \rho\{...f\}_{\Delta} \,\, \N ,\,  \Gamma \\
+\end{array}
+}{
+\begin{array}{c}
+  \ftype{ }{\textsf{rcu}}  \\
+\end{array}
+}
+}
+\newcommand{\tlreadstackext}[1][T-ReadLoopStack1]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+  \Gamma, z:{\_}, x:\textsf{rcuItr}\;\; \rho\{...f_{loop}\}_{\Delta} \,\, \N \\  \vdash_{M,R} z=x \dashv \\ x:\textsf{rcuItr}\;\; \rho\{...f_{loop}\}_{\Delta} \,\, \N, z:\textsf{rcuItr}\;\; \rho\{...f_{loop}\}_{\Delta} \,\, \N \, , \Gamma \\
+\end{array}
+}{
+\begin{array}{c}
+ \\
+\end{array}
+}
+}
+\newcommand{\tlreadstackinit}[1][T-ReadLoopStackInit]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+  \Gamma, z:\textsf{rcuItr}\;\; \rho\{...f_{loop}\}_{\Delta} \,\, \N[f \mapsto x], x:\textsf{rcuItr}\;\; \rho f \{...f_{loop}\}_{\Delta} \,\, \N \\  \vdash_{M,R} z=x \dashv \\ x:\textsf{rcuItr}\;\; \rho f \{...f_{loop}\}_{\Delta} \,\, \N, z:\textsf{rcuItr}\;\; \rho\{...f\}_{\Delta} \,\, \N \, , \Gamma \\
+\end{array}
+}{
+\begin{array}{c}
+  \ftype{ }{\textsf{rcu}} \qquad f_{loop} = \epsilon \\
+\end{array}
+}
+}
+\newcommand{\tlreadnextone}[1][T-ReadLoopNextAbstract]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+  \Gamma, z:\textsf{rcuItr}\;\; \rho f_1\{...f_{loop}\}_{\Delta} \,\, \N, x:\textsf{rcuItr}\;\; \rho\{...f_1\}_{\Delta} \,\, \N[f_1\mapsto z] \\  \vdash_{M,R} z=x.f_2 \dashv \\  x:\textsf{rcuItr}\;\; \rho\{...f_1\}_{\Delta} \,\, \N[\frac{}{f_1 \mid f_2}\mapsto z],\, z:\textsf{rcuItr}\;\; \rho\{...f_2\}_{\Delta} \,\, \N \,, \Gamma \\
+\end{array}
+}{
+\begin{array}{c}
+  \ftype{ }{\textsf{rcu}} \qquad f_{loop}=\epsilon  \\
+\end{array}
+}
+}
+\newcommand{\tlreadnexttwo}[1][T-ReadLoopNextExtend]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+  \Gamma, z:\textsf{rcuItr}\;\; \rho f_1\{...f_{loop}\}_{\Delta} \,\, \N, x:\textsf{rcuItr}\;\; \rho\{...f_1\}_{\Delta} \,\, \N[f_1\mapsto z] \\  \vdash_{M,R} z=x.f_1 \dashv \\  x:\textsf{rcuItr}\;\; \rho\{...f_1\}_{\Delta} \,\, \N[f_1\mapsto z],\, z:\textsf{rcuItr}\;\; \rho\{...f_1\}_{\Delta} \,\, \N \,, \Gamma \\
+\end{array}
+}{
+\begin{array}{c}
+  \ftype{ }{\textsf{rcu}} \qquad f_{loop}=\epsilon  \\
+\end{array}
+}
+}
+\newcommand{\tlreadnextthree}[1][T-ReadLoopNext3]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+  \Gamma, z:{\_}, x:\textsf{rcuItr}\;\; \rho\{...f_{loop}\}_{\Delta} \,\, \N \\  \vdash_{M,R} z=x.f \dashv \\  x:\textsf{rcuItr}\;\; \rho\{...f_{loop}\}_{\Delta} \,\, \N[f\mapsto z],\, z:\textsf{rcuItr}\;\; \rho\{...f\}_{\Delta} \,\, \N \,, \Gamma \\
+\end{array}
+}{
+\begin{array}{c}
+  \ftype{ }{\textsf{rcu}} \\
+\end{array}
+}
+}
+\newcommand{\approximatedecl}{\textsf{Approximate}(x:\textsf{rcuItr}\;\; \rho \;\; \N, \Delta)\mapsto x:\textsf{rcuItr} \;\;\rho\{...\} \;\;\N}
+\newcommand{\approxtype}[2]{\textsf{Approximate}(#1,#2)}
+\newcommand{\gammaapproxdecl}{\Gamma_1 \approx_{\Delta} \Gamma_2 \text{   where  } \Gamma_2 = \{\approxtype{x:\text{T}}{\Delta} \mid \forall_{x:\text{T}\in\Gamma_1}  \}}
+\newcommand{\gammapprox}[3]{#1 \approx_{#3} #2}
+% \qquad \aliaswith{t}{x} \rcuitr{t}{y}{k}{k+1}{z}
+\newcommand{\tunlinknode}[1][T-UnlinkANode]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+\Gamma, \,
+x:\textsf{rcuItr}\;\; \rho \;\; \N([f_1\rightharpoonup z]) , \;\;\;
+z:\textsf{rcuItr} \;\; \rho' \;\; \N'([f_2\rightharpoonup r]) , \;\;\; r:\textsf{rcuItr}\;\; \rho'' \;\; \N'' \\
+\vdash_{M} x.f=r \dashv \\
+z:\unlinked, \,
+x:\textsf{rcuItr}\;\; \rho \;\; \N(f_1\rightharpoonup z \setminus r), \;\;\;
+r:\textsf{rcuItr}\;\; \rho' \;\; \N'' \;\;
+\Gamma \\
+\end{array}
+}{
+\begin{array}{c}
+  \ftype{ }{\textsf{rcu}} \qquad \mid\rho\mid + 1= \mid \rho' \mid  \qquad \mid \rho' \mid + 1 = \mid \rho'' \mid  \\ \forall_{f\in dom(\N')} \ldotp f\neq f_2 \implies \N'([f\rightharpoonup \textsf{Null}])  \\
+\end{array}
+}
+}
+%\qquad  \aliaswith{t}{z} t: \unlinked , \,
+\newcommand{\tafree}[1][T-AsyncFree]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+  \Gamma, x:\unlinked \vdash_{M} \afree{x} \dashv x:\udef , \Gamma \\
+\end{array}
+}{
+\begin{array}{c}
+   \\
+\end{array}
+}
+}
+
+\newcommand{\tallocate}[1][T-Allocate]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+  \Gamma, x:\_ \vdash_{M} x = \NEW \dashv x:\textsf{rcuFresh} \;\; \N_{\emptyset} , \, \Gamma \\
+\end{array}
+}{
+\begin{array}{c}
+   \\
+\end{array}
+}
+}
+
+\newcommand{\tsetfieldfresh}[1][T-SetFieldFresh]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+  \Gamma, \rcuf{p} \;\;, x:\textsf{rcuItr}\;\; \rho \;\; \N([f\rightharpoonup z]) \;\; \\
+  \vdash_{M} p.f = x.f \dashv \\
+  \rcunf{p}{f}{z} ,  \;\;, x:\textsf{rcuItr}\;\; \rho \;\; \N([f\rightharpoonup z])\;\;, \Gamma \\
+\end{array}
+}{
+\begin{array}{c}
+   \\ f \notin \N
+\end{array}
+}
+}
+
+
+\newcommand{\tlinkfreshf}[1][T-LinkFreshNext]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+  \Gamma, \:\;
+z:\textsf{rcuItr}\;\; \rho \;\; \N([f\rightharpoonup x]) \;\;,
+x:\textsf{rcuItr}\;\; \rho' \;\; \N \;\;,
+r:\textsf{rcuFresh} \;\; \N([f\rightharpoonup x]) \\
+  \vdash_{M} z.f = r \dashv \\
+z:\textsf{rcuItr}\;\; \rho \;\; \N(f\rightharpoonup x\setminus r) \;\;,
+r:\textsf{rcuItr}\;\; \rho' \;\; \N([f\rightharpoonup x]) \;\; ,
+x:\textsf{rcuItr}\;\; \rho'' \;\; \N
+ \;\; , \Gamma \\
+\end{array}
+}{
+\begin{array}{c}
+   \ftype{ }{\textsf{rcu}} \qquad \mid\rho\mid + 1= \mid \rho' \mid  \qquad \mid \rho' \mid + 1 = \mid \rho'' \mid \\
+\end{array}
+}
+}
+
+\newcommand{\tlinkfresh}[1][T-LinkFresh]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+  \Gamma, \;\;
+  p:\textsf{rcuItr}\;\; \rho \;\; \N([f\rightharpoonup o]) \;\;,
+  o:\textsf{rcuItr}\;\; \rho' \;\; \N' \;\;, n:\textsf{rcuFresh} \;\; \N'' \\
+  \vdash_{M} p.f = n \dashv \\
+  p:\textsf{rcuItr}\;\; \rho \;\; \N(f \rightharpoonup o \setminus n) \;\;,
+  n:\textsf{rcuItr}\;\; \rho' \;\; \N'' \;\;,
+  o:\unlinked, \;\;  \Gamma
+\end{array}
+}{
+\begin{array}{c}
+   \ftype{ }{\textsf{rcu}}  \qquad \mid \rho \mid + 1= \mid \rho' \mid \qquad \N' = \N'' \\
+\end{array}
+}
+}
+\newcommand{\tloop}[1][T-Loop]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+   \Gamma \vdash \text{C}^{*} \dashv  \Gamma \\
+\end{array}
+}{
+  \begin{array}{c}
+     \Gamma \vdash C \dashv \Gamma
+\end{array}
+}
+}
+\newcommand{\tloopold}[1][T-LoopOld]{
+\infer[\textsc{#1}]{
+  \begin{array}{c}
+ \Gamma_1',\Gamma_1'' \vdash \text{C}^{\Delta} \dashv   \Gamma_1'''',\Gamma_1''    \\
+%  \tloopweaken\\
+\end{array}
+}{
+  \begin{array}{c}
+    \tframeloop \\
+       \Delta = 0 \implies \Gamma_1' =\Gamma_1''''  \land \\
+       \Delta >0 \implies
+       \left\{\begin{array}{cl}
+       \Gamma_1'\approx_{\Delta}\Gamma_1''' \land \left\{\begin{array}{cl}
+       \exists_{0<\varepsilon \leq\Delta} \ldotp 0<\varepsilon<\Delta  \implies  \Gamma_1'''\vdash C \dashv \textsf{ContexRename}(\Delta,\Gamma_1''',\Gamma_1'''') \land \\
+       \varepsilon = \Delta  \implies \Gamma_1'''\vdash C \dashv \Gamma_1''''
+       \end{array}\right\}
+       \end{array}\right\} \\
+\end{array}
+}
+}
+
+% \qquad \rcuitrT{y}{G}{0}{k+1}{\_} \\  \rcuonly{\rcufiltera{\Gamma_1}}{k}{y} \\ \rcuonly{\rcufiltera{\Gamma_2}}{k'}{y} \\   \Gamma_1 \vdash C \dashv   \Gamma_2
+
+\newcommand{\tpar}[1][T-Par]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+  \Gamma_1 \; \Gamma_2  \vdash_{M,R} \bar{s_1} || \bar{s_2} \dashv  \Gamma'_1 \; , \Gamma'_2 \\
+\end{array}
+}{
+\begin{array}{c}
+   \Gamma_1 \vdash_{R} \bar{s_1} \dashv   \Gamma'_1  \qquad   \Gamma_2 \vdash_{M,R} \bar{s_2} \dashv   \Gamma'_2\\
+\end{array}
+}
+}
+\newcommand{\tllinkfresh}[1][T-LoopExtLinkFresh]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+  \{\text{TODO}\} \\
+\end{array}
+}{
+\begin{array}{c}
+ \{\text{TODO}\}\\
+\end{array}
+}
+}
+\newcommand{\tllinkfreshnext}[1][T-LoopExtLinkFreshNext]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+\{\text{TODO}\}\\
+\end{array}
+}{
+\begin{array}{c}
+\{\text{TODO}\} \\
+\end{array}
+}
+}
+\newcommand{\tlunlink}[1][T-LoopExtUnlink]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+   \{\text{TODO}\} \\
+\end{array}
+}{
+\begin{array}{c}
+ \{\text{TODO}\}\\
+\end{array}
+}
+}
+\newcommand{\tskip}[1][T-Skip]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+   \Gamma \vdash \textsf{skip} \dashv   \Gamma \\
+\end{array}
+}{
+\begin{array}{c}
+ \\
+\end{array}
+}
+}
+\begin{comment}
+\newcommand{\tframebranch}[1][T-FrameRCUBranch]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+ \Gamma_{1\text{C}_1}, \, \Gamma'_{1\text{C}_1}  \vdash C_1 \dashv \Gamma'_{23R},\, \Gamma_{abs} \qquad  \Gamma_{1\text{C}_1}, \, \Gamma'_{1\text{C}_2}  \vdash C_2 \dashv  \Gamma'_{23R},\, \Gamma_{abs}
+\end{array}
+}{
+  \begin{array}{c}
+    \Gamma_1  \vdash \text{if e C_1 else C_2}  \dashv  \Gamma_4 \\
+    \exists_{\Gamma'_1} \ldotp \Gamma'_1= \textsf{AbstractVars}(\Gamma_1) \qquad \exists_{\Gamma''_1}\ldotp \Gamma_1 = \Gamma'_1 \uplus \Gamma''_1\\
+    \Gamma''_1,\Gamma'_1\vdash C_1 \dashv   \Gamma_2 \qquad \Gamma''_1,\Gamma'_1 \vdash C_2 \dashv \Gamma_3
+
+\end{array}
+}
+}
+\end{comment}
+
+\newcommand{\tbranch}[1][T-Branch]{
+\infer[\textsc{#1}]{
+  \begin{array}{c}
+ \Gamma,x:\textsf{rcuItr}\;\; \rho \;\; \N([f_1\mid f_2 \rightharpoonup z]) \vdash \text{if e C$_1$ else C$_2$} \dashv \Gamma_4
+\end{array}
+}{
+  \begin{array}{c}
+    e \in \textsf{PointsToExpr} \qquad e \text{ is } x.f_1==z \\
+ \Gamma,x:\textsf{rcuItr}\;\; \rho \;\; \N([f_1 \rightharpoonup  z]) \vdash C_1 \dashv\Gamma_4 \qquad \Gamma,x:\textsf{rcuItr}\;\; \rho \;\; \N([f_2 \rightharpoonup z]) \vdash C_4 \dashv \Gamma_4
+\end{array}
+}
+}
+
+\newcommand{\tframe}[1][T-Frame]{
+\infer[\textsc{#1}]{
+  \begin{array}{c}
+ \Gamma, \; \Gamma_1 \vdash C \dashv \Gamma, \; \Gamma_2
+\end{array}
+}{
+  \begin{array}{c}
+ \Gamma_1 \vdash C\dashv \Gamma_2  \qquad \textsf{RcuModifiedOnly}(C)
+\end{array}
+}
+}
+
+%%\seprcubd{\Gamma_1}{\Gamma_2}{\Gamma_3}{\Gamma_4}{C_1}{C_2}{\Gamma}
+
+%\Gamma''_1,\Gamma'_3\vdash \text{C$_1$} \dashv   \Gamma_2 \qquad \Gamma''_1,\Gamma'_1 \vdash \text{C$_2$} \dashv \Gamma_3 \qquad \Gamma_{23} = \Gamma_2 \cup \Gamma_3  \\
+   %  \Gamma_{23R} = \textsf{ReducedVars}(\Gamma_2,\Gamma_3) \qquad \Gamma'_{23R}=\Gamma_{23} - \Gamma_{23R} \qquad \Gamma_{abs} = \textsf{AbstractPaths}(\Gamma_{23R},\text{f$_1$},\text{f$_2$},e) \qquad \Gamma_4 =  \Gamma'_{23R},\, \Gamma_{abs}
+
+
+\newcommand{\tchoosef}[1][T-Choose-First]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+  \Gamma_1  \vdash C_1 \dashv  \Gamma_2 \\
+\end{array}
+}{
+\begin{array}{c}
+   \Gamma_1 \vdash C_1 \dashv   \Gamma_2  \qquad   \Gamma_1 \vdash C_2 \dashv   \Gamma_3\\
+\end{array}
+}
+}
+\newcommand{\tchooses}[1][T-Choose-Second]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+  \Gamma_1  \vdash C_2 \dashv  \Gamma_3 \\
+\end{array}
+}{
+\begin{array}{c}
+   \Gamma_1 \vdash C_1 \dashv   \Gamma_2  \qquad   \Gamma_1 \vdash C_2 \dashv   \Gamma_3\\
+\end{array}
+}
+}
+\newcommand{\tseq}[1][T-Seq]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+  \Gamma_1  \vdash \bar{s_1} \; ; \; \bar{s_2} \dashv  \Gamma_3 \\
+\end{array}
+}{
+\begin{array}{c}
+   \Gamma_1 \vdash \bar{s_1} \dashv   \Gamma_2  \qquad   \Gamma_2 \vdash \bar{s_2} \dashv   \Gamma_3\\
+\end{array}
+}
+}
+
+\newcommand{\tshuffle}[1][T-Exchange]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+   \Gamma, \, x:T , \, y:T' , \, \Gamma' \vdash \bar{s} \dashv   \Gamma'' \\
+\end{array}
+}{
+\begin{array}{c}
+   \Gamma, \, y:T' , \, x:T, \, \Gamma' \vdash \bar{s} \dashv   \Gamma'' \\
+\end{array}
+}
+}
+\newcommand{\tconsequence}[1][T-Conseq]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+   \Gamma \vdash C \dashv \Gamma''' \\
+\end{array}
+}{
+\begin{array}{c}
+   \Gamma \subt \Gamma'  \qquad \Gamma' \vdash C \dashv \Gamma'' \qquad \Gamma'' \subt \Gamma''' \\
+\end{array}
+}
+}
+
+%%Sub typing
+\newcommand{\nsubone}[1][N-Sub-F1]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+   \vdash \, \N \subt \N'  \\
+\end{array}
+}{
+\begin{array}{c}
+   \text{T } = \textsf{rcuItr}\;\; \rho \;\; \N([f_1 \rightharpoonup y]) \\
+   \text{T}'=\textsf{rcuItr}\;\; \rho \;\; \N'([f^{*} \rightharpoonup y])
+\end{array}
+}
+}
+
+\newcommand{\nsubtwo}[1][N-Sub-F2]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+   \vdash \, \N \subt \N'  \\
+\end{array}
+}{
+\begin{array}{c}
+   \text{T} = \textsf{rcuItr}\;\; \rho \;\; \N([f_2 \rightharpoonup y]) \\
+   \text{T}'=\textsf{rcuItr}\;\; \rho \;\; \N'([f^{*} \rightharpoonup y])
+\end{array}
+}
+}
+\newcommand{\nsubthree}[1][N-Sub]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+   \vdash \, \N_1 \subt \N \, \land \, \N_2 \subt \N  \\
+\end{array}
+}{
+\begin{array}{c}
+  \N_1[f_2\mapsto x] \qquad  \N_2[f_1\mapsto x] \qquad  \N[f^{*} \mapsto x] \qquad f^{*} = \frac{\varphi_{e}}{f_1 \mid f_2}\\
+\end{array}
+}
+}
+
+
+
+\newcommand{\psubone}[1][P-Sub]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+   \vdash  \rho' \subt \rho'' \\
+\end{array}
+}{
+  \begin{array}{c}
+  \rho'' = \rho'\rho^{k}
+\end{array}
+}
+}
+
+\newcommand{\psubtwo}[1][P-Sub-Ref]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+   \vdash  \rho \subt \rho  \\
+\end{array}
+}{
+  \begin{array}{c}
+  \\
+\end{array}
+}
+}
+
+\newcommand{\psubthree}[1][P-Sub-Trans]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+   \vdash  \rho' \subt \rho'''  \\
+\end{array}
+}{
+  \begin{array}{c}
+    \vdash  \rho' \subt \rho'' \qquad
+    \vdash  \rho'' \subt \rho'''
+\end{array}
+}
+}
+
+\newcommand{\csubfour}[1][C-Sub-Emp]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+   \vdash  \epsilon \subt \epsilon  \\
+\end{array}
+}{
+  \begin{array}{c}
+\end{array}
+}
+}
+
+
+
+\newcommand{\tsubase}[1][S-Base]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+ \vdash \, \text{T} \prec_{\varepsilon = 0} \text{T'} \qquad \text{T} =_{\varepsilon = 0} \text{T'} \\
+\end{array}
+}{
+\begin{array}{c}
+ \varepsilon = 0 \\
+\end{array}
+}
+}
+\newcommand{\tsubreflexive}[1][S-Reflexive]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+ \vdash \, \text{T} \preceq_{\varepsilon} \text{T} \\
+\end{array}
+}{
+\begin{array}{c}
+  \\
+\end{array}
+}
+}
+\newcommand{\tsubtransitive}[1][S-Transitive]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+  \vdash \, \text{T}_1 \preceq_{2\varepsilon} \text{T}_3 \\
+\end{array}
+}{
+\begin{array}{c}
+    \vdash \, \text{T}_1 \preceq_{\varepsilon} \text{T}_2 \qquad \vdash \, \text{T}_2 \preceq_{\varepsilon} \text{T}_3 \\
+\end{array}
+}
+}
+\newcommand{\tsubempty}[1][S-Empty]{
+\infer[\textsc{#1}]{
+\begin{array}{c}
+   \vdash \, \epsilon \preceq_{\varepsilon} \epsilon \\
+\end{array}
+}{
+\begin{array}{c}
+    \\
+\end{array}
+}
+}
+\newcommand{\subcontextone}[1][C-Sub-Red-notsure]{
+\infer[\textsc{#1}]{
+  \begin{array}{c}
+        \vdash \Gamma_1  \subt \Gamma \, \land \, \Gamma_2 \subt \Gamma \\
+\end{array}
+}{
+  \begin{array}{c}
+    \textsf{ReduceAbstractPaths}(e,\Gamma,\Gamma_1,\Gamma_2) \\
+\end{array}
+}
+}
+\newcommand{\subeqcontexttwo}[1][C-Sub-Abs-notsure]{
+\infer[\textsc{#1}]{
+  \begin{array}{c}
+        \vdash \Gamma'  \subt \Gamma \\
+\end{array}
+}{
+  \begin{array}{c}
+    \textsf{ReducedVars}(\Gamma_1,\Gamma_2) = \Gamma' \qquad \textsf{AbstractPaths}(\Gamma',f_1,f_2,e) =\Gamma
+\end{array}
+}
+}
+\newcommand{\subeqcontextthree}[1][C-Sub]{
+\infer[\textsc{#1}]{
+  \begin{array}{c}
+        \vdash \Gamma,\, x:\text{T}  \subt \Gamma',\, x:\text{T'} \\
+\end{array}
+}{
+  \begin{array}{c}
+    \vdash\Gamma \subt \Gamma' \qquad
+    \vdash \text{T}  \subt \text{T'}
+\end{array}
+}
+}
+
+
+
+\begin{comment}
+\newcommand{\tsubcons}[1][S-Cons]{
+\infer[\textsc{#1}]{
+  \begin{array}{c}
+        \vdash \Gamma, \, \text{x:T}  \prec \Gamma',\, \text{x':T'}  \\
+\end{array}
+}{
+\begin{array}{c}
+      \vdash \Gamma \prec \Gamma'  \qquad \text{T} \prec \text{T'}  \\
+\end{array}
+}
+}
+
+\newcommand{\tsubdrop}[1][S-Drop]{
+\infer[\textsc{#1}]{
+  \begin{array}{c}
+      \vdash \Gamma \prec \Gamma' \\
+\end{array}
+}{
+\begin{array}{c}
+    \vdash \Gamma, \, \text{x:T}  \prec \Gamma'  \\
+\end{array}
+}
+}
+\end{comment}
+%%%%
+\newcommand{\tsmovewrite}{
+\infer[\textsc{Move-To-RCUWrite}]{
+\begin{array}{c}
+  \Gamma \vdash \textsf{RCUWrite}\, x.f \textsf{ as }y\textsf{ in }\{C\} \\
+\end{array}
+}{
+ \begin{array}{c}
+ \Gamma, y : \textsf{rcuItr} \vdash_M C \dashv \Gamma' \qquad
+ \ftype{}{\textsf{RCU}} \\
+ \textsf{NoFresh}(\Gamma') \qquad
+\textsf{NoUnlinked}(\Gamma')
+\end{array}
+}
+}
+\newcommand{\tsmoveread}{
+  \infer[\textsc{Move-To-RCURead}]{
+\begin{array}{c}
+\Gamma \vdash \textsf{RCURead}\, x.f \textsf{ as }y\textsf{ in }\{C\} \\
+\end{array}
+}{
+\begin{array}{c}
+\ftype{}{\textsf{rcu}} \\
+\Gamma, y : \textsf{rcuItr} \vdash_R C \dashv \Gamma' \\
+\end{array}
+}
+}
+
+\newcommand{\meta}{
+\[
+\begin{array}{rclcl}
+a & \textsf{atoms} \\
+s & \textsf{statement}  & & s::= & a \mid skip \mid s;s \mid s+s \mid s \parallel s \mid s^{*} \\
+n,x,y,z,o,p & \textsf{variables}  & &  \Gamma::= & . \mid \Gamma,x:t \\
+t & \textsf{types}  & & t::= & \mathsf{int} \mid \mathsf{bool} \mid \mathsf{struct} \; sn \{ \overline{fld}\} \mid T\\
+T & \textsf{Qualified types} & & T::= & t<rt> \\
+f & \textsf{field name}  & & fld::= & t \; f \mid  t<rt> \; f\\
+rb & \textsf{rcu blocks}  & & rb::= & \mathsf{ReadBegin} \, ; \bar{s}  \, ; \mathsf{ReadEnd} \mid \mathsf{WriteBegin} \, ; \bar{s}  \, ;  \mathsf{WriteEnd} \\
+fld & \textsf{field decl}  & & rt::= & \mathsf{rcu} \mid \mathsf{rcuItr} \mid \mathsf{rcuRoot} \\
+sn & \textsf{struct name}   & &  i,j & \mathsf{nat (indices)}  \\
+
+\end{array}
+\]\\
+\[
+\begin{array}{rclcl}
+a &::= & \mathsf{skip} \mid \mathsf{x.f = y} \mid \mathsf{y=x} \mid \mathsf{y =x.f}  \mid \mathsf{y =new}\mathsf{Free}\mathsf{(\textsf{x})} \mid \mathsf{Sync} \\
+                  & & \mathsf{RCURead} \; \mathsf{x.f} \; \mathsf{as} \; \mathsf{y} \; \in \; \{ \bar{s} \} \mid \mathsf{RCUWrite} \; \mathsf{x.f} \; \mathsf{as} \; \mathsf{y} \; \in \; \{ \bar{s} \} 
+ \end{array}
+\]
+}
+
+\newcommand{\grammar}{
+\[
+\begin{array}{rclcl}
+a &::= & \mathsf{skip} \mid \mathsf{x.f = y} \mid \mathsf{y=x} \mid \mathsf{y =x.f}  \mid \mathsf{y =new} \mid  \mathsf{Free}\mathsf{(\textsf{x})} \mid \mathsf{Sync} \\
+                  & & \mathsf{RCURead} \; \mathsf{x.f} \; \mathsf{as} \; \mathsf{y} \; \in \; \{ \bar{s} \} \mid \mathsf{RCUWrite} \; \mathsf{x.f} \; \mathsf{as} \; \mathsf{y} \; \in \; \{ \bar{s} \} 
+ \end{array}
+\]
+}
+
+
+\lstset{numbers=left,columns=fullflexible,escapechar=`,mathescape,language=Java,basicstyle=\small\ttfamily,keywordstyle=\color{blue},morekeywords={ReadBegin,ReadEnd,WriteBegin,WriteEnd,SyncStart,SyncStop,Free,foreach,in,var,consume,readable,r,isolated,writable,immutable}}
+
+\renewcommand{\and}{\\}
+
+\usepackage{microtype}%if unwanted, comment out or use option "draft"
+%\bibliographystyle{plainurl}% the recommended bibstyle
+
+%\bibliography{references/paper}
+\begin{document}
+%
+\title{Safe Relax Memory Reclamation with Types}
+%
+%\titlerunning{RCU Types}
+% If the paper title is too long for the running head, you can set
+% an abbreviated paper title here
+%
+\author{Ismail Kuru\and
+  Colin S. Gordon}
+%\orcidID{0000-0002-5796-2150}
+%colin's \orcidID{0000-0002-9012-4490}
+%%%Third Author\inst{3}\orcidID{2222--3333-4444-5555}}
+%
+\authorrunning{I. Kuru et al.}
+% First names are abbreviated in the running head.
+% If there are more than two authors, 'et al.' is used.
+%
+\institute{Drexel University, Philadelphia PA 19104, USA %\and
+%%%Springer Heidelberg, Tiergartenstr. 17, 69121 Heidelberg, Germany
+\email{ik335@drexel.edu,csgordon@drexel.edu}}%\\
+%%%\url{http://www.springer.com/gp/computer-science/lncs} \and
+%%%ABC Institute, Rupert-Karls-University Heidelberg, Heidelberg, Germany\\
+%%%\email{\{abc,lncs\}@uni-heidelberg.de}}
+%
+\maketitle              % typeset the header of the contribution
+
+%\input{chapters/squeezing.tex}
+\begin{abstract}
+Memory management in lock-free data structures remains one of the most difficult problems in concurrent programming.  Design techniques including read-copy-update (RCU) and hazard pointers provide workable solutions, and are widely used to great effect.  These techniques rely on the concept of a grace period: nodes that should be freed are placed on a \emph{deferred} free list, and all threads obey a protocol to ensure that the deallocating thread can detect when all possible readers have completed their use of the object. This provides an approach to safe deallocation, but only when these subtle protocols are implemented correctly.
+
+We present a static type system to ensure correct use of RCU memory management: that nodes removed from a data structure are always scheduled for subsequent deallocation, and that nodes are scheduled for deallocation at most once. Our type system enforces \textit{locality} on heap mutations -- one heap node at a time -- to preserve \textit{well-formedness} properties of data structures including the well-known \textit{acyclicity}. As part of our soundness proof, we give an abstract semantics for RCU memory management primitives which captures \textit{fundamental law} of RCU~\cite{abssem,Alglave:2018:FSC:3173162.3177156}. To our best knowledge we not only verify a singly linked list and but also a binary search tree for the first time. 
+
+%Memory management has been one of the hardest parts in concurrent programming to reason about. What is harder is doing this reasoning for optimistic-concurrent-memory-access-patterns (OCMAP)s such as Read Copy Update(RCU) ~\cite{Mckenney:2004:EDD:1048173} and Hazard Pointers ~\cite{Michael:2004:HPS:987524.987595}. These patterns have been widely used to avoid using locks to synchronise reader threads for performance concerns. Linux kernel is one of the well-known place where these patterns used for improving the performance and scalability on highly concurrent architectures.
+
+%In this paper we focus on RCU which is based on the notion called grace period which means objects are not freed up until all pre-existing read operations on them are complete. Based on this guarantee provided by RCU semantics, a thread can access shared memory locations without holding any responsibility of being aware that they get deallocated. This optimistic memory access makes memory management one of the most complex aspects of the algorithms, because it makes hard to decide when memory reclamation is safe.
+
+%We propose a flow-sensitive type system ~\cite{Foster:2002:FTQ:512529.512531} based on Ownership Types ~\cite{Clarke:2007:ACO:1787553.1787559} which enforces correct usage of RCU to provide memory safety for data structures which are clients of RCU.
+ \end{abstract}\raggedbottom
+\input{chapters/RCUTypesIntro.tex}\raggedbottom
+\input{chapters/RCUTypesMotivation.tex}\raggedbottom
+\input{chapters/RCUSemantics.tex}\raggedbottom
+\input{chapters/RCUProgLangNew.tex}\raggedbottom
+%\input{chapters/RCUTypesSoundness.tex}\raggedbottom
+\input{chapters/NewRCUTypeSoundness.tex}\raggedbottom
+\input{chapters/RCUTypesRelatedWork.tex}\raggedbottom
+%% .. or use the thebibliography environment explicitely
+\bibliographystyle{splncs04}
+\bibliography{references/paper}
+\newpage
+\appendix
+%%This does not include definitions and expl.
+%\input{chapters/RCUTypesSoundnessLemmas.tex}
+\input{chapters/RCUTypesSoundnessLemmasESOP.tex}
+\newpage
+\input{chapters/RCUTypeBSTDeleteProof.tex}
+\newpage
+\input{chapters/RCUPaulExamples.tex}
+\newpage
+\input{chapters/appendixsafeunlink.tex}
+\newpage
+\input{chapters/appendixrcusection.tex}
+\end{document}
+\grid

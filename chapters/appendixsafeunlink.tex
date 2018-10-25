@@ -1,0 +1,157 @@
+\section{RCU Unlinking and Fresh Linking}
+\label{appendix:rcuunlink}
+\begin{figure}[H]
+ \centering
+ \begin{subfigure}[b]{.4\linewidth}
+\centering
+ \begin{tikzpicture}[>=stealth',node distance=1.3cm,semithick,auto]
+ \tikzstyle{hollow node}=[circle,draw,inner sep=1]
+ \tikzstyle{sub node}=[triangle,draw,inner sep=1]
+ \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+ \tikzstyle{solids node}=[rectangle,draw=red,inner sep=1.5]
+\tikzstyle{null node}=[circle,draw=red,fill=red]
+ \tikzset{
+ 	red node/.style={rectangle,draw=black,fill=red,inner sep=1},
+ 	blue node/.style={rectangle,draw=black,inner sep=1},
+ 	reader node/.style={circle,draw=black,inner sep=1},
+        redreader node/.style={circle,draw=red,inner sep=1},
+        readerr node/.style={dashed,circle,draw=black,inner sep=1},
+ 	writer node/.style={circle,draw=black,inner sep=1}
+ }
+
+       \node[solid node] (R) {$R$};
+       \node[solid node] (1) [right of=R] {$H_0$};
+       \node[solids node] (2) [right of=1] {$H_1$};
+       \node[solids node] (3) [right of=2] {$H_2$};
+       \node[solids node] (4) [right of=3] {$H_3$};
+       \node[solid node] (5) [above  of=3] {$H_4$};
+       \node[null node] (nl) [above right of = 3]{};
+       \node[solid node] (6) [above  of=4] {$H_5$};
+       
+       \node[redreader node] (r0) [below  of= 2]  {$pr$};
+       \node[redreader node] (r1) [below  of= 3]  {$cr$};
+       \node[redreader node] (r2)  [below  of= 4] {$crl$};
+
+       \node[readerr node] (r0a) [above  of= 1]  {$a_1$};
+       \node[readerr node] (r1a) [above   of= 2]  {$a_2$};
+       \node[readerr node] (r2a)  [below right of= 4] {$a_3$};
+
+       \node[reader node] (r1f) [above  of= 5]  {$a_4$};
+       \node[reader node] (r2f)  [above  of= 6] {$a_5$};
+
+     \path[->]  (R) edge node[below] {$l$} (1);
+     \path[->]  (1) edge node[below] {$l$} (2);
+     \path[draw=red,->]  (2) edge node[below] {$l$} (3);
+     \path[draw=red,->]  (3) edge node[below] {$l$} (4);
+     \path[dashed,->]  (5) edge node {$l$} (3);
+     \path[dashed,->]  (6) edge node {$l$} (4);
+
+     \path[draw=red,->]  (r0) edge node {} (2);
+     \path[draw=red,->]  (r1) edge node  {}  (3);
+     \path[draw=red,->]  (r2) edge  node  {}   (4);
+
+     \path[dashed,->]  (r0a) edge node {} (2);
+     \path[dashed,->]  (r1a) edge node  {}  (3);
+     \path[dashed,->]  (r2a) edge  node  {}   (4);
+
+     \path[->]  (r1f) edge node  {}  (5);
+     \path[->]  (r2f) edge  node  {}   (6);
+    \path[draw=red,->] (3) edge node[below] {$r$} (nl);
+%\path[dotted,->] (1) edge[bend left] node  {$f^{*}$} (5)
+ ;
+ 
+ \end{tikzpicture}
+ \caption{\textsf{Framing} before unlinking the heap node pointed by \texttt{current}-$cr$.}
+ \label{fig:bframeout}
+ \end{subfigure}\quad
+\begin{subfigure}[b]{.4\linewidth}
+ \centering
+ \begin{tikzpicture}[>=stealth',node distance=1.3cm,semithick,auto]
+ \tikzstyle{hollow node}=[circle,draw,inner sep=1]
+ \tikzstyle{sub node}=[triangle,draw,inner sep=1]
+ \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+ \tikzstyle{solids node}=[rectangle,draw=red,inner sep=1.5]
+  \tikzstyle{solidss node}=[dashed,rectangle,draw=red,inner sep=1.5]
+ \tikzstyle{null node}=[circle,draw=red,fill=red]
+ \tikzset{
+ 	red node/.style={rectangle,draw=black,fill=red,inner sep=1.5},
+ 	blue node/.style={rectangle,draw=black,inner sep=1.5},
+ 	reader node/.style={circle,draw=black,inner sep=1},
+        redreader node/.style={circle,draw=red,inner sep=1},
+                rredreader node/.style={dashed,circle,draw=red,inner sep=1},
+        readerr node/.style={dashed,circle,draw=black,inner sep=1},
+ 	writer node/.style={circle,draw=black,inner sep=1}
+ }
+
+       \node[solid node] (R) {$R$};
+       \node[solid node] (1) [right of=R] {$H_0$};
+       \node[solids node] (2) [right of=1] {$H_1$};
+       \node[solidss node] (3) [right of=2] {$H_2$};
+       \node[solids node] (4) [right of=3] {$H_3$};
+       \node[solid node] (5) [above  of=3] {$H_4$};
+       \node[solid node] (6) [above  of=4] {$H_5$};
+       \node[null node] (nl) [above right of = 3]{};
+
+       \node[redreader node] (r0) [below  of= 2]  {$pr$};
+       \node[rredreader node] (r1) [below  of= 3]  {$cr$};
+       \node[redreader node] (r2)  [below  of= 4] {$crl$};
+
+       \node[readerr node] (r0a) [above  of= 1]  {$a_1$};
+       \node[readerr node] (r1a) [above   of= 2]  {$a_2$};
+       \node[readerr node] (r2a)  [below right of= 4] {$a_3$};
+
+       \node[reader node] (r1f) [above  of= 5]  {$a_4$};
+       \node[reader node] (r2f)  [above  of= 6] {$a_5$};
+
+     \path[->]  (R) edge node[below] {$l$} (1);
+     \path[->]  (1) edge node[below] {$l$} (2);
+     \path[draw=red,->]  (2) edge [bend right] node[below left] {$l$} (4);
+     \path[dashed,draw=red,->]  (3) edge node[below] {$l$} (4);
+     \path[dashed,->]  (5) edge node {$l$} (3);
+     \path[dashed,->]  (6) edge node {$l$} (4);
+
+     \path[draw=red,->]  (r0) edge node {} (2);
+     \path[dashed,draw=red,->]  (r1) edge node  {}  (3);
+     \path[draw=red,->]  (r2) edge  node  {}   (4);
+
+     \path[dashed,->]  (r0a) edge node {} (2);
+     \path[dashed,->]  (r1a) edge node  {}  (3);
+     \path[dashed,->]  (r2a) edge  node  {}   (4);
+
+     \path[->]  (r1f) edge node  {}  (5);
+     \path[->]  (r2f) edge  node  {}   (6);
+     \path[dashed,draw=red, ->] (3) edge node[below] {$r$} (nl);
+ ;
+ \end{tikzpicture}
+
+ \caption{Safe unlinking of the heap node pointed by \texttt{current}-$cr$ via \textsf{Framing}}
+ \label{fig:bunlinkframeout}
+\end{subfigure}
+\caption{Safe unlinking a heap node from a \textsf{BST}}
+ \label{fig:unlkappndx}\vspace{-2mm}
+ \end{figure}
+
+(\textit{\textbf{Mutation - Unlinking a Heap Node}}) - Preserving invariants of a data structure against possible mutations under \textsf{RCU} semantics is challenging. Unlinking a heap node is one way of mutating the heap. To understand the importance of the locality on the effect of the mutation, we illustrate the setting for unlinking a heap node including resources such as stack pointer aliases in Figures  \ref{fig:bframeout} and \ref{fig:bunlinkframeout}. The square nodes filled with $R$ -- a root node -- and $H$ -- a heap node -- are heap nodes. The hollow nodes are stack pointers to the square heap nodes. All resources in red form the memory foot print of unlinking. The hollow red nodes -- $pr$, $cr$ and $crl$ -- point to the red square heap nodes which are involved in unlinking of the heap node pointed by \texttt{cr}. We have $a_1$, $a_2$ and $a_3$ which are aliases with \texttt{parent}-$pr$, \texttt{current}-$cr$ and \texttt{currenL}-$crl$ respectively. We call them the \textit{path-aliases} as they share the same path from root to the node that they reference. The red filled circle which depicts \texttt{null}, the $l$ field which depicts $Left$ and $r$ which depicts $Right$ field.
+
+The type rule for unlinking must assert the "proper linkage" in between the heap nodes involved in unlinking. We see the proper linkage relation between in Figure \ref{fig:bframeout} as red $l$ links between $H_1$, $H_2$ and $H_3$ which are referenced by $pr$, $cr$ and $crl$ respectively. Our type rule for unlinking(\textsc{T-UnlinkH}) asserts that $x$ (\texttt{parent}), $y$ (\texttt{current}) and $z$ (\texttt{currentL}) pointers are linked with field mappings $\N([f_1\rightharpoonup z])$ ($Left \mapsto current$) of $x$, $\N'([f_2\rightharpoonup r])$ ($Left \mapsto currentL$) of $y$. In accordance with the field mappings, the type rule also asserts that $x$ has the path $\rho$ ($(Left)^{k}$), $y$ has the path $\rho.f_1$ ($(Left)^{k}.Left$) and $z$ has the path $\rho.f_1.f_2$ ($(Left)^{k}.Left.Left$).
+
+Being able to localize the effects of the mutation is important in a sense that it prevents unexpected side effects of the mutation. So, sharing through aliasing to the resources under mutation, e.g. aliasing to \texttt{parent}, \texttt{current} and \texttt{currentL}, needs to be handled carefully. Aliasing can occur via either through  object fields -- via field mappings -- or stack pointers -- via path components. We see path aliases, $a_1$, $a_2$ and $a_3$, illustrated with dashed nodes and arrows to the heap nodes in Figures \ref{fig:bframeout} and \ref{fig:bunlinkframeout}. They are depicted as dashed because they are not safe resources to use when unlinking so they are \textit{framed-out} by the type system via
+\[
+\begin{array}{l}
+(\neg\mathsf{MayAlias}(\rho''',\{\rho,\rho',\rho''\})  ) 
+\end{array}
+\]
+which ensures the non-existence of the \textit{path-aliases} to any of $x$, $z$ and $r$ in the rule which corresponds to $pr$, $cr$ and $crl$ respectively.
+
+Any heap node reached from root by following a path($\rho'''$) deeper than the path reaching to the last heap node($crl$) in the footprint cannot be pointed by any of the heap nodes($pr$, $cr$ and $crl$) in the footprint. We require this restriction to prevent inconsistency on path components of references, $\rho'''$, referring to heap nodes deeper than memory footprint
+\[
+ (\forall_{\rho''''\neq \epsilon} \ldotp \neg\mathsf{MayAlias}(\rho''', \rho''.\rho'''') )
+\]
+The reason for framing-out these dashed path aliases is obvious when we look at the changes from the Figure \ref{fig:bframeout} to Figure \ref{fig:bunlinkframeout}. For example, $a_1$ points to $H_1$ which has object field $Next$-$n$ pointing to $H_2$ which is also pointed by \texttt{current} as depicted in the Figure \ref{fig:bframeout}. However, in Figure \ref{fig:bunlinkframeout}, $n$ of $H_1$ is pointing to $H_3$ though $a_1$ still points to $H_1$. This change invalidates the field mapping $Left \mapsto current$ of $a_1$ in the \textsf{rcuItr} type. One another safety achieved with framing shows up in a setting where \texttt{current} and $a_2$ are aliases. In the Figure \ref{fig:bframeout}, both \texttt{current} and $a_2$ are in the \textsf{rcuItr} type and point to $H_2$. After the unlinking action, the type of \texttt{current} becomes \texttt{unlinked} although $a_2$ is still in the \texttt{rcuItr} type. Framing out $a_2$ prevents the inconsistency in its type under the unlinking operation. One interesting and not obvious inconsistency issue shows up due to the aliasing between $a_3$ and \texttt{currentL}-$crl$. Before the unlinking happens, both \texttt{currentL} and $a_3$ have the same path components. After unlinking, the path of \texttt{currentL}-$crl$ gets shortened as the path to heap node it points, $H_3$, changes  to $(Left)^{k}.Left$ . However, the path component of $a_3$  would not change so the path component of $a_3$ in the \textsf{rcuItr} would become inconsistent with the actual path reaching to $H_3$.
+
+In addition to \textit{path-aliasing}, there can also be aliasing via \textit{field-mappings} which we call \textit{field-aliasing}. We see field alising examples in Figures \ref{fig:bframeout} and \ref{fig:bunlinkframeout}: $pr$ and $a_1$ are field aliases with $Left-l$ from $H_0$ points to $H_1$, $cr$ and $a_2$ are field aliases with $Left-l$ from $H_4$ points to $H_2$  and $crl$ and $a_3$ are field aliases with $Left-l$ from $H_5$ points to $H_3$. We do not discuss the problems that can occur due to the \textit{field-aliasing} as they are same with the ones due to \textit{path-aliasing}. What we focus on is how the type rule prevents \textit{field-aliases}. The type rule asserts $ \land (m\not\in\{z,r\} )$ to make sure that there exists no object field from any other context pointing either to the variable points the heap node that is mutation(unlinking) -- \texttt{current}-$cr$ -- or to the variable which points to the new $Left$ of \texttt{parent} after unlinking -- \texttt{currentL}-$crl$. We should also note that it is expected to have object fields in other contexts to point to $pr$ as they are not in the effect zone of unlinking. For example, we see the object field $l$ points from $H_0$ to  $H_1$ in Figures \ref{fig:bframeout} and \ref{fig:bunlinkframeout}.
+
+Once we unlink the heap node, it cannot be accessed by the new coming reader threads the ones that are currently reading this node cannot access to the rest of the heap. We illustrate this with dashed red $cr$, $H_2$ and object fields in Figure \ref{fig:bunlinkframeout}.
+
+Being aware of how much of the heap is under mutation is important, e.g. a whole subtree or a single node. Our type system ensures that there can be only just one heap node unlinked at a time by atomic field update action. To be able to ensure this, in addition to the proper linkage enforcement, the rule also asserts that all other object fields which are not under mutation must either not exists or point to \texttt{null} via
+\[\forall_{f\in dom(\N')} \ldotp f\neq f_2 \implies (\N'(f) = \textsf{null})\] 

@@ -1,0 +1,200 @@
+\begin{comment}
+%\begin{table}[H]
+	%\begin{tabular}{l}
+		%Read\\
+
+\begin{lstlisting}[mathescape,caption={RCU-BST \textsf{Read} function with assertions added.}\label{lst:rcubstreadassertions},language=C]
+struct node_p{
+  int key;
+  struct node_p* child[2];
+  int data;
+}
+
+node_p<rcu> root;
+	
+int Read(int key){
+ int result;	
+ <@\textcolor{orange}{ReadBegin}@>
+  node_p<<@\textcolor{orange}{rcuIterator}@>> itr; 
+  itr=root;
+  int itrKey = itr->key; 
+  while(itr != NULL && itrKey != key ){
+    if(itrKey > key)
+    	$\textrm{assert}$
+    	$[$ 
+	 $\Gamma\,,itr:\textsf{rcuIterator}$ $\vdash_{R} \hilight{itr := itr\textendash\textgreater child[0]}  \dashv$ $itr:\textsf{rcuIterator}\,,\Gamma$                                
+    		    $\textrm{provided} \, \textsf{ftype}(child) = \textsf{rcu}$
+	$]$
+    if(itrKey < key)
+   	$\textrm{assert}$
+  	$[$
+   	$\Gamma\,,itr:\textsf{rcuIterator}$ $\vdash_{R} \hilight{itr := itr\textendash\textgreater child[1]}  \dashv$ $itr:\textsf{rcuIterator}\,,\Gamma$                                
+   	              $\textrm{provided} \, \textsf{ftype}(child) = \textsf{rcu}$
+   	$]$      
+      if(itr != NULL) 
+      itrKey = itr->key;
+    }
+    result = itr->data;
+  <@\textcolor{orange}{ReadEnd}@>
+  return result;
+}
+\end{lstlisting}
+%	\end{tabular} \hfill	
+%\caption{RCU-BST \textsf{Read} function with assertions added.}
+%\label{tab:rcubstreadassertions}
+%\end{table}
+
+%\begin{table}[hbt]
+	%\begin{tabular}{ c }
+		%Update\\
+\begin{lstlisting}[mathescape,caption={RCU-BST \textsf{Insert} function with assertions added.}\label{lst:rcubstinsertassertions},language=C]
+void Insert(int k, int val){
+ <@\textcolor{orange}{WriteBegin}@>
+   node_p<<@\textcolor{orange}{rcuIterator}@>> itr;
+   node_p<<@\textcolor{orange}{rcuIterator}@>> prev;
+   prev = root;
+    $\textrm{assert}$
+     $[$
+     $\Gamma\,,itr:\_\,,prev:\textsf{rcuIterator}$ $\vdash_{M} \hilight{itr := prev\textendash\textgreater child[0]} \dashv$ $prev:\textsf{rcuNext}\,child\,itr\,, itr:\textsf{rcuIterator}\,, \Gamma$ 
+     $]$
+   itrKey = itr->key;
+   direction = 0;
+   int itrKey = itr->key;
+   while (itr != NULL &&  itrKey != key) {
+    prev = itr;
+    if (itrKey > key){
+    $\textrm{assert}$
+     $[$ $\Gamma\,, itr:\_ ,prev:\textsf{rcuIterator}$ $ \vdash_{M} \hilight{prev = itr;itr := prev\textendash\textgreater child[0]} \dashv$ $prev:\textsf{rcuNext}\,child\,itr\,, itr:\textsf{rcuIterator}\,, \Gamma$ 
+     $]$
+     direction = 0;
+    }
+    if (itrKey < key){
+   $\textrm{assert}$
+    $[$ $\Gamma\,, itr:\_ \,prev:\textsf{rcuIterator}$ $\vdash_{M} \hilight{prev = itr;itr := prev\textendash\textgreater child[1]} \dashv$ $prev:\textsf{rcuNext}\,child\,itr \,, itr:\textsf{rcuIterator}\,, \Gamma$ $]$    
+    direction = 1;
+    }
+    if (itr!=NULL) 
+     itrKey = itr->key ;
+  }
+    if(itr != NULL)
+     return false;
+   // Add fresh node as leaf  
+  node_p<<@\textcolor{orange}{rcuFresh}@>> newNode;
+  $\textrm{assert}$ $[$ $\Gamma\,, newNode:\_ \vdash_{M} \hilight{newNode := new} \dashv newNode:\textsf{fresh}, \Gamma$ $]$   
+  $\textrm{assert}$ $[$ $\Gamma\,,newNode:\textsf{fresh}\, key \_ \vdash_{M} \hilight{newNode.key := k } \dashv newNode:\textsf{fresh}\,key\,k$ $]$
+  $\textrm{assert}$ $[$ $\Gamma\,, newNode: \textsf{fresh}\, data\_ \vdash_{M} \hilight{newNode.data := val} \dashv newNode:\textsf{fresh}\,data\,val$ $]$
+  $\textrm{assert}$ $[$ $\Gamma\,, newNode:\textsf{fresh}\, child \_ \vdash_{M} \hilight{newNode.child[0] := NULL} \dashv newNode:\textsf{fresh}\,child\,NULL$ $]$
+  $\textrm{assert}$ $[$  $\Gamma\,, newNode:\textsf{fresh}\, child \_ \vdash_{M} \hilight{newNode.child[1] := NULL} \dashv newNode:\textsf{fresh}\,child\,NULL$ $]$  
+
+  $\textrm{assert}$
+   $[$ 
+   $\Gamma\,,prev:\textsf{rcuNext}\,child\,NULL\,,newNode:fresh\,child\,NULL$
+   $\vdash_{M}  \hilight{ prev.child[direction] := newNode} \dashv$
+   $prev:\textsf{rcuNext}\,child\,newNode \,, newNode:\textsf{rcuNext}\,child\,NULL \, , \Gamma$
+   $]$
+  node_p<<@\textcolor{orange}{WriteEnd}@>>
+  return true;
+}
+\end{lstlisting}
+%	\end{tabular} \hfill	
+%\caption{RCU-BST \textsf{Insert} function with assertions added.}
+%\label{tab:rcubstinsertassertions}
+%\end{table}
+%\usepackage{longtable}
+%\begin{table}[]
+%	\begin{tabular}{ c } 
+\begin{lstlisting}[linewidth=\linewidth,mathescape,caption={RCU-BST \textsf{Delete} function with assertions added.}\label{lst:rcubstdelassertions},language=C] 
+void Delete(int key){  
+ node_p<<@\textcolor{orange}{WriteBegin}@>>
+   node_p<<@\textcolor{orange}{rcuIterator}@>> prev = root;
+   node_p<<@\textcolor{orange}{rcuIterator}@>> itr;
+   $\textrm{assert}$
+    $[$ $\Gamma\,,itr:\_ \,,prev:\textsf{rcuIterator}$ $\vdash_{M} \hilight{itr := prev\textendash\textgreater child[0]} \dashv$ $prev:\textsf{rcuNext}\,child\,prev\,, itr:\textsf{rcuIterator}\,,\Gamma$ $]$
+   itrKey = itr->key;
+   direction = 0;
+   int itrKey = itr->key;  
+   while (itr != NULL && itrKey != key){
+    prev = itr;
+    if (itrKey > key){
+    $\textrm{assert}$
+      $[$ $\Gamma\,, itr:\_ \,,prev:\textsf{rcuIterator}$ $ \vdash_{M} \hilight{itr := prev\textendash\textgreater child[0]} \dashv$ $prev:\textsf{rcuNext}\,child\,itr\,, itr:\textsf{rcuIterator}\,, \Gamma$ $]$
+      direction = 0;
+    }
+    if (itrKey < key){ 
+    $\textrm{assert}$
+     $[$ $\Gamma\,, itr:\_ \,,prev:\textsf{rcuIterator}$ $\vdash_{M} \hilight{itr := prev\textendash\textgreater\textendash\textgreater child[1]} \dashv$ $prev:\textsf{rcuNext}\,child\,itr, itr:\textsf{rcuIterator}\,,\Gamma$ $]$
+      direction = 1;
+    }
+    if (itr!=NULL) 
+     itrKey = itr->key ;
+   }
+   if(itr == NULL)//Not found
+    return false;
+   // One child
+   if(itr->child[0] == NULL){
+    $\textrm{assert}$
+     $[$ $\Gamma\,,prev:\textsf{rcuNext}\,child\,itr\,,itr:\textsf{rcuNext}\,child\,itr.child$ $\vdash_{M} \hilight{prev.child[direction] := itr.child[1]} \dashv$ $itr:\textsf{unlinked}\,,prev:\textsf{rcuNext}\,child\,itr.child\,,\Gamma$ $]$ 
+     }//rcu mutate ends
+   $\textrm{assert}$
+   $[$ $\Gamma\,,itr:\textsf{unlinked} \vdash_{M} \hilight{asyncFree(itr)}\dashv itr:\textsf{undef}\,,\Gamma$ $]$
+     node_p<<@\textcolor{orange}{WriteEnd}@>>
+     return true;
+   }
+   if(itr->child[1] == NULL){
+    $\textrm{assert}$
+     $[$ $\Gamma\,,prev:\textsf{rcuNext}\,child\,itr\,,itr:\textsf{rcuNext}\,child\,itr.child$ $\vdash_{M} \hilight{prev.child[direction] := itr.child[0]} \dashv$ $itr:\textsf{unlinked}\,,prev:\textsf{rcuNext}\,child\,itr.child\,,\Gamma$ $]$    
+     }//rcu mutate ends
+   $\textrm{assert}$
+    $[$ $\Gamma\,, itr:\textsf{unlinked} \vdash_{M} \hilight{asyncFree(itr)} \dashv itr:\textsf{undef} \,,\Gamma$ $]$
+    node_p<<@\textcolor{orange}{WriteEnd}@>>
+    return true;
+}
+   //Two children
+   node_p<<@\textcolor{orange}{rcuIterator}@>> prevSucc = itr;  
+   node_p<<@\textcolor{orange}{rcuIterator}@>> succ = itr->child[0];
+   node_p<<@\textcolor{orange}{rcuIterator}@>> next = succ->child[1]; 
+   // Think this loop more
+   while ( next!= NULL){
+    prevSucc = succ;
+    succ = next;
+    next = next->child[1];
+   }
+   node_p<<@\textcolor{orange}{rcuFresh}@>> newNode;
+   $\textrm{assert}$
+   $[$ $\Gamma\,,newNode:\_\vdash_{M}\hilight{newNode := new}\dashv newNode:\textsf{fresh}\,,\Gamma$ $]$
+   
+   $\textrm{assert}$
+    $[$ $\Gamma\,,newNode:\textsf{fresh}\,key\,\_\vdash_{M}\hilight{newNode.key := succ\textendash\textgreater key}\dashv newNode:\textsf{fresh}\,key\,succ.key\,,\Gamma$ $]$
+
+   $\textrm{assert}$
+    $[$ $\Gamma\,,newNode:\textsf{fresh}\,child\,\_\vdash_{M}\hilight{newNode.child[0] := itr\textendash\textgreater child[0]}\dashv newNode:\textsf{fresh}\,child\,itr.child[0]\,,\Gamma$ $]$
+
+   $\textrm{assert}$
+    $[$ $\Gamma\,,newNode:\textsf{fresh}\,child\,\_ vdash_{M}\hilight{newNode.child[1] := itr\textendash\textgreater child[1]}\dashv newNode:\textsf{fresh}\,child\,itr.child[1]\,,\Gamma$ $]$
+
+   $\textrm{assert}$
+    $[$ $\Gamma\,,prev:\textsf{rcuNext}\,child\,itr\,,itr:\textsf{rcuNext}\,child\,itr.child$ $\vdash_{M} \hilight{prev\textendash\textgreater child[direction]=newNode} \dashv$ $itr:\textsf{unlinked}\,,prev:\textsf{rcuNext}\,child\,itr.child\,,\Gamma$ $]$
+
+   if(prevSucc == itr)
+    $\textrm{assert}$
+     $[$ $\Gamma\,,newNode:\textsf{rcuNext}\,child\,succ\,,succ:\textsf{rcuNext}\,child\,succ.child$ 
+     $\vdash_{M} \hilight{newNode.child[0] := succ\textendash\textgreater child[0]} \dashv$ 
+     $succ:\textsf{unlinked}\,, newNode:\textsf{rcuNext}\,child\,succ.child\,,\Gamma$ 
+     $]$     
+   else 
+    $\textrm{assert}$
+     $[$ $\Gamma\,,prevSucc:\textsf{rcuNext}\,child\,succ\,,succ:\textsf{rcuNext}\,child\,succ.child$ 
+     $\vdash_{M} \hilight{prevSucc.child[1] := succ\textendash\textgreater child[0]} \dashv$ 
+     $succ:\textsf{unlinked}\,,newNode:\textsf{rcuNext}\,child\,succ.child\,,\Gamma$ 
+     $]$
+  node_p<<@\textcolor{orange}{WriteEnd}@>> //Mutator Block Ends 
+  asyncFree(itr,succ);   
+  return true;
+}
+\end{lstlisting}
+\todo{Redo the proof  with taking some informal notes}
+%	\end{tabular} \hfill	
+%\caption{RCU-BST \textsf{Delete} function with assertions added.}
+%\label{tab:rcubstdelassertions}
+%\end{longtable}
+\end{comment}

@@ -1,0 +1,188 @@
+
+\textsf{BST} is an important data structure which is used in many performance critical system (e.g. Operating Systems). \textsf{BST}s are used in implementation of dictionaries which is a set of key-value pairs with \textsf{Insert}, \textsf{Delete}, \textsf{Read} operations. \textsf{Insert}, \textsf{Delete} are \textsf{update} operations, \textsf{Read} is a \textsf{look up} operation. A BST Tree keeps key-value pairs as its internal nodes, with totally ordered keys.\textsf{BST} shown in Figure \ref{fig:rbtree} has $(k,v)$ as its internal node and all value $v$, \textsf{Value((key,value)) = v}, of a node has a unique key $k$, \textsf{Key((key,value)) = k},  which never changes. In BST Tree, all descendants in  the left sub-tree of $v$ have keys larger than the key of $v$. The successor of node $v$ is the node with the smallest key among nodes with keys larger than or equal to key of $v$ which is the purple node in Figure ~\ref{fig:rbtree}. 
+\input{RBTReeStructure.tex}
+\textsf{BST}s are mainly used in components where read-only transactions are intensive. RCU is a programming-pattern which scales up performance when read-only operations are intensive. Naturally, exploration of rb-tree implementation with RCU pattern resulted in many studies:
+\begin{itemize}
+\item \href{http://www.pdx.edu/sites/www.pdx.edu.computer-science/files/tr1006.pdf}{Relativistic Red-Black Tree}. First relativistic RBTree paper.
+\item \href{http://www.cs.technion.ac.il/~mayaarl/full-version.pdf}{ArbelAttiyaConcurrent Updates} . Fine grain updates.
+\end{itemize}
+In this section, we present the implementation of \textsf{BST} with our RCU types and show proofs of memory safety. General correctness properties that we expect from a BST are:
+\begin{itemize}
+\item An in order traversal of a consistent tree will always give values of the tree sorted
+\item Lookups will always find a node that exists in the tree
+\end{itemize}
+Thinking \textsf{BST} from RCU perspective does not make implementation more complicated than normally it is.  A concurrent setting with RCU technique is basically includes:
+\begin{itemize} 
+\item \textsf{\textbf{Readers}}. With RCU technique developing a reader section is almost as easy as developing a non-concurrent reader section.  The only restrictions placed on readers are that they do not hold any references to the data structure outside critical section.
+\item \textsf{\textbf{Mutators}}. Lock-free proceeding of \textsf{Readers} can be provided with keeping BST tree consistent by \textsf{Mutators}. 
+\item Mutator must not allow a reader to see partial changes to a node. Mutator use copy-on-update to make all changes to a private copy of the node, then atomically switch the new node with the old one.
+\item The termination position of a search is defined to be the last node whose value is examined by the search before it is terminated. If a search for a value $v$ is terminated at node $n$ at  time $t$ then it search for value $v$ will always terminate at node $n$ for all searches when we isolate tree from updates
+\item Readers must not get lost when the structure of the tree is changed. In Figure ~\ref{fig:succmoveanom}, suppose that there exists a reader looking for node with key \textsf{k'} concurrently with a mutator thread which moves successor of \textsf{k}, \textsf{k'},to the previous position of \textsf{k}. Result of the \textsf{Delete} operation performed on \textsf{k} cause the reader gets lost and returns false for \textsf{Read} operation on \textsf{k'} even though it exists in the tree.
+\item  Temporarily having the same item in the tree multiple times do not affect the lookups. A unique value is returned if first copy encountered and another unique value can be returned if second copy is encountered.
+\item Only nodes which are  no longer reachable  by an existing search or  future search will be garbage collected and all such nodes will be garbage collected, Figures ~\ref{fig:del1}, ~\ref{fig:del2}
+\end{itemize}
+\subsubsection{Binary-Search-Tree Implementation}
+\textsf{BST} implementation has three functions:
+\begin{itemize}
+\item \textsf{Insert}$(key,value)$ adds $(key,value)$ pair to the tree as a leaf; returns $true$ if $key$ is not in the set and $false$ otherwise
+\item \textsf{Delete}$(key)$ removes $(key,value)$ pair  from tree; returns $true$ if $key$ is in the tree and $false$ otherwise
+\item \textsf{Read}$(key)$ returns $val$ if $(key,value)$ is in the set; otherwise it returns $false$
+\end{itemize}
+\paragraph{Read:}  
+\input{RBTReeSuccMoveAnom.tex}
+\paragraph{Insert:}
+\input{RBTReeInsertAnom.tex}
+\paragraph{Delete:} 
+\input{RBTReeDeleteOneChildAnom.tex}
+\input{RBTReeDeleteTwoChildAnom.tex}
+\begin{figure*}\tiny
+\[
+\proofoutstep{\rcuitr{prev}{sui}{k}{k+1}{\_},itr:\_}{ %read next
+   \proofoutstep{\rcuitr{itr}{sui}{k}{k+1}{\_}\;,prev:\_}{ %read stack  
+   \proofoutstep{\rcuitr{prev}{sui}{k}{k+1}{\_}\;,itr:\_}{
+    \proofoutstep{\rcuitr{sui}{root}{k}{k+1}{\_}\;,prev:\_}{
+      \proofoutstep{root:\uiglobal,sui:\udef}{
+        sui\texttt{=}root\texttt{;}\\
+	}{\textsc{T-UniqueGlobalRead}}
+        {\rcuitr{sui}{root}{k}{k+1}{\_}}\\
+        prev\texttt{=}sui\texttt{.child[1];}\\
+        }{\textsc{T-UniqueStackRead}}
+        {\rcuitr{sui}{root}{k}{k+1}{prev}\;,\rcuitr{prev}{sui}{k+1}{k+2}{\_}}\\
+        itr\texttt{=}prev\texttt{.child[1]}\\
+        }{\textsc{T-ReadNext}}
+        {\rcuitr{prev}{sui}{k}{k+1}{itr}\;,\rcuitr{itr}{sui}{k+1}{k+2}{\_}}\\
+        \;\;\;\;direction\texttt{=}1\texttt{;}\\
+        \;\;\;\;itrKey\texttt{=}itr.key\texttt{;}\\
+        //\texttt{\textcolor{red}{loop for finding the node to read starts}}\\
+        \;\;\;\;prev\texttt{=}itr\texttt{;}\\
+        }{\textsc{T-ReadStack}}
+        {\rcuitr{itr}{sui}{k}{k+1}{\_}, \rcuitr{prev}{sui}{k}{k+1}{\_}} \\
+        \;\;\;\;direction\texttt{ = (itrKey > key ? 0 : 1) }\texttt{;}\\
+        \;\;\;\;itr\texttt{=}prev\texttt{.child[}direction\texttt{]}\texttt{;}\\ %read next
+        \;\;\;\;itrKey\texttt{=}itr\texttt{.key}\texttt{;}\\ %read next
+        //\texttt{\textcolor{red}{loop for finding the node to read ends}}\\
+        }{\textsc{T-ReadNext}}
+        {\rcuitr{itr}{sui}{k+1}{k+2}{\_},\rcuitr{prev}{sui}{k}{k+1}{itr}}
+\]
+\caption{Typing derivation for traversing Binary Search Tree.}
+\label{fig:traverse-bst}
+\end{figure*}
+
+\begin{figure*}\tiny
+\[
+\proofoutstep{\rcuitr{itr}{sui}{k}{k+1}{\_},succ:\_}{ %read next
+ \proofoutstep{\rcuitr{itr}{sui}{k}{k+1}{\_}\;,prevSucc:\_}{ 
+\proofoutstep{itr:\unlinked}{
+\proofoutstep{\rcuitr{prev}{sui}{k}{k+1}{itr}\;,\rcuitr{itr}{sui}{k+1}{k+2}{itrNext}}{
+\proofoutstep{\rcuitr{prev}{sui}{k}{k+1}{\_}\;,itr:\_}{
+\proofoutstep{\rcuitr{itr}{sui}{k}{k+1}{\_}\;,prev:\_}{
+\proofoutstep{\rcuitr{prev}{sui}{k}{k+1}{\_}\;,itr:\_}{
+    \proofoutstep{\rcuitr{sui}{root}{k}{k+1}{\_}\;,prev:\_}{
+      \proofoutstep{root:\uiglobal,sui:\udef}{
+        sui\texttt{=}root\texttt{;}\\
+	}{\textsc{T-UniqueGlobalRead}}
+        {\rcuitr{sui}{root}{k}{k+1}{\_}}\\
+        prev\texttt{=}sui\texttt{.child[1];}\\
+        }{\textsc{T-UniqueStackRead}}
+        {\rcuitr{sui}{root}{k}{k+1}{prev}\;,\rcuitr{prev}{sui}{k+1}{k+2}{\_}}\\
+        itr\texttt{=}prev\texttt{;}\\
+        }{\textsc{T-ReadStack}}
+        {\rcuitr{prev}{sui}{k}{k+1}{\_}\;,\rcuitr{itr}{sui}{k}{k+1}{\_}}\\
+        itrKey\texttt{=} itr\texttt{.key};\\
+        //\texttt{\textcolor{red}{loop for finding the node to delete starts}}\\
+        prev\texttt{=}itr\texttt{;}\\
+        }{\textsc{T-ReadStack}}
+        {\rcuitr{prev}{sui}{k}{k+1}{\_}\;,\rcuitr{itr}{sui}{k}{k+1}{\_}}\\
+         \;\;\;\;direction\texttt{ = (itrKey > key ? 0 : 1) }\texttt{;}\\
+         itr\texttt{=}prev\texttt{.child[1]}\\
+         }{\textsc{T-ReadNext}}
+        {\rcuitr{prev}{sui}{k}{k+1}{itr}\;,\rcuitr{itr}{sui}{k+1}{k+2}{\_}}\\
+        \;\;\;\;itrKey\texttt{=}itr\texttt{.key}\texttt{;}\\ %read next
+        //\texttt{\textcolor{red}{loop for finding the node to delete ends}}\\
+        \texttt{if(}itr\texttt{ == NULL)return false;} //\texttt{Not found}\\
+        \texttt{if(}itr\texttt{.child[0] == NULL) \{ } \\ 
+         \;\;\;\;itrNext\texttt{=} itr\texttt{.child[1];} \\
+         \;\;\;\;prev\texttt{.child[direction]}\texttt{=}itr\texttt{.child[1];}\\
+         }{\textsc{T-UnlinkANode}}
+        {\rcuitr{prev}{sui}{k}{k+1}{itrNext}\;,itr:\unlinked}\\
+        \texttt{asyncDelayedFree(}itr\texttt{); return true; \} }
+        //\texttt{ Unlinking  a single child, child[0], ends. Same for child[1]}\\
+        }{\textsc{T-AsyncFree}}
+        {\rcuitr{prev}{sui}{k}{k+1}{itrNext}\;,itr:\udef}\\
+         \;\;\;\;prevSucc\texttt{=} itr\texttt{;} \\
+        }{\textsc{T-ReadStack}}
+        {\rcuitr{itr}{sui}{k}{k+1}{\_}, \rcuitr{prevSucc}{sui}{k}{k+1}{\_}}\\
+         \;\;\;\;succ\texttt{=} itr\texttt{.child[0];} \\
+            }{\textsc{T-ReadNext}}
+        {\rcuitr{succ}{sui}{k+1}{k+2}{itr}\;,\rcuitr{itr}{sui}{k}{k+1}{\_}}
+        \]
+\caption{Typing derivation for deleting a node in  Binary Search Tree. Phase-1: Deleting node with one child}
+\label{fig:delete-bst-phase1}
+\end{figure*}
+
+\begin{figure*}\tiny
+\[
+\proofoutstep{}{
+\proofoutstep{}{
+\proofoutstep{}{
+\proofoutstep{}{
+\proofoutstep{itr:\unlinked}{
+\proofoutstep{\rcuitr{prev}{sui}{k}{k+1}{z},\rcuf{newNode}{f}}{
+ \proofoutstep{newNode:\rcuf}{
+ \proofoutstep{newNode:\_}{ 
+ \proofoutstep{\rcuitr{follower}{sui}{k}{k+1}{\_}}{ 
+ \proofoutstep{\rcuitr{follower}{sui}{k}{k+1}{\_}\;,succ:\_}{ 
+ \proofoutstep{\rcuitr{succ}{sui}{k}{k+1}{\_}\;,prevSucc:\_}{ 
+\proofoutstep{\rcuitr{succ}{sui}{k}{k+1}{\_},follower:\_}{ %read next
+         \;\;\;\;follower\texttt{=} succ\texttt{.child[1];} \\
+         }{\textsc{T-ReadNext}}
+        {\rcuitr{succ}{sui}{k+1}{k+2}{itr}\;,\rcuitr{follower}{sui}{k}{k+1}{\_}}\\
+        //\texttt{\textcolor{red}{loop for finding the succ node starts}}\\
+         \;\;\;\;prevSucc\texttt{=} succ\texttt{;} \\
+         }{\textsc{T-ReadStack}}
+         {\rcuitr{succ}{sui}{k}{k+1}{\_}, \rcuitr{prevSucc}{sui}{k}{k+1}{\_}}\\
+         \;\;\;\;succ\texttt{=} follower\texttt{;} \\
+          }{\textsc{T-ReadStack}}
+         {\rcuitr{succ}{sui}{k}{k+1}{\_}, \rcuitr{follower}{sui}{k}{k+1}{\_}}\\
+         \;\;\;\;follower\texttt{=} follower\texttt{.child[1];} \\
+           //\texttt{\textcolor{red}{loop for finding the succ node ends}}\\
+          }{\textsc{T-OverWriteCurrent}}
+         {\rcuitr{follower}{sui}{k+1}{k+2}{\_}}\\
+         \;\;\;\;newNode\texttt{=}\textsf{new}\texttt{;}\\
+          }{\textsc{T-Allocate}}
+         {newNode:\rcuf}\\
+         //\texttt{Trivial read of next fields}\\
+         \;\;\;\;x\texttt{=} itr\texttt{.child[0];} \\
+         \;\;\;\;y\texttt{=} itr\texttt{.child[1];} \\
+         \;\;\;\;newNode\texttt{.child[0]}\texttt{=} x\texttt{;} \\
+         \;\;\;\;newNode\texttt{.child[1]}\texttt{=} y\texttt{;} \\
+         }{\textsc{T-SetFresField}}
+         {\rcunf{newNode}{f}{x}, \rcunf{newNode}{f}{y}}\\
+         \;\;\;\;prev.\texttt{.child[direction]}\texttt{=} newNode\texttt{;}\\
+         }{\textsc{T-LinkFresh}}
+         {z:\unlinked,\rcuitr{prev}{sui}{k}{k+1}{newNode}, \rcuitr{newNode}{sui}{k+1}{k+2}{\_}}\\
+         \texttt{asyncDelayedFree(}itr\texttt{);}\\           
+         }{\textsc{T-AsyncFree}}
+         {itr:\udef}\\         
+         \texttt{if(}prev\texttt{==}itr\texttt{) \{ }\\
+         //\texttt{ Take this part again. [Proof up to this point.]}\\
+         \;\;\;\;newNode.\texttt{.child[0]}\texttt{=}succ\texttt{.child[0];}\\
+         }{\textsc{T-UnlinkANode}}
+         {}\\
+          \texttt{asyncDelayedFree(}succ\texttt{); \} // remove old succ case 1}\\
+         }{\textsc{T-AsyncFree}}
+         {succ:\udef}\\
+         \texttt{else \{ }\\
+         \;\;\;\;prevSucc.\texttt{.child[1]}\texttt{=}succ\texttt{.child[1];}\\
+         }{\textsc{T-UnlinkANode}}
+         {}\\
+          \texttt{asyncDelayedFree(}succ\texttt{); //remove old succ case 2}\\
+         }{\textsc{T-AsyncFree}}
+         {succ:\udef}
+\]
+\caption{Typing derivation for deleting a node in  Binary Search Tree. Phase-2: Deleting node with two children}
+\label{fig:delete-bst-phase2}
+\end{figure*}
+%%Temporarily commented out
+%\input{staticCheckBST.tex}
+

@@ -1,0 +1,123 @@
+\section{Semantics}
+\label{sec:semantics}
+In this section, we outline the details of an abstract semantics for RCU implementations. It captures the core client-visible semantics of most RCU primitives, but not the implementation details required for efficiency~\cite{Mckenney01read-copyupdate}.
+\begin{comment}
+\begin{figure}\scriptsize %\fontsize{4}{12}
+\grammar \meta
+\caption{\texttt{Programming Language} for \textsf{RCU} programming.}
+\label{fig:prog-lang}
+\end{figure}\end{comment}
+%RCU allows a single mutator thread and  multiple  reader threads to traverse a data structure. When a writer mutates some state, it waits  until all concurrent reads are completed to free the mutated state. To represent this in our semantics, we augment the  machine state,$\textsf{MState}$, ranged over by $\sigma$, consists of:
+In our semantics, shown in Figure \ref{fig:operationalsemrcu}, an abstract machine state contains:\\
+
+%\noindent
+%\begin{minipage}{0.5\textwidth}
+\begin{itemize}
+\item A stack $s$, of type $\textsf{Var} \times \textsf{TID} \rightharpoonup \textsf{Loc}$
+\item A heap, $h$, of type $\textsf{Loc} \times \textsf{FName} \rightharpoonup \textsf{Val}$
+\item A lock, $l$, of type $\textsf{TID} \uplus \{\textsf{unlocked}\}$
+\item A root location $rt$ of type $\textsf{Loc}$
+%\end{itemize}
+%\end{minipage}
+%\begin{minipage}{0.5\textwidth}
+%\begin{itemize}
+\item A read set, $R$, of type $\mathcal{P}(\textsf{TID})$ and 
+\item A bounding set, $B$, of type $\mathcal{P}(\textsf{TID})$ 
+\end{itemize}
+%\end{minipage}\\
+
+The lock $l$ enforces mutual exclusion between write-side critical sections.
+The root location $rt$ is the root of  an \textsf{RCU} data structure. We model only a single global RCU data structure, as the generalization to multiple structures is straightforward but complicates formal development later in the paper.
+The reader set $R$ tracks the thread IDs (TIDs) of all threads currently executing a read block. 
+The bounding set $B$ tracks which threads the writer is \emph{actively} waiting for during a grace period --- it is empty if the writer is not waiting.
+\begin{comment}\begin{figure*}\scriptsize
+  \meta
+\caption{Programming Language}
+\label{fig:plang}
+\vspace{-2mm}
+  \end{figure*}%%%%%%%%%%%%%%%%%%%%%OPERATIONAL SEMANTICS ENDS%%%%%%%%%%%%%%%%%%
+\end{comment}
+\begin{figure*}\footnotesize%%%%%%%%%%%%OPdERATIONAL SEMANTICS%%%%%%%%%%%%%%
+  \grammar \and 
+  $\desugarwrite$ \and 
+  $\desugarread$ \and 
+  $\desugarsync$ \and 
+% \end{array}
+%\]
+\[\begin{array}{c@{\;}rl@{\Downarrow_{\mathit{tid}}}ll} 
+(\textsc{HUpdate}) & \llbracket\texttt{x.f=y}\rrbracket   &(s,h,l,rt,R,B)& (s,h[s(x,tid),f \mapsto s(y,tid)],l,rt,R,B) &\\
+(\textsc{HRead})   & \llbracket\texttt{y=x.f}\rrbracket   &(s,h,l,rt,R,B)& (s[(y,tid) \mapsto h(s(x,tid),f)],h,l,rt,R,B) & \\
+(\textsc{SUpdate}) & \llbracket\texttt{y=x}\rrbracket     &(s,h,l,rt,R,B)& (s[(y,tid) \mapsto (x,tid)],h,l,rt,R,B) &\\
+(\textsc{HAllocate}) & \llbracket\texttt{y=new}\rrbracket &(s,h,l,rt,R,B)& (s,h[\ell\mapsto\mathsf{nullmap}],l,rt,R,B) & \\%%%%%h[\ell\mapsto\mathsf{nullmap}
+\end{array}\]
+$\textrm{where}~ rt \neq s(y,tid) \textrm{ and } s[(y,tid) \mapsto \ell], \textrm{ and } h[\ell \mapsto \mathsf{nullmap}] \overset{\mathrm{def}}{=} \lambda (o',f) . \textrm{ if } o=o' \textrm{ then } skip \textrm{ else } h(o',f) $
+\[\begin{array}{c@{\;}rl@{\Downarrow_{\mathit{tid}}}ll} 
+(\textsc{RCU-W-Begin}) & \llbracket\texttt{WriteBegin}\rrbracket & (s,h,\mathsf{unlocked},rt,R,B) &(s,h,l,rt,R,B) & \\
+(\textsc{RCU-W-End}) & \llbracket\texttt{WriteEnd}\rrbracket & (s,h,l,rt,R,B) & (s,h,\mathsf{unlocked},rt,R,B) & \\
+(\textsc{RCU-R-Begin}) & \llbracket\texttt{ReadBegin}\rrbracket & (s,h,tid,rt,R,B) & (s,h,tid,rt,R\uplus \{tid\},B) & \mathit{tid} \neq l \\
+(\textsc{RCU-R-End}) & \llbracket\texttt{ReadEnd}\rrbracket & (s,h,tid,rt,R\uplus\{tid\},B) & (s,h,l,rt,R,B\setminus \{tid\})  & \mathit{tid} \neq l\\
+(\textsc{RCU-Synch-Start}) & \llbracket\texttt{SyncStart}\rrbracket & (s,h,l,rt,R,\emptyset) & (s,h,l,rt,R,R) &\\  %\forall_{t\in R}\ldotp t \notin r \\
+(\textsc{RCU-Synch-Stop}) & \llbracket\texttt{SyncStop}\rrbracket & (s,h,l,rt,R,\emptyset) & (s,h,l,rt,R,\emptyset) &  \\
+(\textsc{Free}) & {\llbracket\texttt{Free}(x)\rrbracket} & (s,h,l,rt,R,B) & (s,h,l,rt,R,B ) & 
+\end{array}\]
+\caption{Operational Semantics for \textsf{RCU}}
+\label{fig:operationalsemrcu}
+\vspace{-2mm}
+\end{figure*}%%%%%%%%%%%%%%%%%%%%%OPERATIONAL SEMANTICS ENDS%%%%%%%%%%%%%%%%%%
+
+Figure \ref{fig:operationalsemrcu} gives operational semantics for \emph{atomic} actions; conditionals, loops, and sequencing all have standard semantics, and parallel composition uses sequentially-consistent interleaving semantics.
+
+%(\textbf{\textit{Basic Actions}}) - 
+The first few atomic actions, for writing and reading fields, assigning among local variables, and allocating new objects, are typical of formal semantics for heaps and mutable local variables. \lstinline|Free| is similarly standard.
+%
+%(\textbf{\textit{Writer Thread Actions}}) - 
+A writer thread's critical section is bounded by \lstinline|WriteBegin| and \lstinline|WriteEnd|, which acquire and release the lock that enforces mutual exclusion between writers.  \lstinline|WriteBegin| only reduces (acquires) if the lock is \textsf{unlocked}.
+
+Standard RCU APIs include a primitive \texttt{synchronize\_rcu()} to wait for a grace period for the current readers.  We decompose this here into two actions, \lstinline|SyncStart| and \lstinline|SyncStop|.
+%, for reasons both pedagogical (to separate the start of the grace period from its completion), and technical (our proof framework makes this formulation most convenient).
+\lstinline|SyncStart| initializes the blocking set to the current set of readers --- the threads that may have already observed any nodes the writer has unlinked.
+\lstinline|SyncStop| blocks until the blocking set is emptied by completing reader threads.
+%requires the blocking set to be empty to run, and thus blocks when it is non-empty.  
+%Reader threads are responsible for shrinking the blocking set. 
+%Once the grace period ends, the unlinked/mutated node is reclaimed with \lstinline|Free|.
+
+%(\textbf{\textit{Reader Thread Actions}}) - 
+%A reader thread, like the writer thread, has a critical section, in this case 
+Reader thread critical sections are
+bounded by \lstinline|ReadBegin| and \lstinline|ReadEnd|.  \lstinline|ReadBegin| simply records the current thread's presence as an active reader.
+\lstinline|ReadEnd| removes the current thread from the set of active readers, and also removes it (if present) from the blocking set --- if a writer was waiting for a certain reader to finish its critical section, this ensures the writer no longer waits once that reader has finished its current read-side critical section.
+
+%(\textbf{\textit{Implementing Grace Periods}}) - 
+Grace periods are implemented by the combination of \lstinline|ReadBegin|, \lstinline|ReadEnd|, \lstinline|SyncStart|, and \lstinline|SyncStop|.
+% work together to implement grace periods.  
+\lstinline|ReadBegin| ensures the set of active readers is known.  When a grace period is required, \lstinline|SyncStart;SyncStop;| will store (in $B$) the active readers (which may have observed nodes to free before they were unlinked), and wait for reader threads to record when they have completed their critical section (and implicitly, dropped any references to nodes the writer wants to free) via \lstinline|ReadEnd|.
+ %of threads the writer waits for to the set of active readers when \lstinline|SyncStart| is executed (recording the readers that may have observed any nodes unlinked by the writer), and \lstinline|SyncStop| waits for that set of threads to become empty.
+%\lstinline|ReadEnd| ``informs'' the writer thread of its exit from the critical section by removing itself from $B$, and once every reader that overlapped the \lstinline|SyncStart| has completed its critical section, the blocking set will be empty and the writer will resume.
+
+These semantics do permit a reader in the blocking set to finish its read-side critical section and enter a \emph{new} read-side critical section before the writer wakes.  In this case, \emph{the writer waits only for the first critical section of that reader to complete}, since entering the new critical section adds the thread's ID back to $R$, but not $B$.
+%\subsection{Relationship to Real Implementations}
+%Real RCU implementations are significantly more sophisticated than our abstract semantics, but most synchronous single-writer RCU implementations should be refinements of our semantics.  Real implementations avoid the centralized state of our semantics, instead splitting reader tracking across reader threads' local states, which the writer thread occasionally reads.  Conceptually, most implementations keep a per-reader count of how many critical sections have completed, updated locally by only readers.  A writer then implements a grace period by effectively taking an atomic snapshot of all (active) readers' counts, and waiting for all counters to be incremented.  A slight variation on our semantics would use a bounding set that tracked such a snapshot of counts, and a vector of per-thread counts in place of the reader set.  Blocking grace period completion until the snapshot was strictly older than all current reader counts would be more clearly equivalent to these implementations.
+%Our current semantics are simpler than this alternative, while also equivalent.
+
+%Real implementations also employ further optimizations for scalability, such as using tree-based propagation to reduce contention in systems with many cores~\cite{LiangMKM16}, or working to make read-side critical section work coincide with work already required for scheduling~\cite{Mckenney_rcuusage}.
+%Real implementations deal with weak memory models and may therefore require clients to use special read and write operations with appropriate barriers~\cite{Mckenney_rcuusage}, but this does not change the client programming model checked by our type system.
+%%%%%%%%%%%%%%%%
+%Real implementations of RCU are far more sophisticated than our formal semantics above. Alglave et al. presents the closest \textsf{RCU} model~\cite{Alglave:2018:FSC:3173162.3177156}. Our simple global lock semantics for write critical sections has so many drawbacks in terms limiting the scalability and performance. The motivation of \textsf{RCU} is having very cheap reader critical sections but the number of reader theards can be a lot and this can be a problem. Although readers' performance are not effected badly, writer thread must show the grace period to all of these \emph{active/pre-existsting} readers in such a way that it must \emph{defer} the reclamation phase blocking (or in some implementations registering callback to be invoked after grace period) until all active readers are done with their jobs. Acquiring a global lock during each grace period severly affects scalibility and performance. To overcome this problem, a \emph{tree based} hieararchical mechanism is implemented to handle each thread's (CPU's) \emph{quiescent-state} information and \emph{grace-period}. In Tree RCU, the data strcuture is used in such a way that it records each CPU's quiescent states. The \textsf{rcu} node tree propagates these states up to the root, and then propagates grace-period information down to the leaves. Quiescent-state information does not propagate upwards from a given node until a quiescent state has been reported by each CPU covered by the subtree rooted at that node. This propagation scheme dramatically reduces the lock contention experienced by the upper levels of the tree ~\cite{LiangMKM16}
+
+%In addition, efficient implementations go to great lengths to minimize the cost of the read-side critical section operations while tracking the same information.  Direct implementation of our semantics would yield unacceptable performance, since both \lstinline|ReadBegin| and \lstinline|ReadEnd| modify shared data structures.  Typically, implementations are structured so each reader thread (or CPU) maintains its own \emph{fragment} of the global state, which is only updated by that thread, but is read by the write-side primitives.
+%In the ideal case, the boundaries of the read-side critical section coincide with some other operation the reader must already do for other purposes, such as disabling interrupts~\tocite{}. As a result, some descriptions of RCU implementations do not explicitly discuss equivalents to \lstinline|ReadStart| and \lstinline|ReadEnd|, because the implementation piggybacks on existing state already present for non-RCU purposes.
+
+%Conceptually, each reader thread maintains a count of how many times it has passed through the RCU data structure as a reader (a count of how many read-side critical sections it has executed).  The writer waits for a grace period by effectively taking an atomic snapshot of all readers' counts, and waiting until all have been incremented.  
+
+%Real implementations, of course, must also tolerate the weak memory model of whatever processor they run on, leading them to use. For example, the primitive to dereference a memory location shown by a pointer and the primitive to update the memory location shown by a pointer contain architecture-specific memory barrier instructions and compiler directives to enforce correct ordering. Both primitives reduce to simple assignment statements on sequentially consistent systems. Dereferencing is volatile access except on DEC Alpha, which also requires a memory barrier \todo{CITE}.
+
+%The Linux implementation of the communication in between reader thread and writer thread is based on waiting for context switches. The implementation uses calls \lstinline|SyncStart| and returns back from \lstinline|SyncStop| after all CPUs have passed through at least one context switch. The synchronous version of the primitive to wait reader threads is \textsf{synchronize\_rcu}. For performance reasons, the Linux implementation has also asynchronous version of this primitive named \textsf{call\_rcu}. Detecting context switches requires maintaining state shared between CPUs. A CPU must update state, which other CPUs read, that indicate it executed a context switch ~\cite{Mckenney_rcuusage}.
+\begin{comment}
+  (\textit{\textbf{Type Systems}}) - Castegren et al. ~\cite{Castegren2017lolcat} presents a type system with relaxed notion of linearity that allows an unbounded number of aliases to an object with at most one ownership of to access the contents of the object to guarantee the absence of data-races when accessing owned data in lock-free algorithms. Castegren gives soundness prooof and prototype implementation with examples: \textsf{Treiber Stack} ~\cite{treiber1986systems}, \textsf{Harris-style List} ~\cite{Harris:2001:PIN:645958.676105} and \textsf{Michael-Scott Queue} ~\cite{Michael:1996:SFP:248052.248106}. This approach basically puts restrictions over ownership transfer so that relaxation over linearity does not violate the \textsf{race-freedom} guarantee.This approach utilizes dynamic semantics to check properties such as \textsf{isStable}($x.f$) which basically checks for the presence of a \textsf{fix} pointer, \textsf{fix}($x.f$),  where on a successful branch on \textsf{isStable}(x.f) or \textsf{fix}($x.f$), the type $T$ of $x$ is updated to $T~f$ to reflect our knowledge that $x.f$ is stable.
+\begin{itemize}
+\item The crucial difference of our approach is that our approach is completely based on static typing.
+\item \textsf{RCU} similar relaxed memory reclamation setting is set as future work in this paper.
+\item In addition to \emph{Linked-List} and \emph{Bag} data structures we also ensure well-shapedness of data structures such as cyclicity of \emph{BST Tree} in relaxed memory reclamation setting, \textsf{RCU}.
+\end{itemize}
+Cooper et al. ~\cite{Cooper2015RelativisticPI} presents \textsf{GHC Haskell} library,called \emph{Monadic RP}, for relativistic programming. Similar to our approach, Monadic RP provides types and relativistic programming constructs for write/read critical sections which enforce correct usage of relativistic programming pattern. Implementation is built on top of \texttt{IO}. 
+  \end{comment}

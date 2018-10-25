@@ -1,0 +1,250 @@
+%%%%%%%%%%%%%%%%%%%%%%COMMENTED OUT %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{comment}
+\begin{figure*}\scriptsize
+
+% Core rules
+\[
+\begin{array}{c}
+\pointstostmtdecl\\
+\\[0.5em]
+\\
+\projectpairdecl \qquad \projectfieldecl \\
+\\[0.5em]
+\\
+%\pointstoexprdecl\\
+%\\[0.5em]
+%\\
+%\freductiondecl \\
+%\\[0.5em]
+%\\
+%\freductiondeclneq\\
+%\\[0.5em]
+%\\
+%\gammafieldreduction{\Gamma_{12}}{\Gamma_{11}}{e}{\Gamma}\\
+%\\[0.5em]
+%\\
+%\alterinxys\\
+%\\[0.5em]
+%\\
+%\reducedpathsdecl{\Gamma_1}{\Gamma_2}\\
+%\\[0.5em]
+%\\
+%\reducedvarsdecl\\
+%\\[0.5em]
+%\\
+%\abstractpaths{\Gamma}{f_1}{f_2}{e}\\
+%\\[0.5em]
+%\\
+%\frenamefielddecl \qquad \rewritealternatedecl{f_1}{f_2}{e}\\
+%\\[0.5em]
+%\\
+%\stabilize\\
+%\\[0.5em]
+%\\
+\end{array}
+\]
+% Well formed programs, declarations...
+\caption{\texttt{Abstraction and Reduction on Pointer Fields}}
+\label{fig:absred-on-types}
+\end{figure*}
+\end{comment}
+
+
+\begin{comment}
+\begin{figure*}\scriptsize
+\[
+\begin{array}{c}
+\pi_{\N}(\text{T}) \mapsto \N' \qquad \pi_{\rho}(\text{T}) \mapsto \rho' \text{   where T  }= \textsf{rcuItr}\underset{r}{\mid} \rho' \;\; \N'
+\\[0.5em]
+\\
+\fbox{$\vdash \N \subt \N'$}
+\qquad
+\nsubthree
+\\[0.5em]
+\\
+\nsubtwo \qquad \nsubone
+\\[0.5em]
+\\
+\fbox{$\vdash \rho \subt \rho'$} \qquad
+\psubone \qquad \psubtwo \qquad \psubthree
+\\[0.5em]
+\\
+\fbox{$\vdash \text{T} \subt \text{T'}$} \qquad \stypeone \qquad \stypetwo
+\\[0.5em]
+\\
+\fbox{$\vdash \Gamma \subt  \Gamma'$} \qquad\subeqcontextthree \qquad \csubfour
+%\\[0.5em]
+%\\
+%\subcontextone \qquad \subeqcontexttwo
+\end{array}
+\]
+\caption{\texttt{Sub-Typing}}
+\label{fig:sub-typing}
+\end{figure*}
+\end{comment}
+\begin{comment}
+\begin{figure*}\scriptsize
+% Core rules %\alternatingPointsToStmtsdecl{\text{C}_1}{\text{C}_2}\\
+\[
+\begin{array}{c}
+\pi_{\N}(a:\text{T}) \mapsto \N' \qquad \pi_{\rho}(a:\text{T}) \mapsto \rho' \text{   where T  }= \textsf{rcuItr}\underset{r}{\mid} \rho' \;\; \N' \\
+ \stabilizepath = \{TODO\} \qquad \stabilizenext\{TODO\}
+\\[0.5em]
+\\
+\\
+ \textsf{StabilizePath}(\Gamma,e) \mapsto \Gamma' \text{   where   } \Gamma' = \stabilizecontext\\
+%\reduce{\Delta}{\Gamma}
+\\[0.5em]
+\\
+\rename{\Gamma}{\Gamma'}
+\end{array}
+\]
+% Well formed programs, declarations...
+\caption{\texttt{Path Stabilization}}
+\label{fig:path-stabilization}
+\end{figure*}
+\end{comment}
+\begin{comment}
+In figure \ref{fig:typingrulesRCURead}, we present the axioms for the reading thread traversing the rcu data-structure. The \texttt{Invalidate-Prev} axiom together with \texttt{Overwrite-Curr} axiom enables linearity of reader threads via invalidating the previous iterator. There exists at most one \textsf{rcuIterator} type handle of a reading thread on a shared aggregate. This is essential for ensuring the thread cannot traverse the same state multiple times
+%%%%%%%%%%OLD Operational semantics
+\begin{figure*}
+\scriptsize{
+\begin{mathpar}
+\atomeval \and \heap \and \stack \and \wlock \and \rlock \and \fset \and \mstatedecl
+\end{mathpar}
+\medskip
+%%%%%%%%%%%%%%%%%%%%
+$
+\inferrule
+{}
+{
+\op{\texttt{x.f=y}}{(s,h[s(x,tid),f \mapsto s(y,tid)],l,R,F)}
+}
+\;(\textsc{HUpdate})
+$
+\medskip
+%%%%%%%%%%%%%%%%%%%%
+$
+\inferrule
+{}
+{
+\op{\texttt{y=x.f}}{((s[(y,tid) \mapsto h(s(x,tid),f)],h,l,R,F)}
+}
+\;(\textsc{HRead})
+$
+\medskip
+%%%%%%%%%%%%%%%%%%%%
+$
+\inferrule
+{}
+{
+\op{\texttt{y=x}}{(s[(y,tid) \mapsto (x,tid)],h,l,R,F)}
+}
+\;(\textsc{SUpdate})
+$
+\medskip
+%%%%%%%%%%%%%%%%%%%%
+$
+\inferrule
+{}
+{
+\op{\texttt{y=new}}{(s,h,l,R,F)}
+}
+\;(\textsc{HAllocate})
+$
+\medskip
+%%%%%%%%%%%%%%%%%%%%
+$
+\inferrule
+{}
+{
+\op{\texttt{asyncDelayedFree}(x)}{(s,h,l,R,F \uplus \{ (R,S(x))\} )} \\
+ \texttt{ provided } s[(y,tid)\mapsto o], \;  h[o \mapsto \texttt{new}] \text{ and } \texttt{default}(\textsf{FType}(f))\\
+  \lambda o', f  \ldotp  \text{ if }  o = o' \;  \text{ skip } \text{ else }  h(o',f)
+}
+\;(\textsc{AFree})
+$
+\medskip
+%%%%%%%%%%%%%%%%%%%%
+$
+\inferrule
+{}
+{
+\op{\texttt{gcStep}}{(s,h',l,R,F)}
+}
+\;(\textsc{GC})
+$
+\medskip
+%%%%%%%%%%%%%%%%%%%%
+$
+\inferrule
+{}
+{
+\opm{\texttt{WriteBegin}}{(s,h,\mathrm{unlocked},R,F)}{(s,h,\mathrm{tid},R,F)}\\
+ \texttt{ provided }  s[(x,tid)\mapsto o], \; (\forall f, o' \ldotp o\neq o' \Rightarrow h(o',f) = h'(o',f))) \\
+  \text{ and } \forall f \ldotp h'(o,f)\; \textsf{ undefined }
+}
+\;(\textsc{RCU-W-Begin})
+$
+\medskip
+%%%%%%%%%%%%%%%%%%%%
+$
+\inferrule
+{}
+{
+\opm{\texttt{WriteEnd}}{(s,h,\mathrm{tid},R,F)}{(s,h,\textsf{unlocked},R,F)} \\
+ \textrm{provided }tid \notin R
+}
+\;(\textsc{RCU-W-End})
+$
+\medskip
+%%%%%%%%%%%%%%%%%%%%
+$
+\inferrule
+{}
+{
+\opm{\texttt{ReadBegin}}{(s,h,l,R,F)}{(s,h,l,R \uplus \{ \mathrm{tid}\},F)} \\
+ \textrm{provided }tid \neq l
+}
+\;(\textsc{RCU-R-Begin})
+$
+\medskip
+%%%%%%%%%%%%%%%%%%%%
+$
+\inferrule
+{}
+{
+ \opm{\texttt{ReadEnd}}{( s,h,l,R \uplus \{ \mathrm{tid} \},F)}{(s,h,l,R,F \setminus \mathrm{tid}) }
+ \textrm{provided } \; F \setminus tid \; \textrm{ as } \; \{ (T \setminus tid \},o) \mid (T,o) \in F \}
+}
+\;(\textsc{RCU-R-End})
+$
+\medskip
+}
+\caption{Operational Semantics for RCU Programming Model}
+\label{fig:operationalsemrcu}
+\end{figure*}
+\begin{figure*}
+\scriptsize
+\begin{mathpar}
+\atomeval \and \heap \and \stack \and \wlock \and \rlock \and \fset \and \mstatedecl
+\end{mathpar}
+\[\begin{array}{c@{\;}rl@{\Downarrow_{\mathit{tid}}}ll}
+(\textsc{HUpdate}) & \llbracket\texttt{x.f=y}\rrbracket   &(s,h,l,R,F)& (s,h[s(x,tid),f \mapsto s(y,tid)],l,R,F)\\
+(\textsc{HRead})   & \llbracket\texttt{y=x.f}\rrbracket   &(s,h,l,R,F)& (s[(y,tid) \mapsto h(s(x,tid),f)],h,l,R,F)\\
+(\textsc{SUpdate}) & \llbracket\texttt{y=x}\rrbracket     &(s,h,l,R,F)& (s[(y,tid) \mapsto (x,tid)],h,l,R,F)\\
+(\textsc{HAllocate}) & \llbracket\texttt{y=new}\rrbracket &(s,h,l,R,F)& (s,h[\ell\mapsto\mathsf{nullmap}],l,R,F)\\
+(\textsc{AFree}) & {\llbracket\texttt{asyncDelayedFree}(x)\rrbracket} &
+((s,h,l,R,F) & (s,h,l,R,F \uplus \{ (R,S(x))\} ) \\
+(\textsc{RCU-W-Begin}) & \llbracket\texttt{WriteBegin}\rrbracket & (s,h,\mathsf{unlocked},R,\emptyset) & (s,h,\mathit{tid},R,\emptyset) & \textrm{where}~\mathit{tid}\not\in R\\
+(\textsc{RCU-W-End}) & \llbracket\texttt{WriteEnd}\rrbracket & (s,h,\mathrm{tid},R,F) & (s,h\setminus(\textsf{map}~\textsf{snd}~F),\mathsf{unlocked},R,\emptyset) & \textrm{where}~\mathit{tid}\not\in R\land(\textsf{map}~\textsf{fst}~F)=\{\emptyset\}\\
+(\textsc{RCU-R-Begin}) & \llbracket\texttt{ReadBegin}\rrbracket & (s,h,l,r,F) & (s,h,l,R\uplus\{\mathit{tid}\},F) & \textrm{where}~\mathit{tid}\neq l\\
+(\textsc{RCU-R-End}) & \llbracket\texttt{ReadEnd}\rrbracket & (s,h,l,R\uplus\{\mathit{tid}\},F) & (s,h,l,r,\{(T\setminus\mathit{tid},o) \mid (T,o)\in F\}) &\textrm{where}~\mathit{tid}\neq l
+\end{array}\]
+\todo{This is an alternative typesetting of the above, plus some corrections, and typesetting the actual memory reclamation.  I don't think we need the gc rule.}
+\caption{Operational Semantics for RCU Programming Model}
+\label{fig:operationalsemrcu2}
+\end{figure*}
+
+\end{comment}

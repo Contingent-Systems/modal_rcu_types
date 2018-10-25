@@ -1,0 +1,1104 @@
+\makeatletter
+\newcommand{\srcsize}{\@setfontsize{\srcsize}{2pt}{2pt}}
+\makeatother
+\section{RCU BST Delete}
+\label{appendix:bst_del}
+\[\small
+\begin{array}{@{}l@{}}
+void\;delete(\;\INT\;data)\;\{\\
+ \;\;WriteBegin;\\
+   \;\;\text{// Find data in the tree} \\
+   \;\;\text{// Root is never empty and its value is unique id} \\
+    \;\;BinaryTreeNode \;current,\;parent = root;  \\
+    \;\;\specline{parent:rcuItr\; \epsilon \; \{ \} }\\
+    \;\;current = parent.Right;\\
+    \;\;\specline{parent:rcuItr\; \epsilon \; \{ Right \mapsto current\} }\\
+    \;\;\specline{current:rcuItr\; Right \; \{ \} }\\  
+    \;\;while\;(current!=null \&\& current.data != data)\\
+    \;\;\{\\
+        \;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ (Left|Right) \mapsto current\} }\\
+        \;\;\specline{current:rcuItr\; (Left|Right)^{k}.(Left|Right) \; \{ \} }\\
+        \;\;\;\;if\;(current.data > data)\\
+        \;\;\;\;\{\\
+            \;\;\;\;\;\;\text{//if data exists it's in the left subtree}\\
+            \;\;\;\;\;\;parent = current;\\
+            \;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ \} }\\
+            \;\;\;\;\;\;\specline{current:rcuItr\; (Left|Right)^{k} \; \{ \} }\\
+            \;\;\;\;\;\;current = parent.Left;\\
+            \;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Left\mapsto current\} }\\
+            \;\;\;\;\;\;\specline{current:rcuItr\; (Left|Right)^{k}.Left \; \{ \} }\\
+        \;\;\;\;\}\\
+        \;\;\;\;else \;if\; (current.data < data)\\
+        \;\;\;\;\{\\
+            \;\;\;\;\;\;\text{//if data exists it's in the right subtree}\\
+            \;\;\;\;\;\;parent = current; \\
+            \;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ \} }\\
+            \;\;\;\;\;\;\specline{current:rcuItr\; (Left|right)^{k} \; \{ \} }\\
+            \;\;\;\;\;\;current = current.Right; \\
+            \;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Right\mapsto current\} }\\
+            \;\;\;\;\;\;\specline{current:rcuItr\; (Left|Right)^{k}.Right \; \{ \} }\\
+        \;\;\;\;\}\\
+    \;\;\} \\
+    \;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{(Left|Right)\mapsto current\} }\\
+    \;\;\specline{current:rcuItr\; (Left|Right)^{k}.(Left|Right) \; \{ \} }\\
+    \;\;\text{// At this point, we've found the node to remove}\\
+    \;\;BinaryTreeNode \;lmParent = current.Right;\\
+    \;\;BinaryTreeNode \;currentL = current.Left;\\
+    \;\;\specline{current:rcuItr\; (Left|Right)^{k}.(Left|Right) \; \{ Left \mapsto currentL, Right \mapsto lmParent\} }\\
+    \;\;\specline{currentL:rcuItr\; (Left|Right)^{k}.(Left|Right).Left \; \{\} }\\
+     \;\;\specline{lmParent:rcuItr\; Left|Right)^{k}.(Left|Right).Right \; \{ \} }\\
+    
+\end{array}
+\]
+
+\[\small
+\begin{array}{@{}l@{}}
+    \;\;\text{// We now need to "rethread" the tree}\\
+    \;\;\text{// CASE 1: If current has no right child, then current's left child becomes}\\
+    \;\;\text{//         the node pointed to by the parent}\\
+    \;\;if\; (current.Right == null)\\
+    \;\;\{\\
+        \;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ (Left|Right) \mapsto current\} }\\
+        \;\;\;\;\specline{current:rcuItr\; (Left|Right)^{k}.(Left|Right) \; \{Left\mapsto currentL , Right \mapsto null\} }\\
+        \;\;\;\;\specline{currentL:rcuItr\; (Left|Right)^{k}.(Left|Right).Left \; \{\} }\\
+        
+            \;\;\;\;if\; (parent.Left == current)\\
+                \;\;\;\;\;\;\text{// parent.Value > current.Value, so make current's left child a left child of parent}\\
+                \;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Left \mapsto current\} }\\
+                \;\;\;\;\;\;\specline{current:rcuItr\; (Left|Right)^{k}.Left \; \{Left\mapsto currentL, Right\mapsto null\} }\\
+                \;\;\;\;\;\;\specline{currentL:rcuItr\; (Left|Right)^{k}.Left.Left \; \{\} }\\
+                \;\;\;\;\;\;parent.Left = currentL;\\
+                \;\;\;\;\;\;\text{// parent.Value > current.Value, so make current's left child a left child of parent}\\
+                \;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Left \mapsto current\} }\\
+                \;\;\;\;\;\;\specline{current:unlinked}\\
+                \;\;\;\;\;\;\specline{currentL:rcuItr\; (Left|Right)^{k}.Left \; \{\} }\\
+                
+            \;\;\;\;else \\
+
+                \;\;\;\;\;\;\text{// parent.Value < current.Value, so make current's left child a right child of parent}\\
+                \;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Right \mapsto current\} }\\
+                \;\;\;\;\;\;\specline{current:rcuItr\; (Left|Right)^{k}.Right \; \{Left\mapsto currentL, Right \mapsto null\} }\\
+                \;\;\;\;\;\;\specline{currentL:rcuItr\; (Left|Right)^{k}.Right.Left \; \{\} }\\
+                \;\;\;\;\;\;parent.Right = currentL;\\
+                \;\;\;\;\;\;\text{// parent.Value > current.Value, so make current's left child a left child of parent}\\
+                \;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Right \mapsto current\} }\\
+                \;\;\;\;\;\;\specline{currentL:rcuItr\; (Left|Right)^{k}.Right \; \{\} }\\
+                \;\;\;\;\;\;\specline{current:unlinked }\\
+                \;\;\;\;\;\;SyncStart;\\
+                \;\;\;\;\;\;SyncStop;\\
+                \;\;\;\;\;\;\specline{current:freeable}\\
+                \;\;\;\;\;\;Free(current);\\
+                \;\;\;\;\;\;\specline{current:undef}\\
+    \;\;\}\\
+\end{array}
+\]
+
+\[\small
+\begin{array}{@{}l@{}}
+ \;\;\text{// CASE 2: If current's right child has no left child, then current's right child}\\
+   \;\;\text{ //         replaces current in the tree}\\
+   \;\; else\; if\; (current.Left == null)\\
+    \;\;\{\\
+        \;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{(Left|Right)\mapsto current\} }\\
+        \;\;\;\;\specline{current:rcuItr\; (Left|Right)^{k}.(Left|Right) \; \{ Left \mapsto null, Right \mapsto lmParent\} }\\
+        \;\;\;\;\specline{currentL:rcuItr\; (Left|Right)^{k}.(Left|Right).Left \; \{\} }\\
+        \;\;\;\;\specline{lmParent:rcuItr\; (Left|Right)^{k}.(Left|Right).Right \; \{ \} }\\
+             
+            \;\;\;\;if\; (parent.Left == current)\\
+                \;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Left \mapsto current\} }\\
+                \;\;\;\;\;\;\specline{current:rcuItr\; (Left|Right)^{k}.Left \; \{Left\mapsto null, Right\mapsto lmParent\} }\\
+                \;\;\;\;\;\;\specline{lmParent:rcuItr\; (Left|Right)^{k}.Left.Right \; \{\} }\\
+                \;\;\;\;\;\;\text{// parent.Value > current.Value, so make current's right child a left child of parent}\\
+                \;\;\;\;\;\;parent.Left = lmParent;\\
+                \;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Left \mapsto lmParent\} }\\
+                \;\;\;\;\;\;\specline{current:unlinked }\\
+                \;\;\;\;\;\;\specline{lmParent:rcuItr\; (Left|Right)^{k}.Left \; \{\} }\\                 
+            \;\;\;\;else\\
+                \;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Right \mapsto current\} }\\
+                \;\;\;\;\;\;\specline{current:rcuItr\; (Left|Right)^{k}.Right \; \{Left\mapsto null, Right\mapsto lmParent\} }\\
+                \;\;\;\;\;\;\specline{lmParent:rcuItr\; (Left|Right)^{k}.Right.Right \; \{\} }\\
+                \;\;\;\;\;\;\text{// parent.Value < current.Value, so make current's right child a right child of parent}\\
+                \;\;\;\;\;\;parent.Right = lmParent;\\
+                \;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Right \mapsto lmParent\} }\\
+                \;\;\;\;\;\;\specline{lmParent:rcuItr\; (Left|Right)^{k}.Right \; \{\} }\\
+                \;\;\;\;\;\;\specline{current:unlinked  }\\
+                \;\;\;\;\;\;SyncStart;\\
+                \;\;\;\;\;\;SyncStop;\\
+                \;\;\;\;\;\;\specline{current:freeable}\\
+                \;\;\;\;\;\;Free(current);\\
+                \;\;\;\;\;\;\specline{current:undef}\\
+       
+    \;\;\}\\
+\end{array}
+\]
+\[\small
+\begin{array}{@{}l@{}}
+    \;\;\text{// CASE 3: If current's right child has a left child, replace current with current's}\\
+    \;\;\text{//          right child's left-most descendent}\\
+    \;\;else\\
+    \;\;\{\\
+        \;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ (Left|Right)\mapsto current\} }\\
+        \;\;\;\;\specline{current:rcuItr\; (Left|Right)^{k}.(Left|Right) \; \{Right\mapsto lmParent, Left \mapsto currentL \} }\\
+        \;\;\;\;\specline{lmParent:rcuItr\; (Left|Right)^{k}.(Left|Right).Right \; \{ \} }\\
+        \;\;\;\;\specline{currentL:rcuItr\; (Left|Right)^{k}.(Left|Right).Left \; \{ \} }\\ 
+        \;\;\;\;\text{// We first need to find the right node's left-most child}\\    
+        \;\;\;\;BinaryTreeNode \;currentF = new;\\
+        \;\;\;\;\specline{currentF:rcuFresh }\\
+        \;\;\;\;currentF.Right = lmParent;\\
+        \;\;\;\;\specline{currentF:rcuFresh \; \{Right\mapsto lmParent\}}\\
+        \;\;\;\;currentF.Left = currentL;\\
+        \;\;\;\;\specline{currentF:rcuFresh \; \{Right\mapsto lmParent, Left\mapsto currentL\}}\\
+        \;\;\;\;BinaryTreeNode \; leftmost = lmParent.Left;\\
+        \;\;\;\;\specline{lmParent:rcuItr\; (Left|Right)^{k}.(Left|Right).Right \; \{ Left \mapsto leftmost\} }\\
+        \;\;\;\;\specline{leftmost:rcuItr\; (Left|Right)^{k}.(Left|Right).Right.Left \; \{\} }\\
+        \;\;\;\;if\;(lmParent.Left == null)\{\\
+        \;\;\;\;\specline{lmParent:rcuItr\; (Left|Right)^{k}.(Left|Right).Right \; \{ Left \mapsto null\} }\\
+         \;\;\;\;\;\;currentF.data = lmParent.data;\\
+         \;\;\;\;\;\;if\; (parent.Left == current)\{\\
+                \;\;\;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Left\mapsto current\} }\\
+                \;\;\;\;\;\;\;\;\specline{current:rcuItr\; (Left|Right)^{k}.Left \; \{Right\mapsto lmParent, Left \mapsto currentL \} }\\
+                \;\;\;\;\;\;\;\;\specline{currentF:rcuFresh \; \{Right\mapsto lmParent, Left\mapsto currentL\}}\\
+                \;\;\;\;\;\;\;\;\text{//current's right child a left child of parent}\\
+                \;\;\;\;\;\;\;\;parent.Left = currentF; \\
+                \;\;\;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Left\mapsto currentF\} }\\
+                \;\;\;\;\;\;\;\;\specline{current:unlinked }\\
+                \;\;\;\;\;\;\;\;\specline{currentF:rcuItr \; (Left|Right)^{k}.Left \; \{Right\mapsto lmParent, Left\mapsto currentL\}}\\
+                \;\;\;\;\;\;\;\;SyncStart;\\
+                \;\;\;\;\;\;\;\;SyncStop;\\
+                \;\;\;\;\;\;\;\;\specline{current:freeable}\\
+                \;\;\;\;\;\;\;\;Free(current);\\
+                \;\;\;\;\;\;\;\;\specline{current:undef}\\
+            \;\;\;\;\;\;\} \\
+            \;\;\;\;\;\;else\{ \\
+                \;\;\;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Right\mapsto current\}}\\
+                \;\;\;\;\;\;\;\;\specline{current:rcuItr\; (Left|Right)^{k}.Right \; \{Right\mapsto lmParent, Left \mapsto currentL \}}\\
+                \;\;\;\;\;\;\;\;\specline{currentF:rcuFresh \; \{Right\mapsto lmParent, Left\mapsto currentL\}}\\
+                \;\;\;\;\;\;\;\;\text{//current's right child a right child of parent}\\
+                \;\;\;\;\;\;\;\;parent.Right = currentF; \\
+                \;\;\;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Right\mapsto currentF\} }\\
+                \;\;\;\;\;\;\;\;\specline{current:unlinked }\\
+                \;\;\;\;\;\;\;\;\specline{currentF:rcuItr \; (Left|Right)^{k}.Right \; \{Right\mapsto lmParent, Left\mapsto currentL\}}\\
+                \;\;\;\;\;\;\;\;SyncStart;\\
+                \;\;\;\;\;\;\;\;SyncStop;\\
+                \;\;\;\;\;\;\;\;\specline{current:freeable}\\
+                \;\;\;\;\;\;\;\;Free(current);\\
+                \;\;\;\;\;\;\;\;\specline{current:undef}\\
+          \;\;\;\;\;\;\}\\
+        \;\;\;\;\}
+        \end{array}
+\]
+
+\[\small
+\begin{array}{@{}l@{}}
+        \;\;\;\;else\{\\
+        %%else -- leftmost is not null -- so find it
+        \;\;\;\;\;\;\specline{lmParent:rcuItr\; (Left|Right)^{k}.(Left|Right).Right \; \{ Left \mapsto leftmost\} }\\
+        \;\;\;\;\;\;\specline{leftmost:rcuItr\; (Left|Right)^{k}.(Left|Right).Right.Left \; \{\} }\\
+       \;\;\;\;\;\;while \;(leftmost.Left != null)\\
+        \;\;\;\;\;\;\{\\
+             \;\;\;\;\;\;\;\;\specline{lmParent:rcuItr\; (Left|Right)^{k}.(Left|Right).Right.Left(Left)^{l} \; \{Left \mapsto leftmost\} }\\
+             \;\;\;\;\;\;\;\;\specline{leftmost:rcuItr\; (Left|Right)^{k}.(Left|Right).Right.Left(Left)^{l}.Left \; \{\} }\\
+             \;\;\;\;\;\;\;\;lmParent = leftmost;\\
+             \;\;\;\;\;\;\;\;\specline{lmParent:rcuItr\; (Left|Right)^{k}.(Left|Right).Right.Left(Left)^{l}.Left \; \{\} }\\
+             \;\;\;\;\;\;\;\;\specline{leftmost:rcuItr\; (Left|Right)^{k}.(Left|Right).Right.Left(Left)^{l}.Left \; \{\} }\\
+             \;\;\;\;\;\;\;\;leftmost = lmParent.Left;\\
+             \;\;\;\;\;\;\;\;\specline{lmParent:rcuItr\; (Left|Right)^{k}.(Left|Right).Right.Left(Left)^{l}.Left \; \{Left \mapsto leftmost\} }\\
+            \;\;\;\;\;\;\;\;\specline{leftmost:rcuItr\; (Left|Right)^{k}.(Left|Right).Right.Left(Left)^{l}.Left.Left \; \{\} }\\
+        \;\;\;\;\;\;\}\\
+        \;\;\;\;\;\;currentF.data = leftmost.data;\\
+         \;\;\;\;\;\;if\; (parent.Left == current)\{\\
+                \;\;\;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Left\mapsto current\} }\\
+                \;\;\;\;\;\;\;\;\specline{current:rcuItr\; (Left|Right)^{k}.Left \; \{Right\mapsto lmParent, Left \mapsto currentL \} }\\
+                \;\;\;\;\;\;\;\;\specline{currentF:rcuFresh \; \{Right\mapsto lmParent, Left\mapsto currentL\}}\\
+                \;\;\;\;\;\;\;\;\text{//current's right child a left child of parent}\\
+                \;\;\;\;\;\;\;\;parent.Left = currentF; \\
+                \;\;\;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Left\mapsto currentF\} }\\
+                \;\;\;\;\;\;\;\;\specline{current:unlinked }\\
+                \;\;\;\;\;\;\;\;\specline{currentF:rcuItr \; (Left|Right)^{k}.Left \; \{Right\mapsto lmParent, Left\mapsto currentL\}}\\
+                \;\;\;\;\;\;\;\;SyncStart;\\
+                \;\;\;\;\;\;\;\;SyncStop;\\
+                \;\;\;\;\;\;\;\;\specline{current:freeable}\\
+                \;\;\;\;\;\;\;\;Free(current);\\
+                \;\;\;\;\;\;\;\;\specline{current:undef}\\
+            \;\;\;\;\;\;\} \\
+            \;\;\;\;\;\;else\{ \\
+                \;\;\;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Right\mapsto current\}}\\
+                \;\;\;\;\;\;\;\;\specline{current:rcuItr\; (Left|Right)^{k}.Right \; \{Right\mapsto lmParent, Left \mapsto currentL \}}\\
+                \;\;\;\;\;\;\;\;\specline{currentF:rcuFresh \; \{Right\mapsto lmParent, Left\mapsto currentL\}}\\
+                \;\;\;\;\;\;\;\;\text{//current's right child a right child of parent}\\
+                \;\;\;\;\;\;\;\;parent.Right = currentF; \\
+                \;\;\;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Right\mapsto currentF\} }\\
+                \;\;\;\;\;\;\;\;\specline{current:unlinked }\\
+                \;\;\;\;\;\;\;\;\specline{currentF:rcuItr \; (Left|Right)^{k}.Right \; \{Right\mapsto lmParent, Left\mapsto currentL\}}\\
+                \;\;\;\;\;\;\;\;SyncStart;\\
+                \;\;\;\;\;\;\;\;SyncStop;\\
+                \;\;\;\;\;\;\;\;\specline{current:freeable}\\
+                \;\;\;\;\;\;\;\;Free(current);\\
+                \;\;\;\;\;\;\;\;\specline{current:undef}\\
+          \;\;\;\;\;\;\}\\
+ \end{array}
+\]
+\[\small
+\begin{array}{@{}l@{}}
+        \;\;\;\;\;\;\specline{lmParent:rcuItr\; (Left|Right)^{k}.(Left|Right).Right.Left(Left)^{l} \; \{Left \mapsto leftmost\} }\\
+        \;\;\;\;\;\;\specline{leftmost:rcuItr\; (Left|Right)^{k}.(Left|Right).Right.Left(Left)^{l}.Left \; \{Left \mapsto null\} }\\
+        \;\;\;\;\;\;BinaryTreeNode\; leftmostR = leftmost.Right;\\
+        \;\;\;\;\;\;\specline{leftmost:rcuItr\; (Left|Right)^{k}.(Left|Right).Right.Left(Left)^{l}.Left \; \{Left \mapsto null, Right \mapsto leftmostR\} }\\
+        \;\;\;\;\;\;\specline{lmParent:rcuItr\; (Left|Right)^{k}.(Left|Right).Right.Left(Left)^{l} \; \{Left \mapsto leftmost\} }\\
+        \;\;\;\;\;\;\specline{leftmostR:rcuItr\; (Left|Right)^{k}.(Left|Right).Right.Left(Left)^{l}.Left.Right \; \{\} }\\
+        \;\;\;\;\;\;\text{// the parent's left subtree becomes the leftmost's right subtree}\\
+        \;\;\;\;\;\;lmParent.Left = leftmostR;\\
+        \;\;\;\;\;\;\specline{leftmost:unlinked  }\\
+        \;\;\;\;\;\;\specline{lmParent:rcuItr\; (Left|Right)^{k}.(Left|Right).Right.Left(Left)^{l} \; \{Left \mapsto leftmostR\} }\\
+        \;\;\;\;\;\;\specline{leftmostR:rcuItr\; (Left|Right)^{k}.(Left|Right).Right.Left(Left)^{l}.Left \; \{\} }\\
+        \;\;\;\;\;\;SyncStart;\\
+        \;\;\;\;\;\;SyncStop;\\
+		\;\;\;\;\;\;\specline{leftmost:freeable}\\
+        \;\;\;\;\;\;Free(leftmost);\\
+        \;\;\;\;\;\;\specline{leftmost:undef}\\
+        \;\;\;\;\}\\
+    \;\;\}\\
+     \;\;WriteEnd;\\
+\}
+
+\end{array}
+\]
+
+\begin{comment}
+\[\small
+\begin{array}{@{}l@{}}
+bool\;delete(\;\INT\;key)\;\{\\
+\;\;Node* \;prev = root; \\
+\;\;\specline{prev:rcuItr\; \epsilon \; \{ \} }\\
+\;\;Node* \;cur = prev; \\
+\;\;\specline{cur:rcuItr\; \epsilon \; \{ \}}\\
+\;\;while(cur \& cur \rightarrow key \neq key)\{ \\
+  \;\;\;\;\specline{prev:rcuItr \; \rho^{k}_{0} \; \{right|left \mapsto cur\}}\\
+  \;\;\;\;\specline{cur:rcuItr\; \rho^{k}_{0} \; \{ \}}\\
+  \;\;\;\;if(cur \rightarrow key < key)\{ \\
+  \;\;\;\;\;\;\specline{prev:\_ , cur:rcuItr\; \rho^{k}_{0} \; \{ \} }\\
+   \;\;\;\;\;\;prev = cur; \\
+   \;\;\;\;\;\;cur = prev \rightarrow right;\\
+   \;\;\;\;\;\;\specline{prev:rcuItr\; \rho^{k}_{0}\; \{right \mapsto cur\}}\\
+   \;\;\;\;\;\;\specline{cur:rcuItr\; \rho^{k+1}_{0}\; \{\}}\\
+  \;\;\;\;\}\\
+  \;\;\;\;else \;\; if(cur \rightarrow key > key)\{\\
+   \;\;\;\;\;\;\specline{prev:\_ , cur:rcuItr\; \rho^{k}_{0} \; \{ \} }\\
+   \;\;\;\;\;\;prev = cur;\\
+   \;\;\;\;\;\;cur = prev \rightarrow left;\\
+   \;\;\;\;\;\;\specline{prev:rcuItr\; \rho^{k}_{0} \; \{left \mapsto cur\}}\\
+   \;\;\;\;\;\;\specline{cur:rcuItr\; \rho^{k+1}_{0} \;\{\}}\\
+  \;\;\;\;\}\\
+  \;\;\;\;\specline{prev:rcuItr\; \rho^{k}_{0}\; \{right|left \mapsto cur\}}\\
+  \;\;\;\;\specline{cur:rcuItr\; \rho^{k+1}_{0} \;\{ \}}\\
+\;\;\}\\
+\end{array}
+\]
+\[\small
+\begin{array}{@{}l@{}}
+\;\;\specline{prev:rcuItr\; \rho^{k}_{0} \;\{right|left \mapsto cur\}}\\
+\;\;\specline{cur:rcuItr\; \rho^{k+1}_{0} \; \{ \}}\\
+\;\;if(cur \rightarrow left == NULL)\{ \\
+  \;\;\;\;if(prev\rightarrow left == cur)\{ \\
+    \;\;\;\;\;\;\specline{prev:rcuItr\; \rho^{k}_{0} \;\{left\mapsto cur\}}\\
+    \;\;\;\;\;\;\specline{cur:rcuItr\; \rho^{k+1}_{0}\; \{\}}\\
+    \;\;\;\;\;\;Node *cr = cur \rightarrow right; \\
+    \;\;\;\;\;\;\specline{cr:rcuItr\; \rho^{k+2}_{0} \; \{ \}}\\
+    \;\;\;\;\;\;\specline{cur:rcuItr\; \rho^{k+1}_{0} \; \{ right \mapsto cr\}}\\
+    \;\;\;\;\;\;prev \rightarrow left = cr; \\
+    \;\;\;\;\;\;\specline{prev:rcuItr\;\rho^{k}_{0} \; \{left \mapsto cr\}}\\
+    \;\;\;\;\;\;\specline{cr:rcuItr\;\rho'\; \{\}}\\
+    \;\;\;\;\;\;\specline{cur:unlinked}\\
+    \;\;\;\;\;\;SycnStart;\\
+    \;\;\;\;\;\;SyncStop;\\
+    \;\;\;\;\;\;Free(cur);\\
+    \;\;\;\;\;\;\specline{cur:undef}\\
+    \;\;\;\;\;\;return \;\; true;\\
+  \;\;\;\;\}\\
+  \;\;\;\;else\{\\
+    \;\;\;\;\;\;\specline{prev:rcuItr\; \rho^{k}_{0} \; \{right\mapsto cur\}}\\
+    \;\;\;\;\;\;\specline{cur:rcuItr\; \rho^{k+1}_{0} \;\{\}}\\
+    \;\;\;\;\;\;Node* cr = cur\rightarrow right;\\
+    \;\;\;\;\;\;\specline{cr:rcuItr\; \rho^{k+2}_{0}\; \{ \}}\\
+    \;\;\;\;\;\;\specline{cur:rcuItr\; \rho^{k+1}_{0}\; \{ right \mapsto cr\}}\\
+    \;\;\;\;\;\;prev \rightarrow right = cr;\\
+    \;\;\;\;\;\;\specline{prev:rcuItr\;\rho^{k}_{0} \; \{right \mapsto cr\}}\\
+    \;\;\;\;\;\;\specline{cr:rcuItr\;\rho' \; \{\}}\\
+    \;\;\;\;\;\;\specline{cur:unlinked}\\
+    \;\;\;\;\;\;SycnStart;\\
+    \;\;\;\;\;\;SyncStop;\\
+    \;\;\;\;\;\;Free(cur);\\
+    \;\;\;\;\;\;\specline{cur:undef}\\
+    \;\;\;\;\;\;return \;\; true;\\
+  \;\;\;\;\}\\
+  \end{array}
+\]
+  \[\small
+\begin{array}{@{}l@{}}
+\;\;else if(cur\rightarrow right == NULL)\{\\
+  \;\;\;\;if(prev \rightarrow left == cur)\{\\
+   \;\;\;\;\;\;\specline{prev:rcuItr\; \rho^{k}_{0}\; \{left\mapsto cur\}}\\
+    \;\;\;\;\;\;\specline{cur:rcuItr\; \rho^{k+1}_{0} \; \{\}}\\
+    \;\;\;\;\;\;Node* cl = cur \rightarrow left; \\
+    \;\;\;\;\;\;\specline{cl:rcuItr\; \rho^{k+2}_{0}\; \{ \}}\\
+    \;\;\;\;\;\;\specline{cur:rcuItr\; \rho^{k+1}_{0}\; \{ left \mapsto cl\}}\\
+    \;\;\;\;\;\;prev \rightarrow left = cl; \\
+    \;\;\;\;\;\;\specline{prev:rcuItr\; \rho^{k}_{0}\;  \{left \mapsto cl\}}\\
+    \;\;\;\;\;\;\;\specline{cl:rcuItr\; \rho' \; \{\}} \\
+    \;\;\;\;\;\;\specline{cur:unlinked} \\
+    \;\;\;\;\;\;SycnStart;\\
+    \;\;\;\;\;\;SyncStop;\\
+    \;\;\;\;\;\;Free(cur);\\
+    \;\;\;\;\;\;\specline{cur:undef}\\
+    \;\;\;\;\;\;return \;\; true;\\
+  \;\;\;\;\}\\
+  \;\;\;\;else\{\\
+    \;\;\;\;\;\;\specline{prev:rcuItr\; \rho^{k}_{0} \; \{right\mapsto cur\}}\\
+    \;\;\;\;\;\;\specline{cur:rcuItr\; \rho^{k+1}_{0}\; \{\}}\\
+    \;\;\;\;\;\;Node *cr = cur\rightarrow right;\\
+    \;\;\;\;\;\;\specline{cr:rcuItr\; \rho^{k+2}_{0} \; \{ \}}\\
+    \;\;\;\;\;\;\specline{cur:rcuItr\; \rho^{k+1}_{0} \; \{ right \mapsto cr\}}\\
+    \;\;\;\;\;\;prev \rightarrow right = cr;\\
+    \;\;\;\;\;\;\specline{prev:rcuItr\; \rho^{k}_{0}\; \{right \mapsto cr\}}\\
+    \;\;\;\;\;\;\specline{cr:rcuItr\; \rho'\; \{\}}\\
+    \;\;\;\;\;\;\specline{cur:unlinked}\\
+    \;\;\;\;\;\;SycnStart;\\
+    \;\;\;\;\;\;SyncStop;\\
+    \;\;\;\;\;\;Free(cur);\\
+    \;\;\;\;\;\;\specline{cur:undef}\\
+    \;\;\;\;\;\;return \;\; true;\\
+ \;\;\;\;\}\\
+\;\;\}\\
+\end{array}
+\]
+\[\small
+\begin{array}{@{}l@{}}
+\;\;else\{\\
+  \;\;\;\;\specline{prev:rcuItr\; \rho^{k}_{0} \; \{right|left \mapsto cur\}}\\
+  \;\;\;\;\specline{cur:rcuItr\; \rho^{k+1}_{0} \; \{ \}}\\
+  \mathsf{node*}\;curLoop = cur; \\
+  \;\;\;\;\specline{curLoop: rcuItr \; \rho^{k+1}_{0}\;  \{ \} }\\
+  \;\;\;\;\mathsf{node*}\;minright = cur\rightarrow right;\\
+  \;\;\;\;\mathsf{node*}\;minleft = cur\rightarrow left;\\
+  \;\;\;\;\mathsf{node*}\;nw = \NEW;\\
+  \;\;\;\;nw\rightarrow left= minleft;\\
+  \;\;\;\;nw\rightarrow right = minright;\\ 
+  \;\;\;\;\specline{\ldots}\\
+  \;\;\;\;\specline{minright:rcuItr\; \rho^{k+2}_{0}\; \{ \}}\\
+  \;\;\;\;\specline{nw:rcuFresh \; \{right \mapsto minright,\, left \mapsto minleft\}}\\
+  \;\;\;\;cur\rightarrow left= minleft;\\
+  \;\;\;\;cur\rightarrow right = minright;\\
+  \;\;\;\;\specline{cur:rcuItr\; \rho^{k+1}_{0} \; \{right \mapsto minright,\, left \mapsto minleft\}}\\
+  \;\;\;\;while(minright \rightarrow left)\{\\
+  \;\;\;\;\;\;\specline{curLoop:rcuItr\; \rho^{k+1}_{0}\rho^{l}_{1} \; \{left \mapsto minright\}}\\
+  \;\;\;\;\;\;\specline{minright:rcuItr\; \rho^{k+2}_{0}\rho^{l+1}_{1}\;  \{\}}\\ 
+  \;\;\;\;\;\;curLoop = minright \rightarrow left;\\
+  \;\;\;\;\;\;minright = curLoop \rightarrow left;\\
+  \;\;\;\;\;\;\specline{curLoop:rcuItr\; \rho^{k+2}_{0}\rho^{l+1}_{1}\; \{left \mapsto minright\}}\\
+  \;\;\;\;\;\;\specline{minright:rcuItr\; \rho^{k+2}_{0}\rho^{l+2}_{1}\; \{\}}\\
+ \;\;\;\;\}\\ 
+ \;\;\;\;nw\rightarrow key= minright\rightarrow key;\\
+ \;\;\;\;\specline{curLoop:rcuItr\; \rho^{k+2}_{0}\rho^{l}_{1}\; \{left \mapsto minright\}}\\
+ \;\;\;\;\specline{nw:rcuFresh \; \{right \mapsto minright, \, left \mapsto minleft\}}\\
+ \end{array}
+\]
+\[\small
+\begin{array}{@{}l@{}}
+ \;\;\;\;\mathsf{node}* \;minrightr \;=\; minright\rightarrow right; \\
+  \;\;\;\;\specline{minright:rcuItr\; \rho^{k+2}_{0}\rho^{l+1}_{1} \; \{ right \mapsto minrightr\}}\\
+ \;\;\;\;\specline{minrightr:rcuItr\; \rho^{k+2}_{0}\rho^{l+2}_{1}.right \;\{\}} \\
+ \;\;\;\;if(prev\rightarrow left == cur)\{\\
+ %remove the following if 
+  \;\;\;\;\;\;\;\;\specline{prev:rcuItr\; \rho^{k}_{0} \; \{left \mapsto cur\}}\\
+  \;\;\;\;\;\;\;\;\specline{cur:rcuItr\; \rho^{k+1}_{0} \; \{ right \mapsto minright, \, left \mapsto minleft\}}\\
+  \;\;\;\;\;\;\;\;prev \rightarrow left = nw;\\
+  \;\;\;\;\;\;\;\;\specline{prev:rcuItr\; \rho^{k}_{0} \; \{left \mapsto nw\}}\\
+  \;\;\;\;\;\;\;\;\specline{nw:rcuItr \; \rho^{k+1}_{0} \; \{right \mapsto minright, \, left \mapsto minleft\}}\\
+  \;\;\;\;\;\;\;\;\specline{cur:unlinked}\\
+  \;\;\;\;\;\;\;\;SyncStart;\\
+  \;\;\;\;\;\;\;\;SyncStop\\
+  \;\;\;\;\;\;\;\;Free(cur);\\
+  \;\;\;\;\;\;\;\;\specline{cur:undef} \\
+\;\;\;\;\}\\
+\;\;\;\;else\;\{\\
+  \;\;\;\;\;\;\;\;\specline{prev:rcuItr\; \rho^{k}_{0} \; \{left \mapsto cur\}}\\
+  \;\;\;\;\;\;\;\;\specline{cur:rcuItr\; \rho^{k+1}_{0} \; \{ right \mapsto minright, \, left \mapsto minleft\}}\\
+  \;\;\;\;\;\;\;\;\specline{curLoop:rcuItr\; \rho^{k+1}_{0}\rho^{l}_{1}\; \{left \mapsto minright\}}\\
+  \;\;\;\;\;\;\;\;prev \rightarrow left = nw;\\
+  \;\;\;\;\;\;\;\;\specline{prev:rcuItr\; \rho^{k}_{0} \; \{left \mapsto nw\}}\\
+  \;\;\;\;\;\;\;\;\specline{nw:rcuItr \; \rho^{k+1}_{0} \; \{right\mapsto minright\}}\\
+ \;\;\;\;\;\;\;\;\specline{cur:unlinked}\\
+  \;\;\;\;\;\;\;\;SyncStart;\\
+  \;\;\;\;\;\;\;\;SyncStop\\
+  \;\;\;\;\;\;\;\;Free(cur);\\
+  \;\;\;\;\;\;\;\;\specline{cur:undef} \\
+\;\;\;\;\}\\
+ \end{array}
+\]
+\[\small
+\begin{array}{@{}l@{}}
+ %remove the following if 
+  \;\;\;\;if(curLoop \rightarrow left = minright)\;\{\\
+  \;\;\;\;\;\;\specline{minright:rcuItr\; \rho^{k+2}_{0}\rho^{l+1}_{1} \; \{ right \mapsto minrightr\}}\\
+  \;\;\;\;\;\;\specline{minrightr:rcuItr\; \rho^{k+1}_{0}\rho^{l+2}_{1} \;\{\}} \\
+  \;\;\;\;\;\;\specline{curLoop:rcuItr\; \rho^{k+1}_{0}\rho^{l}_{1}\; \{left \mapsto minright\}}\\
+  \;\;\;\;\;\;curLoop \rightarrow left = minrightr;\\
+  \;\;\;\;\;\;\specline{minright:unlinked}\\
+  \;\;\;\;\;\;\specline{curLoop:rcuItr\; \rho^{k+1}_{0}\rho^{l}_{1}\; \{left \mapsto minrightr\}}\\
+  \;\;\;\;\;\;\specline{minrightr:rcuItr\; \rho^{k+1}_{0}\rho^{l+1}_{1} \;\{\}} \\
+  \;\;\;\;\;\;SyncStart;\\
+  \;\;\;\;\;\;SyncStop;\\
+  \;\;\;\;\;\;Free(minright);\\
+  \;\;\;\;else\;\{\\
+  \;\;\;\;\;\;\specline{nw:rcuItr \; \rho^{k+1}_{0} \; \{right \mapsto minright, \, left \mapsto minleft\}}\\
+  \;\;\;\;\;\;\specline{minright:rcuItr\; \rho^{k+2}_{0}\rho^{l+1}_{1} \; \{ right \mapsto minrightr\}}\\
+  \;\;\;\;\;\;\specline{minrightr:rcuItr\; \rho^{k+1}_{0}\rho^{l+2}_{1} \;\{\}} \\
+  \;\;\;\;\;\;nw \rightarrow right = minrightr;\\
+  \;\;\;\;\;\;\specline{nw:rcuItr \; \rho^{k+1}_{0} \; \{right\mapsto minrightr, \, left \mapsto minleft\}}\\
+  \;\;\;\;\;\;\;\;\specline{minright:unlinked}\\
+  \;\;\;\;\;\;\specline{minrightr:rcuItr\; \rho^{k+1}_{0}.right \;\{\}} \\
+  \;\;\;\;\;\;\textsf{This needs to be immediate free} ? \\
+  \;\;\;\;\;\;SyncStart;\\
+  \;\;\;\;\;\;SyncStop;\\
+  \;\;\;\;\;\;Free(minright);\\  
+ \;\;\;\;\}\\
+%%%%%%
+\;\;\}\\
+\end{array}
+\]
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%MANY OTHER VERSIONS THAT I TRIED TO PROVE%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Refactored RCU BST Deletion : Taken from MSDN .Net  }
+\[\srcsize
+\begin{array}{@{}l@{}}
+bool\;delete(\;\INT\;key)\;\{\\
+\;\;\mathsf{node}\;prev=\NULL; \\
+\;\;\specline{prev:\rcuitertype{root}{0}{\emptyset}{[]}}\\
+\;\;\mathsf{node}\;curr=root;\\
+\;\;\mathsf{int}\;ckey = curr\rightarrow key;\\
+\;\;\specline{curr:\rcuitertype{root}{0}{\emptyset}{[(key,0)\mapsto ckey]}}\\
+\;\;\proofoutstep
+{curr:\rcuitertype{root}{0}{\emptyset}{[(key,0)\mapsto ckey]}, prev:\NULL}
+{\srcsize\begin{array}{@{}l@{}}
+\mathsf{while}\;(curr\neq \texttt{NULL}\;\&\&\;ckey \neq key)\;\{\\
+\;\;\specline{curr:\rcuitertype{root}{0+\varepsilon+1 \leq \Delta}{\{ \ldots left|right\}_{\Delta}}{[(key,0+\varepsilon+1 \leq \Delta) \mapsto ckey, (key,0)\mapsto ckey]}}\\
+\;\;\specline{prev:\rcuitertype{root}{0+\varepsilon \leq \Delta}{\{ \ldots \}_{\Delta}}{[(left|right,0+\varepsilon\leq\Delta)\mapsto curr]}}\\
+\;\;\proofoutstep
+        {}
+{\srcsize\begin{array}{@{}l@{}}
+%%ckey > key starts
+\;\;\mathsf{if}\;(ckey > key)\;\{\\
+\;\;\;\;prev = curr;\\
+\;\;\;\;curr=prev\rightarrow left;\\
+\;\;\;\;\specline{curr:\rcuitertype{root}{0+\varepsilon+1\leq\Delta}{\{\ldots left\}_{\Delta}}{[(key,0+\varepsilon+1\leq\Delta)\mapsto ckey, (key,0)\mapsto ckey]}}\\
+\;\;\;\;\specline{prev:\rcuitertype{root}{0+\varepsilon\leq\Delta}{\{\ldots\}_{\Delta}}{[(left,0+\varepsilon\leq\Delta)\mapsto curr]}}\\
+%%curr is not found 
+\;\;\;\;\mathsf{if}\;(curr == \texttt{NULL})\;\{\\
+\;\;\;\;\;\;\mathsf{return}\;\mathsf{false};\\
+%%curr is found and key == ckey
+\;\;\;\;\}\textsf{else}\;\mathsf{if}\;(ckey == key)\;\{\\
+%% curr->right-> is  null starts 
+\;\;\;\;\mathsf{if}\;(curr\rightarrow right  == \texttt{NULL})\;\{\\
+\;\;\;\;\;\;\mathsf{node}\;cl = curr \rightarrow left;\\
+\;\;\;\;\;\;\specline{curr:\rcuitertype{root}{0+\varepsilon+1 \leq \Delta}{\{\ldots left\}_{\Delta}}{[(key,0+\varepsilon+1 \leq \Delta)\mapsto ckey, (key,0)\mapsto ckey, (left,0+\varepsilon+1 \leq \Delta) \mapsto cl]}}\\
+\;\;\;\;\;\;\specline{cl:\rcuitertype{root}{0+\varepsilon+1 +1\leq \Delta}{\{\ldots left.left\}_{\Delta}}{[]}}\\
+\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\varepsilon\leq\Delta}{\{\ldots\}_{\Delta}}{[(left,0+\varepsilon\leq\Delta)\mapsto curr]}}\\
+\;\;\;\;\;\;prev\rightarrow left = cl;\\
+\;\;\;\;\;\;\specline{curr:\unlinked}\\
+\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\varepsilon\leq\Delta}{\{\ldots\}_{\Delta}}{[(left,0+\varepsilon\leq\Delta)\mapsto cl]} }\\
+\;\;\;\;\;\;\specline{cl:\rcuitertype{root}{0+\varepsilon+1\leq\Delta}{\{\ldots left\}_{\Delta}}{[]}}\\
+\;\;\;\;\;\;\mathsf{asyncDelayedFree}(curr);\\
+\;\;\;\;\;\;\specline{curr:\udef}\\
+\;\;\;\;\;\;\mathsf{WriteEnd};\\
+\;\;\;\;\;\;\mathsf{return }\;\mathsf{true};\\
+%%curr->right-> is  null ends 
+\;\;\;\;\}\;\mathsf{else}\;\mathsf{if}\;(curr\rightarrow right \rightarrow left == \texttt{NULL})\;\{\\
+\;\;\;\;\;\;\mathsf{node}\;cr =  curr \rightarrow right;\\
+\;\;\;\;\;\;\specline{curr:\rcuitertype{root}{0+\varepsilon+1 \leq \Delta}{\{\ldots left\}_{\Delta}}{[(key,0+\varepsilon+1 \leq \Delta)\mapsto ckey, (key,0)\mapsto ckey, (left,0+\varepsilon+1 \leq \Delta) \mapsto cr]}}\\
+\;\;\;\;\;\;\specline{cr:\rcuitertype{root}{0+\varepsilon+1 \leq \Delta+1}{\{\ldots left.right\}_{\Delta}}{[]}}\\
+\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\varepsilon\leq\Delta}{\{\ldots\}_{\Delta}}{[(left,0+\varepsilon\leq\Delta)\mapsto curr]}}\\
+\;\;\;\;\;\;prev\rightarrow left = cr;\\
+\;\;\;\;\;\;\specline{curr:\unlinked}\\
+\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\varepsilon\leq\Delta}{\{\ldots\}_{\Delta}}{[(left,0+\varepsilon\leq\Delta)\mapsto cr]} }\\
+\;\;\;\;\;\;\specline{cr:\rcuitertype{root}{0+\varepsilon+1\leq\Delta}{\{\ldots left\}_{\Delta}}{[]}}\\
+\;\;\;\;\;\;\mathsf{asyncDelayedFree}(curr);\\
+\;\;\;\;\;\;\specline{curr:\udef}\\
+\;\;\;\;\;\;\mathsf{WriteEnd};\\
+\;\;\;\;\;\;\mathsf{return }\;\mathsf{true};\\
+\;\;\;\;\}\;\mathsf{else}\;\{\\
+%%curr->right->left is null
+\;\;\;\;\;\;\specline{curr:\rcuitertype{root}{0+\varepsilon+1\leq\Delta}{\{\ldots left\}_{\Delta}}{[(key,0+\varepsilon+1\leq\Delta)\mapsto ckey, (key,0)\mapsto ckey]}}\\
+\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\varepsilon\leq\Delta}{\{\ldots\}_{\Delta}}{[(left,0+\varepsilon\leq\Delta)\mapsto curr]}}\\
+\;\;\;\;\;\;\mathsf{node}\;minright=curr\rightarrow right;\\
+\;\;\;\;\;\;\specline{minright:\rcuitertype{root}{0+\varepsilon+1+1\leq\Delta}{\{\ldots left.right\}_{\Delta}}{[]}}\\
+\;\;\;\;\;\;\specline{curr:\rcuitertype{root}{0+\varepsilon+1\leq\Delta}{\{\ldots left\}_{\Delta}}{[(key,0+\varepsilon+1\leq\Delta)\mapsto ckey, (key,0)\mapsto ckey, (right,0+\varepsilon+1\leq\Delta) \mapsto minright]}}\\
+%%succ while
+\;\;\;\;\;\;\mathsf{while}\;(minright\rightarrow left\neq \texttt{NULL})\;\{\\
+\;\;\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\varepsilon+1 +1+ (\varepsilon_1\leq\Delta_1) \leq\Delta}{\{\ldots left.right.\{\ldots\}_{ \Delta_1}\}_{\Delta}} {[(left,0+\varepsilon\leq\Delta)\mapsto curr,(left,0+\varepsilon+1+1+(\varepsilon_1\leq\Delta_1)\leq\Delta)\mapsto minright]}}\\
+\;\;\;\;\;\;\;\;\specline{minright:\rcuitertype{root}{0+\varepsilon+1+1+(\varepsilon_1+1\leq\Delta_1)\leq\Delta}{\{\ldots left.right.\{\ldots left\}_{\Delta_1}\}_{\Delta}} {[]}}\\
+\;\;\;\;\;\;\;\;prev = minright;\\
+\;\;\;\;\;\;\;\;minright = prev\rightarrow left;\\
+\;\;\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\varepsilon+1 +1+ (\varepsilon_1\leq\Delta_1) \leq\Delta}{\{\ldots left.right.\{\ldots\}_{ \Delta_1}\}_{\Delta}} {[(left,0+\varepsilon\leq\Delta)\mapsto curr,(left,0+\varepsilon+1+1+(\varepsilon_1\leq\Delta_1)\leq\Delta)\mapsto minright]}}\\
+\;\;\;\;\;\;\;\;\specline{minright:\rcuitertype{root}{0+\varepsilon+1+1+(\varepsilon_1+1\leq\Delta_1)\leq\Delta}{\{\ldots left.right.\{\ldots left\}_{\Delta_1}\}_{\Delta}} {[]}}\\
+\;\;\;\;\;\;\}\\
+%%succ while ends
+\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\varepsilon+1+1+\Delta_1\leq\Delta}{\{\ldots left.right.\{\ldots\}_{ \Delta_1}\}_{\Delta}} {[(left,0+\varepsilon\leq\Delta)\mapsto curr,(left,0+\varepsilon+1+1+(\varepsilon_1\leq\Delta_1) \leq\Delta)\mapsto minright]}}\\
+\;\;\;\;\;\;\specline{minright:\rcuitertype{root}{0+\varepsilon+1+1+\Delta_1+1\leq \Delta}{\{\ldots left.right.\{\ldots left\}_{\Delta_1}\}_{\Delta}} {[]}}\\
+\;\;\;\;\;\;\mathsf{node}\;minrightr=minright\rightarrow right;\\
+\;\;\;\;\;\;\specline{minrightr:\rcuitertype{root}{0+\varepsilon+1+1+\Delta_1+1+1\leq \Delta}{\{\ldots left.right.\{\ldots left\}_{\Delta_1}.right\}_{\Delta}} {[]}}\\
+\;\;\;\;\;\;\specline{minright:\rcuitertype{root}{0+\varepsilon+1+1+\Delta_1+1\leq \Delta}{\{\ldots left.right.\{\ldots left\}_{\Delta_1}\}_{\Delta}} {[(right0+\varepsilon+1+1+\Delta_1+1\leq \Delta)\mapsto minrightr]}}\\
+\;\;\;\;\;\;\mathsf{if}\;(prev\rightarrow left == minright)\;\{\\
+\;\;\;\;\;\;\;\;prev\rightarrow left = minrightr;\\
+\;\;\;\;\;\;\;\;\specline{minright:\unlinked}\\
+\;\;\;\;\;\;\;\;\specline{prev:}\\
+\;\;\;\;\;\;\;\;\specline{minrightr:}\\
+\;\;\;\;\;\;\;\;\mathsf{asyncDelayedFree}(minright);\\
+\;\;\;\;\;\;\;\;\specline{minright:\udef}\\
+\;\;\;\;\;\;\;\;\mathsf{WriteEnd};\\
+\;\;\;\;\;\;\;\;\mathsf{return }\;\mathsf{true};\\
+%%
+\;\;\;\;\;\;\}\;\mathsf{else}\;\{\\
+\;\;\;\;\;\;\;\;curr\rightarrow right = minrightr;\\
+\;\;\;\;\;\;\;\;\specline{minright:\unlinked}\\
+\;\;\;\;\;\;\;\;\specline{curr:}\\
+\;\;\;\;\;\;\;\;\mathsf{asyncDelayedFree}(minright);\\
+\;\;\;\;\;\;\;\;\specline{minright:\udef}\\
+\;\;\;\;\;\;\;\;\mathsf{WriteEnd};\\
+\;\;\;\;\;\;\;\;\mathsf{return }\;\mathsf{true};\\
+\;\;\;\;\;\;\}\\
+%%ckey == key is not equal
+\;\;\;\;\}\;\mathsf{else}\; \SKIP;\\
+%% ckey > key ends
+\;\;\}\\
+\end{array} }
+{T-Branch}
+{}\\
+\;\;\proofoutstep
+{}
+{\srcsize\begin{array}{@{}l@{}}
+\;\;\mathsf{if}\;(ckey < key)\;\{\\
+\;\;\;\;prev = curr;\\
+\;\;\;\;curr=prev\rightarrow right;\\
+\;\;\;\;\specline{curr:\rcuitertype{root}{0+\varepsilon+1\leq\Delta}{\{\ldots right\}_{\Delta}}{[(key,0+\varepsilon+1\leq\Delta)\mapsto ckey, (key,0)\mapsto ckey]}}\\
+\;\;\;\;\specline{prev:\rcuitertype{root}{0+\varepsilon\leq\Delta}{\{\ldots\}_{\Delta}}{[(right,0+\varepsilon\leq\Delta)\mapsto curr]}}\\
+%%first spec of the first branch
+%% case 1 of inside first branch
+\;\;\;\;\mathsf{if}\;(curr == \texttt{NULL})\;\{\\
+\;\;\;\;\;\;\mathsf{return}\;\mathsf{false};\\
+\;\;\;\;\}\textsf{else}\;\mathsf{if}\;(ckey == key)\;\{\\
+%%
+\;\;\;\;\mathsf{if}\;(curr\rightarrow right  == \texttt{NULL})\;\{\\
+\;\;\;\;\;\;\mathsf{node}\;cl = curr \rightarrow left;\\
+\;\;\;\;\;\;\specline{curr:\rcuitertype{root}{0+\varepsilon+1 \leq \Delta}{\{\ldots right\}_{\Delta}}{[(key,0+\varepsilon+1 \leq \Delta)\mapsto ckey, (key,0)\mapsto ckey, (left,0+\varepsilon+1 \leq \Delta) \mapsto cl]}}\\
+\;\;\;\;\;\;\specline{cl:\rcuitertype{root}{0+\varepsilon+1+1 \leq \Delta}{\{\ldots right.left\}_{\Delta}}{[]}}\\
+\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\varepsilon\leq\Delta}{\{\ldots\}_{\Delta}}{[(right,0+\varepsilon\leq\Delta)\mapsto curr]}}\\
+\;\;\;\;\;\;prev\rightarrow  right = cl;\\
+\;\;\;\;\;\;\specline{curr:\unlinked}\\
+\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\varepsilon\leq\Delta}{\{\ldots\}_{\Delta}}{[(right,0+\varepsilon\leq\Delta)\mapsto cl]} }\\
+\;\;\;\;\;\;\specline{cl:\rcuitertype{root}{0+\varepsilon+1\leq\Delta}{\{\ldots right\}_{\Delta}}{[]}}\\
+\;\;\;\;\;\;\mathsf{asyncDelayedFree}(curr);\\
+\;\;\;\;\;\;\specline{curr:\udef}\\
+\;\;\;\;\;\;\mathsf{WriteEnd};\\
+\;\;\;\;\;\;\mathsf{return }\;\mathsf{true};\\
+%%
+\;\;\;\;\}\;\mathsf{else}\;\mathsf{if}\;(curr\rightarrow right \rightarrow left == \texttt{NULL})\;\{\\
+\;\;\;\;\;\;\mathsf{node}\;cr =  curr \rightarrow right;\\
+\;\;\;\;\;\;\specline{curr:\rcuitertype{root}{0+\varepsilon+1 \leq \Delta}{\{\ldots right\}_{\Delta}}{[(key,0+\varepsilon+1 \leq \Delta)\mapsto ckey, (key,0)\mapsto ckey, (right,0+\varepsilon+1 \leq \Delta) \mapsto cr]}}\\
+\;\;\;\;\;\;\specline{cr:\rcuitertype{root}{0+\varepsilon+1 +1\leq \Delta}{\{\ldots right.right\}_{\Delta}}{[]}}\\
+\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\varepsilon\leq\Delta}{\{\ldots\}_{\Delta}}{[(right,0+\varepsilon\leq\Delta)\mapsto curr]}}\\
+\;\;\;\;\;\;prev\rightarrow right = cr;\\
+\;\;\;\;\;\;\specline{curr:\unlinked}\\
+\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\varepsilon\leq\Delta}{\{\ldots\}_{\Delta}}{[(right,0+\varepsilon\leq\Delta)\mapsto cr]} }\\
+\;\;\;\;\;\;\specline{cr:\rcuitertype{root}{0+\varepsilon+1\leq\Delta}{\{\ldots right\}_{\Delta}}{[]}}\\
+\;\;\;\;\;\;\mathsf{asyncDelayedFree}(curr);\\
+\;\;\;\;\;\;\specline{curr:\udef}\\
+\;\;\;\;\;\;\mathsf{WriteEnd};\\
+\;\;\;\;\;\;\mathsf{return }\;\mathsf{true};\\
+\;\;\;\;\}\;\mathsf{else}\;\{\\
+%%
+\;\;\;\;\;\;\specline{curr:\rcuitertype{root}{0+\varepsilon+1\leq\Delta}{\{\ldots right\}_{\Delta}}{[(key,0+\varepsilon+1\leq\Delta)\mapsto ckey, (key,0)\mapsto ckey]}}\\
+\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\varepsilon\leq\Delta}{\{\ldots\}_{\Delta}}{[(right,0+\varepsilon\leq\Delta)\mapsto curr]}}\\
+\;\;\;\;\;\;\mathsf{node}\;minright=curr\rightarrow right;\\
+\;\;\;\;\;\;\specline{minright:\rcuitertype{root}{0+\varepsilon+1+1\leq\Delta}{\{\ldots right.right\}_{\Delta}}{[]}}\\
+\;\;\;\;\;\;\specline{curr:\rcuitertype{root}{0+\varepsilon+1\leq\Delta}{\{\ldots right\}_{\Delta}}{[(key,0+\varepsilon+1\leq\Delta)\mapsto ckey, (key,0)\mapsto ckey, (right,0+\varepsilon+1\leq\Delta) \mapsto minright]}}\\
+%%
+\;\;\;\;\;\;\mathsf{while}\;(minright\rightarrow left\neq \texttt{NULL})\;\{\\
+\;\;\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\varepsilon+1+1+(\varepsilon_1\leq\Delta_1)\leq\Delta}{\{\ldots right.right.\{\ldots\}_{ \Delta_1}\}_{\Delta}} {[(right,0+\varepsilon\leq\Delta)\mapsto curr,(left0+\varepsilon+1+1+(\varepsilon_1\leq\Delta_1)\leq\Delta)\mapsto minright]}}\\
+\;\;\;\;\;\;\;\;\specline{minright:\rcuitertype{root}{  0+\varepsilon+1+1+(\varepsilon_1\leq\Delta_1+1)\leq\Delta}{\{\ldots right.right.\{\ldots left\}_{\Delta_1}\}_{\Delta}} {[]}}\\
+\;\;\;\;\;\;\;\;prev = minright;\\
+\;\;\;\;\;\;\;\;minright = prev\rightarrow left;\\
+\;\;\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\varepsilon+1+1+(\varepsilon_1\leq\Delta_1)\leq\Delta}{\{\ldots right.right.\{\ldots\}_{ \Delta_1}\}_{\Delta}} {[(right,0+\varepsilon\leq\Delta)\mapsto curr,(left0+\varepsilon+1+1+(\varepsilon_1\leq\Delta_1)\leq\Delta)\mapsto minright]}}\\
+\;\;\;\;\;\;\;\;\specline{minright:\rcuitertype{root}{  0+\varepsilon+1+1+(\varepsilon_1+1\leq\Delta_1)\leq\Delta}{\{\ldots right.right.\{\ldots left\}_{\Delta_1}\}_{\Delta}} {[]}}\\
+\;\;\;\;\;\;\}\\
+%%
+\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\varepsilon+1+1+\Delta_1\leq\Delta}{\{\ldots right.right.\{\ldots\}_{ \Delta_1}\}_{\Delta}} {[(right,0+\varepsilon\leq\Delta)\mapsto curr,(left0+\varepsilon+1+1+(\varepsilon_1\leq\Delta_1)\leq\Delta)\mapsto minright]}}\\
+\;\;\;\;\;\;\specline{minright:\rcuitertype{root}{  0+\varepsilon+1+1+\Delta_1+1\leq\Delta}{\{\ldots right.right.\{\ldots left\}_{\Delta_1}\}_{\Delta}} {[]}}\\
+\;\;\;\;\;\;\mathsf{node}\;minrightr=minright\rightarrow right;\\
+\;\;\;\;\;\;\specline{minrightr:\rcuitertype{root}{ 0+\varepsilon+1+1+\Delta_1+1+1\leq\Delta}{\{\ldots right.right.\{\ldots left\}_{\Delta_1}.right\}_{\Delta}} {[]}}\\
+\;\;\;\;\;\;\specline{minright:\rcuitertype{root}{ 0+\varepsilon+1+1+\Delta_1+1\leq\Delta}{\{\ldots right.right.\{\ldots left\}_{\Delta_1}\}_{\Delta}} {[(right 0+\varepsilon+1+1+\Delta_1+1\leq\Delta)\mapsto minrightr]}}\\
+%%succ node delete branch starts
+\;\;\;\;\;\;\mathsf{if}\;(prev\rightarrow left == minright)\;\{\\
+\;\;\;\;\;\;\;\;prev\rightarrow left = minrightr;\\
+\;\;\;\;\;\;\;\;\specline{minright:\unlinked}\\
+\;\;\;\;\;\;\;\;\specline{prev:}\\
+\;\;\;\;\;\;\;\;\specline{minrightr:}\\
+\;\;\;\;\;\;\;\;\mathsf{asyncDelayedFree}(minright);\\
+\;\;\;\;\;\;\;\;\specline{minright:\udef}\\
+\;\;\;\;\;\;\;\;\mathsf{WriteEnd};\\
+\;\;\;\;\;\;\;\;\mathsf{return }\;\mathsf{true};\\
+\;\;\;\;\;\;\}\mathsf{else}\;\{\\
+\;\;\;\;\;\;\;\;curr\rightarrow right = minrightr;\\
+\;\;\;\;\;\;\;\;\specline{minright:\unlinked}\\
+\;\;\;\;\;\;\;\;\specline{curr:}\\
+\;\;\;\;\;\;\;\;\mathsf{asyncDelayedFree}(minright);\\
+\;\;\;\;\;\;\;\;\specline{minright:\udef}\\
+\;\;\;\;\;\;\;\;\mathsf{WriteEnd};\\
+\;\;\;\;\;\;\;\;\mathsf{return }\;\mathsf{true};\\
+\;\;\;\;\;\;\}\\
+%%ckey == key is not equal
+\;\;\;\;\}\;\mathsf{else}\; \SKIP ;\\
+\;\;\}\\
+\end{array} }
+{T-Branch}
+{}\\
+%%second branch ends
+\;\;\}\\
+\;\;ckey = curr\rightarrow key;\\
+\;\;\specline{curr:}\\
+\;\;\specline{prev:}\\
+\}\\
+\end{array} }
+{T-Loop}
+{}\\
+\}
+{}\\
+\end{array}
+\]
+\end{comment}
+\begin{comment}
+\section{Ideal RCU BST Deletion : Taken from MSDN .Net  }
+\[\srcsize
+\begin{array}{@{}l@{}}
+bool\;delete(\;\INT\;key)\;\{\\
+\;\;\mathsf{node}\;prev=\NULL; \\
+\;\;\specline{prev:\rcuitertype{root}{0}{\emptyset}{[]}}\\
+\;\;\mathsf{node}\;curr=root;\\
+\;\;\mathsf{int}\;ckey = curr\rightarrow key;\\
+\;\;\specline{curr:\rcuitertype{root}{0}{\emptyset}{[(key,0)\mapsto ckey]}}\\
+\;\;\proofoutstep
+{curr:\rcuitertype{root}{0}{\emptyset}{[(key,0)\mapsto ckey]}, prev:\NULL}
+{\scriptsize\begin{array}{@{}l@{}}
+\mathsf{while}\;(curr\neq \texttt{NULL}\;\&\&\;ckey \neq key)\;\{\\
+\;\;\specline{curr:\rcuitertype{root}{0+\varepsilon+1 \leq \Delta}{\{ \ldots left|right\}_{\Delta}}{[(key,0+\varepsilon+1 \leq \Delta) \mapsto ckey, (key,0)\mapsto ckey]}}\\
+\;\;\specline{prev:\rcuitertype{root}{0+\varepsilon \leq \Delta}{\{ \ldots \}_{\Delta}}{[(left|right,0+\varepsilon\leq\Delta)\mapsto curr]}}\\
+\;\;\mathsf{if}\;(ckey > key)\;\{\\
+\;\;\;\;prev = curr;\\
+\;\;\;\;curr=prev\rightarrow left;\\
+\;\;\;\;\specline{curr:\rcuitertype{root}{0+\varepsilon+1\leq\Delta}{\{\ldots left\}_{\Delta}}{[(key,0+\varepsilon+1\leq\Delta)\mapsto ckey, (key,0)\mapsto ckey]}}\\
+\;\;\;\;\specline{prev:\rcuitertype{root}{0+\varepsilon\leq\Delta}{\{\ldots\}_{\Delta}}{[(left,0+\varepsilon\leq\Delta)\mapsto curr]}}\\
+\;\;\}\;\mathsf{else}\;\mathsf{if}\;(ckey < key)\;\{\\
+\;\;\;\;prev = curr;\\
+\;\;\;\;curr=prev\rightarrow right;\\
+\;\;\;\;\specline{curr:\rcuitertype{root}{0+\varepsilon+1\leq\Delta}{\{\ldots right\}_{\Delta}}{[(key,0+\varepsilon+1\leq\Delta)\mapsto ckey, (key,0)\mapsto ckey]}}\\
+\;\;\;\;\specline{prev:\rcuitertype{root}{0+\varepsilon\leq\Delta}{\{\ldots\}_{\Delta}}{[(right,0+\varepsilon\leq\Delta)\mapsto curr]}}\\
+\;\;\}\\
+\;\;ckey = curr\rightarrow key;\\
+\;\;\specline{curr:\rcuitertype{root}{0+\varepsilon+1\leq\Delta}{\{\ldots left|right\}_{\Delta}}{[(key,0+\varepsilon+1\leq\Delta)\mapsto ckey, (key,0)\mapsto ckey]}}\\
+\;\;\specline{prev:\rcuitertype{root}{0+\varepsilon\leq\Delta}{\{\ldots\}_{\Delta}}{[(left|right,0+\varepsilon\leq\Delta)\mapsto curr]}}\\
+\}\\
+\end{array} }
+{T-Loop}
+{prev:\rcuitertype{root}{0+\Delta}{\{\ldots\}_{\Delta}}{[(left|right,0+\Delta)\mapsto curr]}}\\
+{curr:\rcuitertype{root}{0+\Delta+1}{\{\ldots left|right\}_{\Delta}}{[(key,0+\Delta+1)\mapsto ckey, (key,0)\mapsto ckey]}}\\
+\end{array}
+\]
+\[\srcsize
+\begin{array}{@{}l@{}}
+\;\;\mathsf{if}\;(curr == \texttt{NULL})\;\{\\
+\;\;\;\;\mathsf{return}\;\mathsf{false};\\
+\;\;\}\\
+\;\;\mathsf{if}\;(curr\rightarrow right  == \texttt{NULL})\;\{\\
+\;\;\;\;\mathsf{if}\;(prev == \texttt{NULL})\;\{\\
+\;\;\;\;\;\;curr=curr\rightarrow left;\\
+\;\;\;\;\}\;\mathsf{else}\;\{\\
+\;\;\;\;\;\;\mathsf{if}\;(prev\rightarrow left == curr)\;\{\\
+\;\;\;\;\;\;\;\;\mathsf{node}\;cr =  curr \rightarrow right;\\
+\;\;\;\;\;\;\;\;\mathsf{node}\;cl = curr \rightarrow left;\\
+\;\;\;\;\;\;\;\;\specline{curr:\rcuitertype{root}{0+\Delta+1}{\{\ldots left|right\}_{\Delta}}{[(key,0+\Delta+1)\mapsto ckey, (key,0)\mapsto ckey, (left,0+\Delta+1) \mapsto cl , (right,0+\Delta+1) \mapsto cr]}}\\
+\;\;\;\;\;\;\;\;\specline{cl:\rcuitertype{root}{0+\Delta+1+1}{\{\ldots left|right\}_{\Delta}.left}{[]}}\\
+\;\;\;\;\;\;\;\;\specline{cr:\rcuitertype{root}{0+\Delta+1+1}{\{\ldots left|right\}_{\Delta}.right}{[]}}\\
+\;\;\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\Delta}{\{\ldots\}_{\Delta}}{[(left,0+\Delta)\mapsto curr]}}\\
+\;\;\;\;\;\;\;\;prev\rightarrow left = cl;\\
+\;\;\;\;\;\;\;\;\specline{curr:\unlinked}\\
+\;\;\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\Delta}{\{\ldots\}_{\Delta}}{[(left,0+\Delta)\mapsto cl]} }\\
+\;\;\;\;\;\;\;\;\specline{cl:\rcuitertype{root}{0+\Delta+1}{\{\ldots\}_{\Delta}.left}{[]}}\\
+\;\;\;\;\;\;\;\;\mathsf{asyncDelayedFree}(curr);\\
+\;\;\;\;\;\;\;\;\specline{curr:\udef}\\
+\;\;\;\;\;\;\;\;\mathsf{WriteEnd};\\
+\;\;\;\;\;\;\;\;\mathsf{return }\;\mathsf{true};\\
+\;\;\;\;\;\;\}\;\mathsf{else}\;\{\\
+\;\;\;\;\;\;\;\;\specline{curr:\rcuitertype{root}{0+\Delta+1}{\{\ldots right\}_{\Delta}}{[(key,0+\Delta+1)\mapsto ckey, (key,0)\mapsto ckey, (left,0+\Delta+1) \mapsto cl , (right,0+\Delta+1) \mapsto cr]}}\\
+\;\;\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\Delta}{\{\ldots\}_{\Delta}}{[(right,0+\Delta)\mapsto curr]}}\\
+\;\;\;\;\;\;\;\;prev\rightarrow right = cr;\\
+\;\;\;\;\;\;\;\;\specline{curr:\unlinked}\\
+\;\;\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\Delta}{\{\ldots\}_{\Delta}}{[(right,0+\Delta)\mapsto cr]} }\\
+\;\;\;\;\;\;\;\;\specline{cr:\rcuitertype{root}{0+\Delta+1}{\{\ldots\}_{\Delta}.right}{[]}}\\
+\;\;\;\;\;\;\;\;\mathsf{asyncDelayedFree}(curr);\\
+\;\;\;\;\;\;\;\;\specline{curr:\udef}\\
+\;\;\;\;\;\;\;\;\mathsf{WriteEnd};\\
+\;\;\;\;\;\;\;\;\mathsf{return }\;\mathsf{true};\\
+\;\;\;\;\;\;\}\\
+\;\;\;\;\}\\
+\;\;\}\;\mathsf{else}\;\mathsf{if}\;(curr\rightarrow left == \texttt{NULL})\;\{\\
+\;\;\;\;\mathsf{if}\;(prev == \texttt{NULL})\;\{\\
+\;\;\;\;\;\;root=curr\rightarrow right;\\
+\;\;\;\;\}\;\mathsf{else}\;\{\\
+\;\;\;\;\;\;\mathsf{if}\;(prev\rightarrow left == curr)\;\{\\
+\;\;\;\;\;\;\;\;\mathsf{node}\;cr =  curr \rightarrow right;\\
+\;\;\;\;\;\;\;\;\mathsf{node}\;cl = curr \rightarrow left;\\
+\;\;\;\;\;\;\;\;\specline{curr:\rcuitertype{root}{0+\Delta+1}{\{\ldots left|right\}_{\Delta}}{[(key,0+\Delta+1)\mapsto ckey, (key,0)\mapsto ckey, (left,0+\Delta+1) \mapsto cl , (right,0+\Delta+1) \mapsto cr]}}\\
+\;\;\;\;\;\;\;\;\specline{cl:\rcuitertype{root}{0+\Delta+1+1}{\{\ldots left|right\}_{\Delta}.left}{[]}}\\
+\;\;\;\;\;\;\;\;\specline{cr:\rcuitertype{root}{0+\Delta+1+1}{\{\ldots left|right\}_{\Delta}.right}{[]}}\\
+\;\;\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\Delta}{\{\ldots\}_{\Delta}}{[(left,0+\Delta)\mapsto curr]}}\\
+\;\;\;\;\;\;\;\;prev\rightarrow left = cr;\\
+\;\;\;\;\;\;\;\;\specline{curr:\unlinked}\\
+\;\;\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\Delta}{\{\ldots\}_{\Delta}}{[(left,0+\Delta)\mapsto cr]} }\\
+\;\;\;\;\;\;\;\;\specline{cr:\rcuitertype{root}{0+\Delta+1}{\{\ldots\}_{\Delta}.left}{[]}}\\
+\;\;\;\;\;\;\;\;\mathsf{asyncDelayedFree}(curr);\\
+\;\;\;\;\;\;\;\;\specline{curr:\udef}\\
+\;\;\;\;\;\;\;\;\mathsf{WriteEnd};\\
+\;\;\;\;\;\;\;\;\mathsf{return }\;\mathsf{true};\\
+\;\;\;\;\;\;\}\;\mathsf{else}\;\{\\
+\;\;\;\;\;\;\;\;\specline{curr:\rcuitertype{root}{0+\Delta+1}{\{\ldots right\}_{\Delta}}{[(key,0+\Delta+1)\mapsto ckey, (key,0)\mapsto ckey, (left,0+\Delta+1) \mapsto cl , (right,0+\Delta+1) \mapsto cr]}}\\
+\;\;\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\Delta}{\{\ldots\}_{\Delta}}{[(right,0+\Delta)\mapsto curr]}}\\
+\;\;\;\;\;\;\;\;prev\rightarrow right = cr;\\
+\;\;\;\;\;\;\;\;\specline{curr:\unlinked}\\
+\;\;\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\Delta}{\{\ldots\}_{\Delta}}{[(right,0+\Delta)\mapsto cr]} }\\
+\;\;\;\;\;\;\;\;\specline{cl:\rcuitertype{root}{0+\Delta+1}{\{\ldots\}_{\Delta}.right}{[]}}\\
+\;\;\;\;\;\;\;\;\mathsf{asyncDelayedFree}(curr);\\
+\;\;\;\;\;\;\;\;\specline{curr:\udef}\\
+\;\;\;\;\;\;\;\;\mathsf{WriteEnd};\\
+\;\;\;\;\;\;\;\;\mathsf{return }\;\mathsf{true};\\
+\;\;\;\;\;\;\}\\
+\;\;\;\;\}\\
+\;\;\}\;\mathsf{else}\{\\
+\;\;\;\;\specline{prev:\rcuitertype{root}{0+\Delta}{\{\ldots\}_{\Delta}}{[(left|right,0+\Delta)\mapsto curr]}}\\
+\;\;\;\;\specline{curr:\rcuitertype{root}{0+\Delta+1}{\{\ldots left|right\}_{\Delta}}{[(key,0+\Delta+1)\mapsto ckey, (key,0)\mapsto ckey}}\\
+\;\;\;\;\mathsf{node}\;minright=curr\rightarrow right;\\
+\;\;\;\;\specline{minright:\rcuitertype{root}{0+\Delta+1+1}{\{\ldots left|right\}_{\Delta}.right}{[]}}\\
+\;\;\;\;\specline{curr:\rcuitertype{root}{0+\Delta+1}{\{\ldots left|right\}_{\Delta}}{[(key,0+\Delta+1)\mapsto ckey, (key,0)\mapsto ckey, (right,0+\Delta+1) \mapsto minright]}}\\
+\;\;\;\;\mathsf{while}\;(minright\rightarrow left\neq \texttt{NULL})\;\{\\
+\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\Delta+1+1+\Delta_1}{\{\ldots left|right\}_{\Delta}.right\{\ldots\}_{ \Delta_1}} {[(left|right,0+\Delta)\mapsto curr,(left,0+\Delta+1+1+\varepsilon_1\leq\Delta_1)\mapsto minright]}}\\
+\;\;\;\;\;\;\specline{minright:\rcuitertype{root}{0+\Delta+1+1+\Delta_1+1}{\{\ldots left|right\}_{\Delta}.right\{\ldots left\}_{\Delta_1}} {[]}}\\
+\;\;\;\;\;\;prev = minright;\\
+\;\;\;\;\;\;minright = prev\rightarrow left;\\
+\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\Delta+1+1+\varepsilon_1\leq\Delta_1}{\{\ldots left|right\}_{\Delta}.right\{\ldots\}_{ \Delta_1}} {[(left|right,0+\Delta)\mapsto curr,(left,0+\Delta+1+1+\varepsilon_1\leq\Delta_1)\mapsto minright]}}\\
+\;\;\;\;\;\;\specline{minright:\rcuitertype{root}{0+\Delta+1+1+\varepsilon+1\leq\Delta_1}{\{\ldots left|right\}_{\Delta}.right\{\ldots left\}_{\Delta_1}} {[]}}\\
+\;\;\;\;\}\\
+\;\;\;\;\specline{prev:\rcuitertype{root}{0+\Delta+1+1+\Delta_1}{\{\ldots left|right\}_{\Delta}.right\{\ldots\}_{ \Delta_1}} {[(left|right,0+\Delta)\mapsto curr,(left,0+\Delta+1+1+\Delta_1)\mapsto minright]}}\\
+\;\;\;\;\specline{minright:\rcuitertype{root}{0+\Delta+1+1+\Delta_1+1}{\{\ldots left|right\}_{\Delta}.right\{\ldots left\}_{\Delta_1}} {[]}}\\
+\;\;\;\;\mathsf{node}\;minrightr=minright\rightarrow right;\\
+\;\;\;\;\specline{minrightr:\rcuitertype{root}{0+\Delta+1+1+\Delta_1+1+1}{\{\ldots left|right\}_{\Delta}.right\{\ldots left\}_{\Delta_1}.right} {[]}}\\
+\;\;\;\;\specline{minright:\rcuitertype{root}{0+\Delta+1+1+\Delta_1+1}{\{\ldots left|right\}_{\Delta}.right\{\ldots left\}_{\Delta_1}} {[(right,0+\Delta+1+1+\Delta_1+1)\mapsto minrightr]}}\\
+\;\;\;\;\mathsf{if}\;(prev\rightarrow left == minright)\;\{\\
+\;\;\;\;\;\;prev\rightarrow left = minrightr;\\
+\;\;\;\;\;\;\specline{minright:\unlinked}\\
+\;\;\;\;\;\;\specline{prev:\rcuitertype{root}{0+\Delta+1+1+\Delta_1}{\{\ldots left|right\}_{\Delta}.right\{\ldots\}_{ \Delta_1}} {[(left|right,0+\Delta)\mapsto curr,(left,0+\Delta+1+1+\Delta_1)\mapsto minrightr]}}\\
+\;\;\;\;\;\;\specline{minrightr:\rcuitertype{root}{0+\Delta+1+1+\Delta_1+1}{\{\ldots left|right\}_{\Delta}.right\{\ldots\}_{\Delta_1}.left} {[]}}\\
+\;\;\;\;\;\;\mathsf{asyncDelayedFree}(minright);\\
+\;\;\;\;\;\;\specline{minright:\udef}\\
+\;\;\;\;\;\;\mathsf{WriteEnd};\\
+\;\;\;\;\;\;\mathsf{return }\;\mathsf{true};\\
+\;\;\;\;\}\mathsf{else}\;\{\\
+\;\;\;\;\;\;curr\rightarrow right = minrightr;\\
+\;\;\;\;\;\;\specline{minright:\unlinked}\\
+\;\;\;\;\;\;\specline{curr:\rcuitertype{root}{0+\Delta+1}{\{\ldots left|right\}_{\Delta}}{[(key,0+\Delta+1)\mapsto ckey, (key,0)\mapsto ckey,(right,0+\Delta+1) \mapsto minrightr]}}\\
+\;\;\;\;\;\;\mathsf{asyncDelayedFree}(minright);\\
+\;\;\;\;\;\;\specline{minright:\udef}\\
+\;\;\;\;\;\;\mathsf{WriteEnd};\\
+\;\;\;\;\;\;\mathsf{return }\;\mathsf{true};\\
+\;\;\;\;\}\\
+\}\\
+\end{array}
+\]
+\section{RCU BST Deletion}
+\[\scriptsize
+\begin{array}{@{}l@{}}
+\bool\;delete(\mathsf{Node}\;root,\;\INT\;key)\;\{\\
+\;\;\specline{root:\mathsf{rcuIterator},key:\INT}\\
+\;\;\mathsf{WriteBegin};\\
+\;\;\mathsf{node}\;prev = root;\\
+\;\;\specline{\ldots,prev:\rcuitertype{root}{0}{\emptyset}{\emptyset}}\\
+\;\;\mathsf{node}\;curr = prev\rightarrow left;\\
+\;\;\specline{root\ldots key\ldots,curr:\rcuitertype{root}{1}{\emptyset}{\emptyset},prev:\rcuitertype{root}{0}{???}{\{left\mapsto curr\}}}\\
+\;\;\mathsf{int}\;ckey = curr\rightarrow key;\\
+\;\;\specline{root\ldots key\ldots,curr:\rcuitertype{root}{1}{\emptyset}{\{key\mapsto ckey\}},prev:\rcuitertype{root}{0}{???}{\{left\mapsto curr\}}}\\
+\;\;\proofoutstep
+    {root\ldots key\ldots,curr:\rcuitertype{root}{1}{\emptyset}{\{key\mapsto ckey\}},prev:\rcuitertype{root}{0}{???}{\{left\mapsto curr\}}}
+    {\scriptsize\begin{array}{@{}l@{}}
+        \mathsf{while}\;(curr\neq \texttt{NULL}\;\&\&\;ckey \neq key)\;\{\\
+        \;\;\specline{ckey\ldots key\ldots curr:rcu\ldots[key\mapsto ckey], prev:rcu\ldots}\\
+        \;\;prev = curr;\\
+        \;\;\specline{ckey\ldots key\ldots curr:rcu\ldots[key\mapsto ckey], prev:rcu\ldots[key\mapsto ckey]}\\
+        \;\;\mathsf{if}\;(ckey > key)\;\{\\
+        \;\;\;\;curr=prev\rightarrow left;\\
+        \;\;\;\;direction=0;\\
+        \;\;\;\;ckey = curr\rightarrow key;\\
+        \;\;\;\;\specline{ckey\ldots key\ldots curr:rcu\ldots[key\mapsto ckey], prev:rcu\ldots[left\mapsto curr]}\\
+        \;\;\;\;\mathsf{if}\;(curr==\texttt{NULL})\;\{\;\mathsf{WriteEnd};\;\mathsf{return}\;\mathsf{false};\;\}\\
+        \;\;\;\;\mathsf{if}\;(ckey==key)\;\{\\
+        \;\;\;\;\;\;\mathsf{node}\;tmp0 = curr\rightarrow left;\\
+        \;\;\;\;\;\;\mathsf{node}\;tmp1 = curr\rightarrow right;\\
+        \;\;\;\;\;\;\specline{ckey\ldots key\ldots curr:rcu\ldots[key\mapsto ckey,left\mapsto tmp0,right\mapsto tmp1], prev:rcu\ldots[left\mapsto curr]}\\
+        \;\;\;\;\;\;\textrm{\todo{Missing requirements on fields of new value for unlink rule}}\\
+        \;\;\;\;\;\;\mathsf{if}\;(tmp0 ==\texttt{NULL})\;\{\;prev\rightarrow right = tmp1;\;\mathsf{WriteEnd};\;\mathsf{return}\;\mathsf{true};\;\}\\
+        \;\;\;\;\;\;\mathsf{if}\;(tmp1 ==\texttt{NULL})\;\{\;prev\rightarrow left = tmp0;\;\mathsf{WriteEnd};\;\mathsf{return}\;\mathsf{true};\;\}\\
+        \;\;\;\;\;\;\textrm{\emph{// non-trivial unlink to do outside the loop}}\\
+        \;\;\;\;\;\;\specline{ckey\ldots key\ldots curr:rcu\ldots[key\mapsto ckey], prev:rcu\ldots}\\
+        \;\;\;\;\}\\
+        \;\;\}\;\mathsf{else}\;\{\\
+        \;\;\;\;\mathsf{if}\;(ckey < key)\;\{\\
+        \;\;\;\;\;\;curr=prev\rightarrow right;\\
+        \;\;\;\;\;\;direction=1;\\
+        \;\;\;\;\;\;ckey = curr\rightarrow key;\\
+        \;\;\;\;\;\;\specline{ckey\ldots key\ldots curr:rcu\ldots[key\mapsto ckey], prev:rcu\ldots[right\mapsto curr]}\\
+        \;\;\;\;\;\;\mathsf{if}\;(curr==\texttt{NULL})\;\{\;\mathsf{WriteEnd};\;\mathsf{return}\;\mathsf{false};\;\}\\
+
+        \;\;\;\;\;\;\mathsf{if}\;(ckey==key)\;\{\\
+        \;\;\;\;\;\;\;\;\mathsf{node}\;tmp0 = curr\rightarrow left;\\
+        \;\;\;\;\;\;\;\;\mathsf{node}\;tmp1 = curr\rightarrow right;\\
+        \;\;\;\;\;\;\;\;\specline{ckey\ldots key\ldots curr:rcu\ldots[key\mapsto ckey,left\mapsto tmp0,right\mapsto tmp1], prev:rcu\ldots[left\mapsto curr]}\\
+        \;\;\;\;\;\;\;\;\textrm{\todo{Missing requirements on fields of new value for unlink rule}}\\
+        \;\;\;\;\;\;\;\;\mathsf{if}\;(tmp0 ==\texttt{NULL})\;\{\;prev\rightarrow right = tmp1;\;\mathsf{WriteEnd};\;\mathsf{return}\;\mathsf{true};\;\}\\
+        \;\;\;\;\;\;\;\;\mathsf{if}\;(tmp1 ==\texttt{NULL})\;\{\;prev\rightarrow left = tmp0;\;\mathsf{WriteEnd};\;\mathsf{return}\;\mathsf{true};\;\}\\
+        \;\;\;\;\;\;\;\;\textrm{\emph{// non-trivial unlink to do outside the loop}}\\
+        \;\;\;\;\;\;\;\;\specline{ckey\ldots key\ldots curr:rcu\ldots[key\mapsto ckey], prev:rcu\ldots}\\
+        \;\;\;\;\;\;\}\\
+        \;\;\;\;\}\\
+        \;\;\;\;\specline{ckey\ldots key\ldots curr:rcu\ldots[key\mapsto ckey], prev:rcu\ldots}\\
+        \textrm{\todo{That makes at least curr's type loop-invariant.}}\\
+        \;\;\}\\
+        \;\;\specline{ckey\ldots key\ldots curr:rcu\ldots[key\mapsto ckey], prev:rcu\ldots}\\
+        \}
+    \end{array} }
+    {T-Loop}
+    {prev:?, curr:?}\\
+\end{array}
+\]
+\[\small
+\begin{array}{@{}l@{}}
+\mathsf{node}\;prevSucc = curr;\\
+\mathsf{node}\;succ = prevSucc\rightarrow right;\\
+\mathsf{node}\;next = succ\rightarrow left;\\
+\specline{\ldots,prevSucc:\rcuitertype{root}{k}{?}{[right\mapsto succ],succ:\rcuitertype{rook}{k?}{?}{[left\mapsto next]}}}\\
+\mathsf{while}\;(next\neq\texttt{NULL})\;\{\\
+\;\;\specline{\ldots,prevSucc:\rcuitertype{root}{k?}{?}{[right\mapsto succ],succ:\rcuitertype{rook}{k?}{?}{[left\mapsto next]}}}\\
+\;\;prevSucc = succ;\\
+\;\;\specline{\ldots,prevSucc:\rcuitertype{root}{k?}{?}{[left\mapsto next],succ:\rcuitertype{rook}{k?}{?}{[left\mapsto next]}}}\\
+\;\;\specline{\ldots,prevSucc:\rcuitertype{root}{k?}{?}{[left\mapsto next],succ:\rcuitertype{rook}{k?}{?}{[]}}}\\
+\;\;succ = prevSucc\rightarrow left;\\
+\;\;\specline{\ldots,prevSucc:\rcuitertype{root}{k?}{?}{[left\mapsto succ],succ:\rcuitertype{rook}{k?}{?}{[]}}}\\
+\;\;next = succ\rightarrow left;\\
+\;\;\specline{\ldots,prevSucc:\rcuitertype{root}{k?}{?}{[left\mapsto succ],succ:\rcuitertype{rook}{k?}{?}{[left\mapsto next]}}}\\
+\;\;\textrm{\todo{ERROR: prevSucc starts w/ right as succ, finishes loop body w/ left as succ}}\\
+\;\;\textrm{\todo{Do we need the field info for prevSucc? Looks like we need it for unlinking later}}\\
+\}\\
+\specline{\ldots,prevSucc:\rcuitertype{root}{k?}{?}{[left\mapsto succ],succ:\rcuitertype{rook}{k?}{?}{[left\mapsto next]}}}\\
+\mathsf{node}\;newN = \NEW;\\
+\mathsf{node}\;k = succ\rightarrow key;\\
+\mathsf{node}\;l = curr\rightarrow left;\\
+\mathsf{node}\;r = curr\rightarrow right;\\
+\specline{\ldots,prevSucc:\rcuitertype{root}{k?}{?}{[left\mapsto succ],succ:\rcuitertype{rook}{k?}{?}{[key\mapsto k]}},curr:\ldots[left\mapsto l,right\mapsto r]}\\
+newN\rightarrow key = k;\\
+newN\rightarrow left = l;\\
+newN\rightarrow right = r;\\
+\specline{\ldots,prevSucc+succ+curr\langle again\rangle,newN:fresh...[left\mapsto l,right\mapsto r,key\mapsto k]}\\
+\textit{// unlink curr}\\
+\textrm{\todo{This unlinks curr, so we need to know prev.X==curr (don't yet)}}\\
+\textrm{\todo{and that child ptrs are preserved (which we do know)}}\\
+\mathsf{if}\;(direction==0)\;prev\rightarrow left = newN;\\
+\mathsf{else}\;prev\rightarrow right = newN;\\
+\mathsf{node}\;tmp = succ\rightarrow right;\\
+\textit{// unlink old succ }\\
+\mathsf{if}\;(prevSucc == curr)\;\{\\
+\textrm{\todo{curr.right.left==NULL, succ==curr.right, newN.right==curr.right}}\\
+\textrm{\todo{here newN is linked in, and we know newN.right=r, and curr.right=r, but curr/prevSucc is unlinked}}\\
+\textrm{\todo{types give: prev.X=newN (ideally), newN.right=r, succ.right=tmp}}\\
+\textrm{\todo{also know manually r.left==null, succ=r(!)}}\\
+\textrm{\todo{so newN.right=r, succ==r, succ.right = tmp.}}
+\textrm{\todo{reading tmp from r in this branch would unlink r instead of succ, then hoist free?}}
+\;\;\assertion{}\\
+\;\;newN\rightarrow right = tmp;\\
+\}\;\mathsf{else}\;\{\\
+\textrm{\todo{here types give prevSucc.left=succ, succ.right=tmp, succ.left=next}}\\
+\textrm{\todo{manually we know succ.left=null since next=null}}\\
+\;\;prevSucc\rightarrow left = tmp;\\
+\}\\
+\mathsf{asyncDelayedFree}(curr);\\
+\mathsf{asyncDelayedFree}(succ);\\
+\mathsf{WriteEnd};\\
+\mathsf{return}\;\mathsf{true};\\
+\end{array}
+\]
+
+\section{RCU BST Deletion -- Ismail's notes}
+\[\tiny
+\begin{array}{@{}l@{}}
+\bool\;delete(\mathsf{Node}\;root,\;\INT\;key)\;\{\\
+\;\;\specline{root:\mathsf{rcuIterator},key:\INT}\\
+\;\;\mathsf{WriteBegin};\\
+\;\;\mathsf{node}\;prev = root;\\
+\;\;\specline{prev:\rcuitertype{root}{0}{\emptyset}{[]}}\\
+\;\;\mathsf{node}\;curr = prev\rightarrow left;\\
+\;\;\specline{curr:\rcuitertype{root}{1}{left}{[]},prev:\rcuitertype{root}{0}{\emptyset}{[(left,0) \mapsto curr]}}\\
+\;\;\mathsf{int}\;ckey = curr\rightarrow key;\\
+\;\;\specline{curr:\rcuitertype{root}{1}{left}{[(key,1)\mapsto ckey]},prev:\rcuitertype{root}{0}{\emptyset}{[(left,0)\mapsto curr]}}\\
+\;\;\proofoutstep
+    {curr:\rcuitertype{root}{1}{left}{[(key,1)\mapsto ckey]},prev:\rcuitertype{root}{0}{\emptyset}{[(left,0)\mapsto curr]}}
+    {\tiny\begin{array}{@{}l@{}}
+        \mathsf{while}\;(curr\neq \texttt{NULL}\;\&\&\;ckey \neq key)\;\{\\
+        \;\;\specline{curr:\rcuitertype{root}{\epsilon_{l1}+1}{left\{\ldots\}_{\epsilon_{l1}}}{[(key,\epsilon_{l1})\mapsto ckey]}, prev:\rcuitertype{root}{\epsilon_{l1}}{\{\ldots\}_{\epsilon_{l1}}}{[(left,0)\mapsto curr,(left,\epsilon_{l1})\mapsto curr]}}\\
+        \;\;prev = curr;\\
+        \;\;\specline{curr:\rcuitertype{root}{\epsilon_{l1}+1}{left\{\ldots\}_{\epsilon_{l1}}}{[(key,\epsilon_{l1})\mapsto ckey]}}\\
+        \;\;\specline{prev:\rcuitertype{root}{\epsilon_{l1}+1}{\{left\ldots_{\epsilon_{l1}}\}_{\epsilon_{l1}+1}}{[(key,\epsilon_{l1})\mapsto ckey]} }\\
+        \;\;\mathsf{if}\;(ckey > key)\;\{\\
+        \;\;\;\;curr=prev\rightarrow left;\\ 
+        \;\;\;\;direction=0;\\
+        \;\;\;\;ckey = curr\rightarrow key;\\
+        \;\;\;\;\specline{curr:\rcuitertype{root}{\epsilon_{l1}+2}{left\{left\ldots_{\epsilon_{l1}}\}_{\epsilon_{l1}+1}}{[]}}\\
+        \;\;\;\;\specline{prev:\rcuitertype{root}{\epsilon_{l1}+1}{\{left\ldots_{\epsilon_{l1}}\}_{\epsilon_{l1}+1}}{[(key,\epsilon_{l1}+1)\mapsto ckey,(left,\epsilon_{l1}+1)\mapsto curr,(left,0)\mapsto curr]}}\\
+        \;\;\;\;\mathsf{if}\;(curr==\texttt{NULL})\;\{\;\mathsf{WriteEnd};\;\mathsf{return}\;\mathsf{false};\;\}\\
+        \;\;\;\;\mathsf{if}\;(ckey==key)\;\{\\
+        \;\;\;\;\;\;\mathsf{node}\;tmp0 = curr\rightarrow left;\\
+        \;\;\;\;\;\;\mathsf{node}\;tmp1 = curr\rightarrow right;\\
+        \;\;\;\;\;\;\specline{ curr:\rcuitertype{root}{\epsilon_{l1}+2}{left\{left\ldots_{\epsilon_{l1}}\}_{\epsilon_{l1}+1}}{[(key \mapsto ckey),(left,\epsilon_{l1}+2)\mapsto tmp0,(right,\epsilon_{l1}+2)\mapsto tmp1]}}\\
+        \;\;\;\;\;\;\specline{prev:\rcuitertype{root}{\epsilon_{l1}+1}{\{left\ldots_{\epsilon_{l1}}\}_{\epsilon_{l1}+1}}{[(key,\epsilon_{l1}+1)\mapsto ckey,(left,\epsilon_{l1}+1)\mapsto curr,(left,0)\mapsto curr]}}\\
+        \;\;\;\;\;\;\mathsf{if}\;(tmp0 ==\texttt{NULL})\;\{\\
+        \;\;\;\;\;\;\;\;prev\rightarrow right = tmp1;\\
+        \;\;\;\;\;\;\;\;\specline{curr:\unlinked,prev:\rcuitertype{root}{\epsilon_{l1}+1}{\{left\ldots_{\epsilon_{l1}}\}_{\epsilon_{l1}+1}}{[(key,\epsilon_{l1}+1)\mapsto ckey,(right,\epsilon_{l1}+1)\mapsto tmp1,(left,0)\mapsto curr]}}\\ 
+        \;\;\;\;\;\;\;\;\mathsf{WriteEnd};\;\mathsf{return}\;\mathsf{true};\;\}\\
+        \;\;\;\;\;\;\mathsf{if}\;(tmp1 ==\texttt{NULL})\;\{\\
+        \;\;\;\;\;\;\;\;prev\rightarrow left = tmp0;\\
+        \;\;\;\;\;\;\;\;\specline{curr:\unlinked,prev:\rcuitertype{root}{\epsilon_{l1}+1}{\{left\ldots_{\epsilon_{l1}}\}_{\epsilon_{l1}+1}}{[(key,\epsilon_{l1}+1)\mapsto ckey,(left,\epsilon_{l1}+1)\mapsto tmp0,(left,0)\mapsto curr]}}\\
+        \;\;\;\;\;\;\;\;\mathsf{WriteEnd};\;\mathsf{return}\;\mathsf{true};\;\}\\
+        \;\;\;\;\;\;\specline{}\\
+        \;\;\;\;\}\\
+        \;\;\}\;\mathsf{else}\;\{\\
+\;\;\mathsf{if}\;(ckey < key)\;\{\\
+        \;\;\;\;curr=prev\rightarrow right;\\ 
+        \;\;\;\;direction=1;\\
+        \;\;\;\;ckey = curr\rightarrow key;\\
+        \;\;\;\;\specline{curr:\rcuitertype{root}{\epsilon_{l1}+2}{left\{right\ldots_{\epsilon_{l1}}\}_{\epsilon_{l1}+1}}{[]}}\\
+        \;\;\;\;\specline{prev:\rcuitertype{root}{\epsilon_{l1}+1}{\{left\ldots_{\epsilon_{l1}}\}_{\epsilon_{l1}+1}}{[(key,\epsilon_{l1}+1)\mapsto ckey,(right,\epsilon_{l1}+1)\mapsto curr,(left,0)\mapsto curr]}}\\
+        \;\;\;\;\mathsf{if}\;(curr==\texttt{NULL})\;\{\;\mathsf{WriteEnd};\;\mathsf{return}\;\mathsf{false};\;\}\\
+        \;\;\;\;\mathsf{if}\;(ckey==key)\;\{\\
+        \;\;\;\;\;\;\mathsf{node}\;tmp0 = curr\rightarrow left;\\
+        \;\;\;\;\;\;\mathsf{node}\;tmp1 = curr\rightarrow right;\\
+        \;\;\;\;\;\;\specline{ curr:\rcuitertype{root}{\epsilon_{l1}+2}{left\{right\ldots_{\epsilon_{l1}}\}_{\epsilon_{l1}+1}}{[(key \mapsto ckey),(left,\epsilon_{l1}+2)\mapsto tmp0,(right,\epsilon_{l1}+2)\mapsto tmp1]}}\\
+        \;\;\;\;\;\;\specline{prev:\rcuitertype{root}{\epsilon_{l1}+1}{\{left\ldots_{\epsilon_{l1}}\}_{\epsilon_{l1}+1}}{[(key,\epsilon_{l1}+1)\mapsto ckey,(right,\epsilon_{l1}+1)\mapsto curr,(left,0)\mapsto curr]}}\\
+        \;\;\;\;\;\;\mathsf{if}\;(tmp0 ==\texttt{NULL})\;\{\\
+        \;\;\;\;\;\;\;\;prev\rightarrow right = tmp1;\\
+        \;\;\;\;\;\;\;\;\specline{curr:\unlinked,prev:\rcuitertype{root}{\epsilon_{l1}+1}{\{left\ldots_{\epsilon_{l1}}\}_{\epsilon_{l1}+1}}{[(key,\epsilon_{l1}+1)\mapsto ckey,(right,\epsilon_{l1}+1)\mapsto tmp1,(left,0)\mapsto curr]}}\\ 
+        \;\;\;\;\;\;\;\;\mathsf{WriteEnd};\;\mathsf{return}\;\mathsf{true};\;\}\\
+        \;\;\;\;\;\;\mathsf{if}\;(tmp1 ==\texttt{NULL})\;\{\\
+        \;\;\;\;\;\;\;\;prev\rightarrow left = tmp0;\\
+        \;\;\;\;\;\;\;\;\specline{curr:\unlinked,prev:\rcuitertype{root}{\epsilon_{l1}+1}{\{left\ldots_{\epsilon_{l1}}\}_{\epsilon_{l1}+1}}{[(key,\epsilon_{l1}+1)\mapsto ckey,(left,\epsilon_{l1}+1)\mapsto tmp0,(left,0)\mapsto curr]}}\\
+        \;\;\;\;\;\;\;\;\mathsf{WriteEnd};\;\mathsf{return}\;\mathsf{true};\;\}\\
+        \;\;\;\;\;\;\textrm{\emph{// non-trivial unlink to do outside the loop}}\\
+        \;\;\;\;\;\;\specline{}\\
+        \;\;\;\;\}\\
+        \;\;\}\\
+        \;\;\specline{}\\
+        \}
+    \end{array} }
+    {T-Loop}
+    {prev:\rcuitertype{root}{\Delta_{l1}}{\{\ldots\}_{\Delta_{l1}}}{[(left,0) \mapsto curr, (left,\Delta_{l1}) \mapsto curr]}, curr:\rcuitertype{root}{\epsilon_{l1}+1}{left\{\ldots\}_{\Delta_{l1}}}{[]}}\\
+\end{array}
+\]
+\[\tiny
+\begin{array}{@{}l@{}}
+\mathsf{node}\;prevSucc = curr;\\
+\mathsf{node}\;succ = prevSucc\rightarrow right;\\
+\mathsf{node}\;next = succ\rightarrow left;\\
+\specline{prevSucc:\rcuitertype{root}{\Delta_{l1}+1}{left\{\ldots\}_{\Delta_{l1}}}{[(right,\Delta_{l1}+1) \mapsto succ]}}\\
+\specline{succ:\rcuitertype{root}{\Delta_{l1}+2}{left \{\ldots\}_{\Delta_{l1}} right}{[(left,\Delta_{l1}+2)\mapsto next]}}\\
+\specline{next:\rcuitertype{root}{\Delta_{l1}+3}{left \{\ldots\}_{\Delta_{l1}} rightleft}{[]}}\\
+\mathsf{while}\;(next\neq\texttt{NULL})\;\{\\
+\;\;\specline{prevSucc:\rcuitertype{root}{\Delta_{l1}+_{l2}+1}{left\{\ldots\}_{\Delta_{l1}}\{\ldots\}_{\epsilon_{l2}} }{[(right,\Delta_{l1}+1)\mapsto succ, (left,\Delta_{l1}+\epsilon_{l2}+1) \mapsto succ]}}\\
+  \;\;\specline{succ:\rcuitertype{root}{\Delta_{l1}+\epsilon_{l2}+2}{left \{\ldots\}_{\Delta_{l1}}right\{\ldots\}_{\epsilon_{l2}}}{[(left,\Delta_{l1}+2) \mapsto next, (left,\Delta_{l1} + \epsilon_{l2} + 2) \mapsto next]}} \\
+  \;\;\specline{next:\rcuitertype{root}{\Delta_{l1}+\epsilon_{l2}+3}{left \{\ldots\}_{\Delta_{l1}} right left \{\ldots\}_{\epsilon_{l2}} }{[]}} \\
+  \;\;prevSucc = succ;\\
+  \;\;\specline{prevSucc:\rcuitertype{root}{\Delta_{l1}+\epsilon_{l2}+2}{left \{\ldots\}_{\Delta_{l1}}\{right\ldots_{\epsilon_{l2}}\}_{\epsilon_{l2}+1}}{[(right,\Delta_{l1}+1) \mapsto succ,(left,\Delta_{l1}+2) \mapsto next, (left,\Delta_{l1} + \epsilon_{l2} + 2) \mapsto next]}} \\  
+  \;\;\specline{succ:\rcuitertype{root}{\Delta_{l1}+\epsilon_{l2}+2}{left \{\ldots\}_{\Delta_{l1}}right\{\ldots\}_{\epsilon_{l2}}}{[(left,\Delta_{l1}+2) \mapsto next, (left,\Delta_{l1} + \epsilon_{l2} + 2) \mapsto next]}} \\
+\;\;succ = prevSucc\rightarrow left;\\
+\;\;\specline{prevSucc:\rcuitertype{root}{\Delta_{l1}+\epsilon_{l2}+2}{left\{\ldots\}_{\Delta_{l1}}\{right\ldots_{\epsilon_{l2}}\}_{\epsilon_{l2}+1}}{[(right,\Delta_{l1}+1) \mapsto succ,(left,\Delta_{l1}+\epsilon_{l2}+2)\mapsto succ]}}\\
+\;\;\specline{succ:\rcuitertype{root}{\Delta_{l1}+\epsilon_{l2}+3}{left\{\ldots\}_{\Delta_{l1}}right\{left\ldots_{\epsilon_{l2}}\}_{\epsilon_{l2}+1}}{[(left,\Delta_{l1}+2) \mapsto next, (left,\Delta_{l1} + \epsilon_{l2} + 2) \mapsto next]}}\\
+\;\;next = succ\rightarrow left;\\
+\;\;\specline{succ:\rcuitertype{root}{\Delta_{l1}+\epsilon_{l2}+3}{left\{ \ldots \}_{\Delta_{l1}} right \{left\ldots_{\epsilon_{l2}}\}_{\epsilon_{l2}+1}}{[(left,\Delta_{l1}+2) \mapsto next, (left,\Delta_{l1} + \epsilon_{l2} + 2) \mapsto next,(left,\Delta_{l1}+\epsilon_{l2}+3)\mapsto next]}}\\
+\;\;\specline{prevSucc:\rcuitertype{root}{\Delta_{l1}+\epsilon_{l2}+2}{left\{\ldots\}_{\Delta_{l1}}\{right\ldots_{\epsilon_{l2}}}\}_{\epsilon_{l2}+1}{[(right,\Delta_{l1}+1) \mapsto succ,(left,\Delta_{l1}+\epsilon_{l2}+2)\mapsto succ,(left,\Delta_{l1}+\epsilon_{l2}+2)\mapsto succ]}}\\
+\;\;\specline{next:\rcuitertype{root}{\Delta_{l1}+\epsilon_{l2}+4}{left\{\ldots\}_{\Delta_{l1}}rightleft\{left\ldots_{\epsilon_{l2}}\}_{\epsilon_{l2}+1}\}}{[]}}\\
+\}\\
+\specline{succ:\rcuitertype{root}{\Delta_{l1}+\Delta_{l2}+2}{left\{\ldots\}_{\Delta_{l1}} right \{\ldots\}_{\Delta_{l2}}}{[(left,\Delta_{l1}+2) \mapsto next, (left,\Delta_{l1} + \Delta_{l2} + 2) \mapsto next]}}\\
+\specline{prevSucc:\rcuitertype{root}{\Delta_{l1}+\Delta_{l2}+1}{left\{\ldots\}_{\Delta_{l1}}\{\ldots\}_{\Delta_{l2}}}{[(right,\Delta_{l1}+1) \mapsto succ,(left,\Delta_{l1}+\Delta_{l2}+1)\mapsto succ]}}\\
+\specline{next:\rcuitertype{root}{\Delta_{l1}+\Delta_{l2}+3}{left\{\ldots\}_{\Delta_{l1}}rightleft\{\ldots\}_{\Delta_{l2}}\}}{[]}}\\
+\mathsf{node}\;newN = \NEW;\\
+\mathsf{node}\;k = succ\rightarrow key;\\
+\mathsf{node}\;l = curr\rightarrow left;\\
+\mathsf{node}\;r = curr\rightarrow right;\\
+
+newN\rightarrow key = k;\\
+newN\rightarrow left = l;\\
+newN\rightarrow right = r;\\
+\specline{newN:\rcunextfresh{\{left\mapsto l,right\mapsto r,key\mapsto k\}}}\\
+\textit{// unlink curr}\\
+\specline{newN:\rcunextfresh{\{left\mapsto l,right\mapsto r,key\mapsto k\}}}\\
+\specline{prev:\rcuitertype{root}{\Delta_{l1}}{\{\ldots\}_{l1}}{[(left \mid right,\Delta_{l1})\mapsto curr, (left,0)\mapsto curr]}}\\
+\mathsf{if}\;(direction==0)\;prev\rightarrow left = newN;\\
+\specline{newN:\rcuitertype{root}{\Delta_{l1}+1}{left\{\ldots\}_{\Delta_{l1}}}{[(left,\Delta_{l1}+1)\mapsto l,(right,\Delta_{l1}+1)\mapsto r,(key,\Delta_{l1}+1)\mapsto k]}}\\
+\specline{prev:\rcuitertype{root}{\Delta_{l1}}{\{\ldots\}_{l1}}{[(left,\Delta_{l1})\mapsto newN]}}\\
+\mathsf{else}\;prev\rightarrow right = newN;\\
+\specline{newN:\rcuitertype{root}{\Delta_{l1}+1}{right\{\ldots\}_{\Delta_{l1}}}{[(left,\Delta_{l1}+1)\mapsto l,(right,\Delta_{l1}+1)\mapsto r,(key,\Delta_{l1}+1)\mapsto k]}}\\
+\specline{prev:\rcuitertype{root}{\Delta_{l1}}{\{\ldots\}_{l1}}{[(right,\Delta_{l1})\mapsto newN]}}\\
+\\
+\specline{succ:\rcuitertype{root}{\Delta_{l1}+\Delta_{l2}+2}{left\{\ldots\}_{\Delta_{l1}} right \{\ldots\}_{\Delta_{l2}}}{[(left,\Delta_{l1}+2) \mapsto next, (left,\Delta_{l1} + \Delta_{l2} + 2) \mapsto next]}}\\
+\specline{tmp:\_}\\
+\mathsf{node}\;tmp = succ\rightarrow right;\\
+\specline{succ:\rcuitertype{root}{\Delta_{l1}+\Delta_{l2}+2}{left\{\ldots\}_{\Delta_{l1}} right \{\ldots\}_{\Delta_{l2}}}{[(left,\Delta_{l1}+2) \mapsto next, (left,\Delta_{l1} + \Delta_{l2} + 2) \mapsto next, (right,\Delta_{l1} + \Delta_{l2} + 2) \mapsto tmp]}}\\
+\specline{tmp:\rcuitertype{root}{\Delta_{l1}+\Delta_{l2}+3}{left\{\ldots\}_{\Delta_{l1}}right\{\ldots\}_{\epsilon_{l2}}right}{[]}}\\
+\specline{prevSucc:\rcuitertype{root}{\Delta_{l1}+\Delta_{l2}+1}{left\{\ldots\}_{\Delta_{l1}}\{\ldots\}_{\epsilon_{l2}}}{[(right,\Delta_{l1}+1) \mapsto succ,(left,\Delta_{l1}+\Delta_{l2}+1)\mapsto succ]}}\\
+\specline{newN:\rcuitertype{root}{\Delta_{l1}+1}{left\mid right\{\ldots\}_{\Delta_{l1}}}{[(left,\Delta_{l1}+1)\mapsto l,(right,\Delta_{l1}+1)\mapsto r,(key,\Delta_{l1}+1)\mapsto k]}}\\
+\mathsf{if}\;(prevSucc == curr \&\& newN\rightarrow right == prevSucc \rightarrow right)\;\{\\
+\;\;\textrm{\todo{We loose information that newN left and right points to curr's left and right respectively.}}\\
+\;\;\textrm{\todo{ left and right fields are l and r now. Suppose we provide  info via control-flow and know it : }}\\
+\;\;newN\rightarrow right = tmp ;\\
+\;\;\textrm{\todo{Here we know that curr is unlinked. prevSucc == curr at succ loop is not executed.}}\\
+\;\;\textrm{\todo{Asserting prevSucc == curr. Or unlinked curr makes prevSucc also unlinked at depth before succ loop executed}}\\
+\;\;\mathsf{asyncDelayedFree}(prevSucc);\\
+\;\;\specline{prevSucc:\udef}\\
+\;\;\specline{succ:\unlinked}\\
+\;\;\specline{newN:\rcuitertype{root}{\Delta_{l1}+1}{left\mid right\{\ldots\}_{\Delta_{l1}}}{[(left,\Delta_{l1}+1)\mapsto l,(right,\Delta_{l1}+1)\mapsto tmp,(key,\Delta_{l1}+1)\mapsto k]}}\\
+\;\;\specline{tmp:\rcuitertype{root}{\Delta_{l1}+\Delta_{l2}+2}{left\{\ldots\}_{\Delta_{l1}}right}{[]}}\\
+\}\;\mathsf{else}\;\{\\
+\;\;prevSucc\rightarrow left = tmp;\\
+\;\;\specline{succ:\unlinked}\\
+\;\;\specline{tmp:\rcuitertype{root}{\Delta_{l1}+\Delta_{l2}+2}{left\{\ldots\}_{\Delta_{l1}}\{\ldots\}_{\Delta_{l2}}left}{[]}}\\
+\;\;\specline{prevSucc:\rcuitertype{root}{\Delta_{l1}+\Delta_{l2}+1}{left\{\ldots\}_{\Delta_{l1}}\{\ldots\}_{\Delta_{l2}}}{[(left,\Delta_{l1}+\Delta_{l2}+1)\mapsto tmp]}}\\
+\}\\
+\mathsf{asyncDelayedFree}(curr);\\
+\mathsf{asyncDelayedFree}(succ);\\
+\mathsf{WriteEnd};\\
+\mathsf{return}\;\mathsf{true};\\
+\end{array}
+\]
+\end{comment}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

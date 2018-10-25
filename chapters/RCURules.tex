@@ -1,0 +1,312 @@
+\makeatletter % allow us to mention @-commands
+\def\arcr{\@arraycr}
+\makeatother
+%%%%%%%%%%%%%%%%%%%%%%%%SUB TYPING JUDGEMENTS%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{figure}\tiny
+%\begin{subfigure}[b]{.4\linewidth}
+\begin{mathpar}
+ \fmapextendn \and \fmapname  \and \fmapdiff \and \fmapwithf \and \fmapextend \and \fmapempty \and \fmapfieldemp \and \typelocalmap \and \typeglobal \and \rcutypes \and \types \and  \ftypedecl \and \rpth 
+\and
+\fbox{$\vdash \, \N \subt \N'$} \;\;
+\inferrule[\scriptsize{T-NSub3}]
+{
+\N'([f \rightharpoonup y]) \;\;
+\N_{f,\emptyset}
+}
+{\vdash \, \N\subt \N'}
+\and
+\inferrule[\scriptsize{T-NSub4}]
+{
+ \N' \;\;
+ \N_{\emptyset}
+}
+{\vdash \, \N \subt \N'}
+\and
+\inferrule[\scriptsize{T-NSub2}]
+{
+ \N([f_2 \rightharpoonup y]) \;\;
+\N'([f^{*} \rightharpoonup y])
+}
+{\vdash \, \N\subt \N'}
+\and
+\inferrule[\scriptsize{T-NSub1}]
+{
+\N([f_1 \rightharpoonup y]) \;\;
+ \N'([f^{*} \rightharpoonup y])
+}
+{\vdash \, \N \subt \N'}
+\and
+\inferrule[\scriptsize{T-NSub5}]
+{
+}
+{\vdash \, \N \subt \N}
+\and
+\fbox{$\vdash \, \rho \subt \rho'$} \;\;
+\inferrule[\scriptsize{T-PSub1}]
+{
+\rho'=\rho''.f_1 \qquad \rho = \rho''.f_1|f_2
+}
+{
+ \vdash  \rho' \subt \rho
+}
+\and
+\inferrule[\scriptsize{T-PSub2})]
+{
+\rho'=\rho''.f_2  \qquad \rho= \rho''.f_1|f_2
+}
+{
+ \vdash  \rho' \subt \rho
+}
+\and
+\fbox{$\vdash \, \rho \subt \rho'$} \;\;
+\inferrule[\scriptsize{T-TSub}]
+{
+T=\textsf{rcuItr}\; \_ \qquad T'=\textsf{undef}
+}
+{
+\vdash T   \subt T' 
+}
+\and
+\inferrule[\scriptsize{T-TSub1}]
+{
+\vdash\rho\subt \rho' \qquad \vdash \N \subt \N' \\
+T =\textsf{rcuItr} \, \rho \, \N \qquad T'=\textsf{rcuItr} \, \rho' \, \N'
+}
+{
+\vdash T  \subt  T'
+}
+\and
+\fbox{$\vdash \, \Gamma \subt \Gamma'$} \;\;
+\inferrule[\scriptsize{T-CSub1}]
+{
+\vdash\Gamma \subt \Gamma' \;\; \vdash \text{T}  \subt \text{T'}
+}
+{
+\vdash \Gamma\, , x:\text{T}  \subt \Gamma'\, , x:\text{T'}
+}
+\and
+\inferrule[\scriptsize{T-CSub2}]
+{
+\Gamma' = \Gamma[\rho.f^{k}/\rho.f^{k}.f]
+}
+{
+ \vdash  \Gamma \subt \Gamma'
+}
+\and
+\inferrule[\scriptsize{T-ESub}]
+{
+}
+{
+\vdash  \epsilon \subt \epsilon
+}\and
+%\end{mathpar}
+%\caption{Sub-Typing Judgements}
+%\label{fig:sub-typing}
+%\end{subfigure}\quad
+%\begin{subfigure}[b]{.4\linewidth}
+%\tiny
+%\begin{mathpar}
+\fbox{$\Gamma \vdash \bar{s} \dashv \Gamma'$} \and
+\inferrule[\scriptsize(T-Branch1)]
+{
+  x.f_1==z \and
+ \Gamma\, ,x:\textsf{rcuItr}\,\rho \, \N([f_1 \rightharpoonup  z]) \vdash \bar{s}_1 \dashv\Gamma_4 \and
+  \Gamma\, ,x:\textsf{rcuItr}\, \rho \, \N([f_2 \rightharpoonup z]) \vdash \bar{s}_2 \dashv \Gamma_4
+}
+{
+\Gamma\, ,x:\textsf{rcuItr}\, \rho \, \N([f_1\mid f_2 \rightharpoonup z]) \vdash \textsf{if}(x.f_1==z)  \textsf{ then } \bar{s}_1 \textsf{ else } \bar{s}_2 \dashv \Gamma_4
+}
+\and
+\inferrule[\scriptsize(T-Branch2)]
+{
+\Gamma(x)= \textsf{bool} \\
+ \Gamma \vdash \bar{s}_1 \dashv\Gamma' \and \Gamma \vdash \bar{s}_2 \dashv \Gamma'
+}
+{
+\Gamma \vdash \textsf{if}(x) \textsf{ then } \bar{s}_1  \textsf{ else } \bar{s}_2 \dashv \Gamma'
+}
+\and
+\inferrule[\scriptsize(T-Branch3)]
+{
+ \Gamma,\,x:\textsf{rcuItr} \, \rho \, \N([f\rightharpoonup y \setminus \textsf{null}]) \vdash \bar{s}_1 \dashv \Gamma' \and \Gamma,\,x:\textsf{rcuItr} \, \rho \, \N([f\rightharpoonup y]) \vdash \bar{s}_2 \dashv \Gamma'
+}
+{
+\Gamma,\,x:\textsf{rcuItr} \, \rho \, \N([f\rightharpoonup y]) \vdash \textsf{if}(x.f == \textsf{null}) \textsf{ then } \bar{s}_1  \textsf{ else } \bar{s}_2 \dashv \Gamma'
+}
+\and
+\inferrule[\scriptsize(T-Frame)]
+{
+\Gamma_1 \vdash \bar{s} \dashv \Gamma_2   \and
+\textsf{WellFramed}(\Gamma, \Gamma_1) \and \textsf{WellFramed}(\Gamma, \Gamma_2)
+}
+{
+\Gamma, \; \Gamma_1 \vdash \bar{s} \dashv \Gamma, \; \Gamma_2
+}
+\and
+\inferrule[\scriptsize(T-Conseq)]
+{
+ \Gamma \subt \Gamma'  \and \Gamma' \vdash \bar{s} \dashv \Gamma'' \and \Gamma'' \subt \Gamma'''
+}
+{
+ \Gamma \vdash \bar{s} \dashv \Gamma'''
+}
+\and
+\inferrule[\scriptsize(T-Loop1)]
+{
+\Gamma(x) = \textsf{bool} \and
+\Gamma \vdash \bar{s} \dashv \Gamma 
+}
+{
+\Gamma \vdash \textsf{while}(x)\{\bar{s}\} \dashv  \Gamma
+}
+\and
+\inferrule[\scriptsize(T-Loop2)]
+{
+\Gamma,\, x:\textsf{rcuItr}\;\rho \; \N([f\rightharpoonup \_]) \vdash \bar{s} \dashv \Gamma, x:\textsf{rcuItr}\;\rho' \; \N([f\rightharpoonup \_])
+}
+{
+\Gamma,\, x:\textsf{rcuItr}\;\rho \; \N([f\rightharpoonup \_]) \vdash \textsf{while}(x.f \neq \textsf{null})\{\bar{s}\} \dashv   x:\textsf{rcuItr}\;\rho' \; \N([f\rightharpoonup \textsf{null}]) ,\,  \Gamma
+}
+\and
+\inferrule[\scriptsize(T-ReIndex)]
+{
+}
+{
+\Gamma \vdash \bar{s}_{k} \dashv  \Gamma[\rho.f^{k}/\rho.f^{k}.f]
+}\and
+%\end{mathpar}
+%\caption{Type Judgements for Control-Flow.}
+%\label{fig:type-judgements-for-cf}
+%\end{subfigure}\quad
+%%%%%%%%%%%%%%%%%%%%%%%%TYPE JUDEGEMENT%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%\begin{subfigure}[b]{.4\linewidth}
+%\begin{mathpar}
+\inferrule[\scriptsize(T-Root)]
+{ \textsf{FV}(\Gamma) \cap \{r,y\}  =\emptyset}
+{\Gamma\,,r:\textsf{rcuRoot}\,,y:\textsf{undef} \vdash_{M,R} y = r \dashv y: \textsf{rcuItr}\, \epsilon \, \N_{\emptyset}\,,r:\textsf{rcuRoot}\,,\Gamma}
+\;\;
+\inferrule[\scriptsize(T-ReadS)]
+{ \textsf{FV}(\Gamma) \cap \{z,x\}  =\emptyset}
+{
+\Gamma\,, z:\textsf{rcuItr}\,\_ \, ,\rcuitrT{x}{G}{k}{k+1}{\_} \vdash_{M,R} z=x \dashv  \rcuitrT{x}{G}{k}{k+1}{\_}\, , \rcuitrT{z}{G}{k}{k+1}{\_} \,, \Gamma
+}
+\and
+\inferrule[\scriptsize(T-ReadH)]
+{
+\rho.f=\rho' \\
+ \textsf{FV}(\Gamma) \cap \{z,x\} =\emptyset
+}
+{
+ \Gamma\, , z:\textsf{rcuItr}\,\_ \, ,  x:\textsf{rcuItr} \, \rho \, \N   \vdash_{M,R}
+ 	z=x.f
+ \dashv  x:\textsf{rcuItr} \, \rho \, \N[f\mapsto z]\, ,z:\textsf{rcuItr} \, \rho' \, \N_{\emptyset} \, , \Gamma
+}
+\and
+\inferrule[\scriptsize(T-Alloc)]
+{
+\mathsf{FV}(\Gamma) \cap \{x\} = \emptyset
+}
+{
+ \Gamma\,, x:\textsf{undef} \vdash_{M} x = \NEW \dashv x:\textsf{rcuFresh} \, \N_{\emptyset} \, ,  \Gamma
+}
+\and
+\inferrule[\scriptsize(T-Free)]
+{
+}
+{
+x:\textsf{freeable} \vdash_{M} \textsf{Free}(x) \dashv x:\textsf{undef}
+}\;\;
+\inferrule[\scriptsize(T-Exchange)]
+{
+ \Gamma, \, y:T' , \, x:T, \, \Gamma' \vdash \bar{s} \dashv   \Gamma''
+}
+{
+\Gamma, \, x:T , \, y:T' , \, \Gamma' \vdash \bar{s} \dashv   \Gamma''
+}
+\and
+\inferrule[\scriptsize(T-Sync)]
+{
+\textsf{FV}(\Gamma) \cap \textsf{FV}(\Gamma'')  = \emptyset \\
+\lnot(\exists_{x \in \Gamma''} \ldotp x:\textsf{unlinked}) \\
+\forall x \in \Gamma \ldotp  x:\textsf{unlinked} \quad \Gamma'  = \forall_{x\in \Gamma }\ldotp \Gamma \setminus \{x:\textsf{unlinked}\} \cup \{x:\textsf{freeable}\} \\
+\Gamma'',\Gamma \vdash_{M}\textsf{SyncStart}\dashv\Gamma'',\Gamma \qquad \Gamma'',\Gamma \vdash_{M}\textsf{SyncStop}\dashv\Gamma'',\Gamma' \qquad
+}
+{
+\Gamma'',\Gamma \vdash_{M} \textsf{SyncStart};\textsf{SyncStop} \dashv \Gamma',\Gamma''
+}
+\and
+\inferrule[\scriptsize(T-WriteFH)]
+{
+\textsf{FV}(\Gamma) \cap \{p,z,x\}  =\emptyset \\ z:\textsf{rcuItr} \; \rho.f \; \_
+}
+{
+ \Gamma, p:\textsf{rcuFresh}\,\N_{f,\emptyset},\; x:\textsf{rcuItr}\;\; \rho \;\; \N([f\rightharpoonup z])
+  \vdash_{M} p.f = z \dashv
+  \rcunf{p}{f}{z} \, , x:\textsf{rcuItr}\, \rho \, \N([f\rightharpoonup z]), \, \Gamma
+}
+\and
+\inferrule[\scriptsize(T-UnlinkH)]
+{
+\textsf{FV}(\Gamma) \cap \{x,z,r\} \qquad \rho.f_1=\rho' \;\; \rho'.f_2=\rho'' \qquad \forall_{f\in dom(\N')} \ldotp f\neq f_2 \implies \N'([f\rightharpoonup \textsf{null}]) \lor \N'_{f,\emptyset}   \\
+\begin{array}{l}
+\forall_{n\in \Gamma,m,\N''', p''',f}\ldotp n:\textsf{rcuItr}\,\rho'''\,\N'''([f\rightharpoonup m]) \implies 
+\left\{\begin{array}{l}
+(((\rho \neq \rho''' \land \rho' \neq \rho''' \land \rho'' \neq \rho''')  ) \land (\{m\} \cap \{z,r\} = \emptyset ) ) \arcr
+\land (\forall_{\rho''''\neq \epsilon} \ldotp \rho''' = \rho''.\rho'''' \implies \lnot(\exists_{f'}\ldotp ( \N(f')=n \lor \N'(f')=n  \lor \N''(f')=n )))
+\end{array}\right.
+\end{array}
+}
+{
+\Gamma,\,x:\textsf{rcuItr}\, \rho \, \N([f_1\rightharpoonup z]) \, ,
+z:\textsf{rcuItr}\, \rho' \, \N'([f_2\rightharpoonup r]) \, ,  r:\textsf{rcuItr} \, \rho'' \, \N''\, 
+\vdash_{M} x.f_1=r \dashv
+z:\unlinked\, ,
+x:\textsf{rcuItr} \, \rho \, \N(f_1\rightharpoonup z \setminus r)\, ,
+r:\textsf{rcuItr} \, \rho' \, \N'',\, \Gamma
+}
+\and
+\inferrule[\scriptsize(T-LinkF)]
+{
+\rho.f  = \rho'  \qquad \N' = \N'' \qquad  \textsf{FV}(\Gamma) \cap \{p,o,n\}  =\emptyset \\
+\lnot(\exists_{x \in \Gamma, \N''', \rho'',f',y} \ldotp (x:\textsf{rcuItr}\,\rho''\,\N'''([f'\rightharpoonup y])) \land ((\rho'' = \rho)\lor(\rho'' = \rho')) \land (y\neq o \land (\forall_{x_i \in codom(\N')} \ldotp y \neq x_i  ) ) )
+}
+{
+\Gamma,\,
+ p:\textsf{rcuItr}\, \rho \, \N([f\rightharpoonup o]) \, ,
+  o:\textsf{rcuItr}\, \rho' \, \N' \, , n:\textsf{rcuFresh} \, \N''
+  \vdash_{M} p.f = n \dashv
+  p:\textsf{rcuItr}\, \rho \, \N(f \rightharpoonup o \setminus n) \, ,
+  n:\textsf{rcuItr}\, \rho' \, \N'' \,
+  o:\unlinked\, ,  \Gamma
+}
+\and
+\inferrule[\scriptsize(T-Seq)]
+{
+\Gamma_1 \vdash \bar{s_1} \dashv_{M,R}   \Gamma_2  \qquad   \Gamma_2 \vdash_{M,R} \bar{s_2} \dashv   \Gamma_3
+}
+{
+\Gamma_1  \vdash_{M,R} \bar{s_1} \; ; \; \bar{s_2} \dashv  \Gamma_3
+}
+\and
+\inferrule[\scriptsize(T-Par)]
+{
+ \Gamma_1 \vdash_{R} \bar{s_1} \dashv   \Gamma'_1  \qquad   \Gamma_2 \vdash_{M,R} \bar{s_2} \dashv   \Gamma'_2
+}
+{
+ \Gamma_1, \; \Gamma_2  \vdash \bar{s_1} || \bar{s_2} \dashv  \Gamma'_1 \; , \Gamma'_2
+}
+\and
+\inferrule[\scriptsize(T-Skip)]
+{
+}
+{
+ \Gamma \vdash_{M,R} \textsf{skip} \dashv   \Gamma
+}
+\end{mathpar}
+%\caption{Type Rules for other program statements}
+%\label{fig:type-judgements}
+%\end{subfigure}
+\label{fig:ts}
+\caption{Type Rule for \textsf{RCU} Programming}
+\end{figure}
+%%%%%%%%%%%%%%%COND TYPE JUDGEMENTS ENDS%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

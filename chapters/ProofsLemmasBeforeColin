@@ -1,0 +1,454 @@
+
+\subsection{Soundness Lemmas}
+\begin{Lemma}[Overwrite-Current]\scriptsize
+\begin{align*}
+\llbracket x:=x.f \rrbracket \lfloor \llbracket \Gamma,x:\mathsf{rcuItr} \rrbracket_{\textsf{R,M},tid} * \{m\}\rfloor  \subseteq \\
+\lfloor \llbracket \Gamma,x:\mathsf{rcuItr} \rrbracket_{\textsf{R,M},tid}  * \mathcal{R}(\{m\})\rfloor
+\end{align*}
+\end{Lemma}
+\begin{proof}
+We prove here the simpler obligation, which together with Lemma \ref{lem:crit-lifting} (critical section lifting) implies the above:
+
+{\scriptsize
+\[
+\llbracket x:=x.f \rrbracket \lfloor \llbracket \Gamma,x:\mathsf{rcuItr} \rrbracket_{tid} * \{m\}\rfloor  \subseteq
+\lfloor \llbracket \Gamma,x:\mathsf{rcuItr} \rrbracket_{tid}  * \mathcal{R}(\{m\})\rfloor
+\]
+}
+
+Assume
+\[(\sigma,O,U,T)\in\llbracket \Gamma,x:\mathsf{rcuItr} \rrbracket_{tid} * \{m\}\]
+Then
+\[
+\llbracket x:=x.f \rrbracket(\sigma)\Downarrow_{tid}\sigma'
+\]
+where
+\[
+\sigma'=\sigma[s\mapsto(\sigma.s[(x,tid)\mapsto \sigma.h(\sigma.s(x,tid),f)])]
+\]
+We must choose $O'$, $U'$, and $T'$ such that
+\[(\sigma',O',U',T')\in\llbracket \Gamma,x:\mathsf{rcuItr} \rrbracket_{tid} * \{m\}\]
+Let $U'=U$ and $T'=T$, and
+\[O'=O\cup(\sigma.h(\sigma.s(x,tid),f)\mapsto\mathsf{iterator}\;tid)\]
+\todo{there should be field maps in this lemma...}
+\colin{T-WriteS doesn't seem to have the required side-conditions on $\Gamma$.  Either $\Gamma$ should be dropped from this rule (pushing the problem to \textsf{WellFramed} and the frame rule) or T-WriteS should gain appropriate side-conditions.  The appropriate side conditions should really be equivalent to what \textsf{WellFramed} would impose, so I propose dropping it.}
+\iso{I couldn't understand this comment. So is it the case that our well-formed framing lemma and its proof does not captures this case ? I am not clear on this. }
+\colin{T-WriteS doesn't seem to manage the field maps correctly.  The map in the input environment can have \emph{any} field map, since we don't care about its contents for safety.  And the map in the output environment should be empty, since we know nothing about the node $x$ now refers to.}
+\iso{Yes, you are right, it needs to be empty mapping.}
+\end{proof}
+
+
+\begin{Lemma}[Read-Heap]\scriptsize
+\begin{align*}
+\llbracket y:=x.f \rrbracket( \lfloor \llbracket \Gamma,y:\_,x:\mathsf{rcuItr} \rrbracket_{\textsf{R,M},tid} * \{m\}\rfloor)  \subseteq \\
+\lfloor \llbracket \Gamma,y:\mathsf{rcuItr},x:\mathsf{rcuItr} \rrbracket_{\textsf{R,M},tid}  * \mathcal{R}(\{m\})\rfloor
+\end{align*}
+\end{Lemma}
+\begin{proof}
+    \todo{also missing field maps}
+\end{proof}
+
+\begin{Lemma}[Heap-Update-Unlink]\scriptsize
+\begin{align*}
+  \llbracket x.f:=z \rrbracket (\lfloor \llbracket \Gamma, \, x:\mathsf{rcuItr}\,\rho\,\N ( [f \rightharpoonup  y]), y:\mathsf{rcuItr} \, \rho' \,\N([ f \rightharpoonup z]), \\
+                                                              z:\mathsf{rcuItr} \, \rho'' \,\_ \rrbracket_{M,tid} * \{m\}\rfloor)  \subseteq \\
+                                                              \lfloor \llbracket \Gamma, \,  x:\mathsf{rcuItr} \, \rho \, \N([ f \rightharpoonup z]),\\
+                                                              y:\mathsf{unlinked}, \\
+                                                              z:\mathsf{rcuItr} \, \rho' \, \_ \rrbracket  * \mathcal{R}(\{m\})\rfloor
+\end{align*}
+\end{Lemma}
+\begin{proof}\scriptsize
+
+We can assume
+\begin{gather}\label{3ua1}
+  \begin{aligned}
+    (\sigma, O, U, T) \, \in & \llbracket \Gamma, \, x:\mathsf{rcuItr}\,\rho\,\N ( [f \rightharpoonup  y]), y:\mathsf{rcuItr} \, \rho' \,\N([ f \rightharpoonup z]) , \\
+    &z:\mathsf{rcuItr} \, \rho'' \,\_ \rrbracket_{M,tid} * \{m\}
+    \end{aligned} \\
+\textsf{WellFormed}(\sigma,O,U,T)
+\label{3ua2}
+\end{gather}
+
+And we show that there exists $O', U', T'$ such that
+
+\begin{gather}\label{3up1}
+\textsf{WellFormed}(  \sigma [ \sigma.h(\sigma.s(x,tid),f )\mapsto \sigma.s(z,tid) ] , O', U', T')
+\end{gather}
+
+From \ref{3ua1} we can assume
+
+\begin{gather} \label{3u1a1}
+  \begin{aligned}
+    (\sigma, O_{1}, U_{1}, T_{1} ) \in & \llbracket \Gamma,\, x:\mathsf{rcuItr}\,\rho\,\N ( [f \rightharpoonup  y]), y:\mathsf{rcuItr} \, \rho' \,\N([ f \rightharpoonup z]), \\
+    &z:\mathsf{rcuItr} \, \rho'' \,\_  \rrbracket_{M,tid} \end{aligned}\\
+\label{3u2a1}
+(\sigma, O_{2}, U_{2}, T_{2}) = m
+\\
+\label{3ua3}
+O_{1} \bullet O_{2} = O
+\\
+\label{3ua4}
+U_{1} \cup U_{2} = U
+\\
+\label{3ua5}
+T_{1} \cup T_{2} = T
+\\
+\label{3ua6}
+\textsf{WellFormed}(\sigma,O_{1},U_{1},T_{1})
+\\
+\label{3ua7}
+\textsf{WellFormed}(\sigma,O_{2},U_{2},T_{2})
+\end{gather}
+
+To prove \ref{3up1} we choose
+
+\begin{gather}\label{3xup}
+  O' = O [\sigma.s(y,tid) \mapsto O(\sigma.s(y,tid)) \setminus \mathsf{iterator} \, tid \cup \{ \mathsf{unlinked}\} ]\\
+  \label{3xup1}
+  U' = U\\
+  \label{3xup2}
+  T' = T
+\end{gather}
+
+
+We must prove there exists $O'_{1}, O'_{2}, U'_{1}, U'_{2}, T'_{1}, T'_{2}$ such that
+
+\begin{gather}\label{3u1p1}
+\begin{aligned}
+(\sigma',O'_{1},U'_{1}, T'_{1})  \in \llbracket \Gamma, \,  x:\mathsf{rcuItr} \, \rho \,\N([ f \rightharpoonup z]), \\y:\mathsf{unlinked}, z:\mathsf{rcuItr} \, \rho' \, \_ \rrbracket_{M,tid}
+\end{aligned}\\
+\label{3u2p1}
+(\sigma',O'_{2},U'_{2}, T'_{2}) \in \mathcal{R}(\{m\})
+\\
+\label{3up3}
+O'_{1} \bullet O'_{2} = O'
+\\
+\label{3up4}
+U'_{1} \cup U'_{2} = U'
+\\
+\label{3up5}
+T'_{1} \cup T'_{2} = T
+\\
+\label{3up6}
+\textsf{WellFormed}(\sigma',O'_{1},U'_{1},T'_{1}) \\
+\label{3up7}
+\textsf{WellFormed}(\sigma',O'_{2},U'_{2},T'_{2})
+\end{gather}
+We choose \[O_{2}' = O_{2}, U_{1}' = U_{1}, U_{2}' = U_{2}, T_{1}' = T_{1}, T_{2}' = T_{2}\] so that \ref{3up4} follows from \ref{3ua4} and for the rest for the proof, we claim that
+
+\begin{equation} \label{3ua8}
+T_{1} = \{tid\} \land tid =  \sigma.l
+\end{equation}
+which follows directly from \ref{3ua1}.
+
+We set $O'_1$ as
+\begin{gather} \label{3xup3}
+O'_1 = O_1 [  \sigma.s(y,tid) \mapsto \sigma.s(y,tid) \setminus \{\mathsf{iterator}\;tid \} \cup \{\mathsf{unlinked}\} ]
+\end{gather}
+As $O_{2}'$ is chosen as $O_{2}$ and we know equations \ref{3xup3}, \ref{3xup1} and \ref{3ua3}, we can show that \ref{3up3} holds.
+
+From \ref{3u1a1} we can assume that there exists $\hat{O_1}$, $\hat{\hat{O_1}}$,  $\hat{\hat{\hat{O_1}}}$ and $\hat{\hat{\hat{\hat{O_1}}}}$ such that
+\begin{gather}\label{3uahat1}
+  (\sigma, \hat{O_1}, U_1,T_1) \in \llbracket \Gamma \rrbracket_{M,tid} \\
+  \label{3uahat2}
+  (\sigma, \hat{\hat{O_1}}, U_1 ,T_1) \in \llbracket x:\mathsf{rcuItr}\,\rho\,\N ( [f \rightharpoonup  y]) \rrbracket_{M,tid} \\
+\label{3uahat3}
+ (\sigma, \hat{\hat{\hat{O_1}}}, U_1 ,T_1) \in \llbracket y:\mathsf{rcuItr} \, \rho' \,\N([ f \rightharpoonup z]) \rrbracket_{M,tid} \\
+\label{3uahat4}
+  (\sigma, \hat{\hat{\hat{\hat{O_1}}}}, U_1 ,T_1) \in \llbracket z:\mathsf{rcuItr} \, \rho'' \,\_  \rrbracket_{M,tid} \rrbracket_{M,tid}\\
+  \label{3uahat5}
+  \hat{O_1} \bullet \hat{\hat{O_1}} \bullet \hat{\hat{\hat{O_1}}} \bullet \hat{\hat{\hat{\hat{O_1}}}} = O_1
+  \end{gather}
+
+To show \ref{3u1p1} we need to show that there exists $\hat{O}'_{1}$, $\hat{\hat{O}}'_{1}$, $\hat{\hat{\hat{O'_1}}}$ and $\hat{\hat{\hat{\hat{O'_1}}}}$
+
+\begin{gather}
+\label{3uphat1}
+  (\sigma',\hat{O}'_{1},U_1, T_1) \in \llbracket \Gamma \rrbracket_{M,tid} \\
+  \label{3uphat2}
+   (\sigma',\hat{\hat{O}}'_{1},U_1, T_1) \in \llbracket   x:\mathsf{rcuItr} \, \rho \,\N([ f \rightharpoonup z]) \, \rrbracket_{M,tid} \\
+\label{3uphat3}
+(\sigma',\hat{\hat{\hat{O}}}'_{1},U_1, T_1) \in \llbracket   y:\mathsf{unlinked}\, \rrbracket_{M,tid} \\
+\label{3uphat4}
+(\sigma',\hat{\hat{\hat{\hat{O}}}}'_{1},U_1, T_1) \in \llbracket  z:\mathsf{rcuItr} \, \rho' \, \_ \rrbracket_{M,tid} \\
+\label{3uphat5}
+\hat{O'_1} \bullet \hat{\hat{O'_1}} \bullet \hat{\hat{\hat{O'_1}}} \bullet \hat{\hat{\hat{\hat{O'_1}}}} = O'_1
+\end{gather}
+
+We choose $\hat{O'}_1$ as $\hat{O}_1$, $\hat{\hat{O'}}_1$ as $\hat{\hat{O}}_1$ and $\hat{\hat{\hat{\hat{O'}}}}_1$ as $\hat{\hat{\hat{\hat{O}}}}_1$ so that \ref{3uphat1}, \ref{3uphat2} and \ref{3uphat4} follows from \ref{3uahat1}, \ref{3uahat2} and \ref{3uahat4}.
+
+However, $\hat{\hat{\hat{O'}}}_1$ and $\hat{\hat{\hat{O}}}_1$ are different observations so \ref{3uphat3} does not follow from \ref{3uahat3}.
+To prove \ref{3up6} we need to recall \ref{3ua6}, \ref{3xup3} and $tid = \sigma.l \land T_1 = \{tid\}$.
+%%I am here
+\begin{itemize}
+\item \textsf{\ref{3up6}.Ownership}:trivial.
+\item \textsf{\ref{3up6}.Reader-Writer-Iterator-Coexistence-Ownerhsip}:trivial.
+\item \textsf{\ref{3up6}.Iterators-Free-List}:trivial.
+\item \textsf{\ref{3up6}.Unlinked-Reachability}:We know that only updated map is $O'_1$ where the update is shown with equation \ref{3xup3}.
+  We also know from \ref{3uphat3} that $y$ is observed as $\mathsf{unlinked}$. Unlinked observation of $y$ can be in premise of Unlinked-Reachability or in conclusion of the Unlinked-Reachability. Therefore, we need to show two cases :
+  \begin{itemize}
+  \item \textbf{Case-1} All nodes reaching to $y$ can be either observed as $\mathsf{unlinked}$ or in free-list:
+    \begin{itemize}
+    \item From type environments shown in figure \ref{fig:denotingtypeenviroment} and equations \ref{3uahat1}, \ref{3uahat2}, \ref{3uahat3}, \ref{3uahat4}, \ref{3uphat1}, \ref{3uphat2}, \ref{3uphat3} and \ref{3uphat4} we know that:
+      \begin{itemize}
+            \item \[\textsf{iterator } \, tid\in  O_1(s(x,tid))  \land x \notin U_1 \land s(y,tid) = h(s(x,tid), f) \]
+              \[\textsf{iterator } \, tid\in  O'_1(s(x,tid))  \land x \notin U'_1 \land s(z,tid) = h(s(x,tid), f) \]
+            \item \[\textsf{iterator } \, tid\in  O_1(s(y,tid))  \land y \notin U_1 \land s(z,tid) = h(s(y,tid), f) \]
+              \[\textsf{unlinked }\in  O'_1(s(y,tid))  \land y \notin U'_1 \]
+            \item \[\textsf{iterator } \, tid\in  O_1(s(z,tid))  \land z \notin U_1 \land s(\_,tid) = h(s(z,tid), f) \]
+              \[\textsf{iterator } \, tid\in  O'_1(s(z,tid))  \land z \notin U'_1 \land s(\_,tid) = h(s(z,tid), f) \]
+            \item Since $U_{1}'$ is chosen  $U_{1}$ and $T_{1}'$ is chosed as $T_{1}$, we know that the only map changed is shown in equation \ref{3xup3}
+            \item Suppose $\exists_{f'}\ldotp f' \neq f$
+              \[\textsf{iterator } \, tid\in  O_1(s(x,tid))  \land x \notin U_1 \land s(y,tid) = h(s(x,tid), f') \]
+              \[\textsf{iterator } \, tid\in  O'_1(s(x,tid))  \land x \notin U'_1 \land s(y,tid) = h(s(x,tid), f') \]
+              which ends in contradiction with $\textsf{unlinked} \in O'_1(s(y,tid))$.
+      \end{itemize}
+      \end{itemize}
+  \item \textbf{Case-2} All nodes reachable from $y$ needs to be observed as $\mathsf{unlinked}$ : Under the context built for \textbf{Case-1} and from type environments we know that
+     \[\textsf{unlinked }\in  O'_1(s(y,tid))  \land y \notin U'_1 \]
+    There exists no \textsf{rcu} field access in this type environment so no heap node can be observed as $\mathsf{iterator } tid$ from a $y$ with a field access.
+  \end{itemize}
+\item \textsf{\ref{3up6}.Free-List-Reachability}:is trivial because free list is not updated by the action.
+\item \textsf{\ref{3up6}.Writer-Unlink}:trivial.
+\item \textsf{\ref{3up6}.Fresh-Reachable}:trivial.
+\item \textsf{\ref{3up6}.Fresh-Writer}:trivial.
+\item \textsf{\ref{3up6}.Writer-Not-Reader}: We know that $tid = \sigma.l$. Since operational semantics of heap update does not include change in owner of lock we know that
+  \[ \sigma'.l = tid\]
+  which implies \textsf{\ref{3up6}.Writer-Not-Reader}.
+\item \textsf{\ref{3up6}.Readers-In-Free-List}: As we know from operational semantics, \textsf{free-list} is changed with add/subtraction of threads $t$ such that
+  \[t \in R\]
+  As we know that $tid = \sigma.l$ we can conclude that \textsf{\ref{3up6}.Writer-Not-Reader}.
+\item \textsf{\ref{3up6}.To-Be-In-Free-List}:trivial.
+\item \textsf{\ref{3up6}.MustBeAllocated}:trivial.
+\item \textsf{\ref{3up6}.Heap-Domain}:trivial.
+  \textsf{\ref{3up6}.Unique-Root}: \begin{itemize}
+  \item From \ref{3up6} we know that \textsf{Unique-Root} invariant is preserved by observed type states in $O_1$ including $x,y,z$.
+  \item We know that choosing $\hat{\hat{O'}}_1$ as $\hat{\hat{O}}_1$ and $\hat{\hat{\hat{\hat{O'}}}}_1$ as $\hat{\hat{\hat{\hat{O}}}}_1$ showed that \ref{3uphat1}, \ref{3uphat2} and \ref{3uphat4} follows from \ref{3uahat1}, \ref{3uahat2} and \ref{3uahat4} as we know from the equation \ref{3xup3} that the only changed map is $O'_1$ and the change is reflected in change from \ref{3uahat3} to \ref{3uphat3}.
+  \item We unlink $y$ as shown in \ref{3uphat3} and unlinking occurs in between  $z$ and $x$ where both preserves the type states as shown in equations \ref{3uphat4} and \ref{3uphat2}.
+    \item In this context, we know that $x$ points $z$ preserve \textsf{Unique-Root} in \ref{3ua6} and preserves in it in \ref{3up6}.
+    \end{itemize}
+\item \textsf{\ref{3up6}.Unique-Reachable}:[TODO: EASY - write down]
+
+\end{itemize}
+To show  \ref{3u2p1} we need to show that
+\[(\sigma, O_2, U_2, T_2) \mathcal{R} (\sigma', O'_2, U'_2, T'_2)  \]
+which by definition means that we must show
+\begin{gather}\label{3ir1}
+\sigma.l \in T_2 \implies \sigma.h = \sigma'.h \\
+\label{3ir2}
+\textsf{iterator} \, tid \in O_2(o) \implies o \in dom(\sigma'.h) \\
+\label{3ir3}
+O_2  = O'_2\\
+\label{3ir4}
+U_2 = U'_2\\
+\label{3ir5}
+T_2 = T'_2\\
+\label{3ir6}
+\forall_{t} \in T_2 \implies  \forall x \ldotp \sigma.s(x,t) = \sigma'.s(x,t)
+\end{gather}
+\begin{itemize}
+\item We know that $tid \in T_1 \land \sigma.l = tid$ therefore $\forall_{t\in T_2}\ldotp t \neq tid$. Also recall that $T'_1$ is chosen as $T_1$ and $T'_2$ is chosen as $T_2$ where all implies \ref{3ir1}.
+\item Recall that  $U'_2$ is chosen as $U_2$, $T'_2$ is chosen as $T_2$, $O'_2$ is chosen as $O_2$ therefore \ref{3ir3}-\ref{3ir5} holds.
+\item Recall from equation \ref{3xup3} that the only changed map is $O_1$. Also recall that $O_2'$ is chosen as $O_2$ and $T'_2$ is chosen as $T_2$ which means $\forall_{x,f\fname,t\in T_2} \ldotp O_2(h(s(x,t),f)) = O'_2(h'(s'(x,t),f))$. Therefore \ref{3ir2} and \ref{3ir6} hold.
+\end{itemize}
+\end{proof}
+
+\newcommand{\newln}{\\&\quad\quad{}}
+
+\begin{Lemma}[Heap-Update-Link]\scriptsize
+\begin{align*}
+\llbracket x.f:=z \rrbracket( \lfloor \llbracket \Gamma,x:\mathsf{rcuItr} \, \N([ f \rightharpoonup y]) \, , \\
+z:\mathsf{rcuFresh} \,\N([f \rightharpoonup y]) \rrbracket_{\textsf{M},tid} * \{m\}\rfloor)  \subseteq  \\
+\lfloor \llbracket \Gamma,x:\mathsf{rcuItr} \, \N([f \rightharpoonup z]) \, , \\
+z:\mathsf{rcuItr} \, \rho' \,\N([ f \rightharpoonup y])  \rrbracket_{\textsf{M},tid}  * \mathcal{R}(\{m\})\rfloor
+\end{align*}
+\end{Lemma}
+\begin{proof}\scriptsize
+
+We can assume
+\begin{gather}\label{4ua1}
+\begin{aligned}
+(\sigma, O, U, T) \, \in \,& \llbracket \Gamma, \, x:\mathsf{rcuItr}\,\rho\,\N ( [f \rightharpoonup  y]), \\
+&z:\mathsf{rcuFresh} \,\N([ f \rightharpoonup y])  \rrbracket_{M,tid} * \{m\}  \end{aligned}\\
+\textsf{WellFormed}(\sigma,O,U,T)
+\label{4ua2}
+\end{gather}
+
+And we show that there exists $O', U', T'$ such that
+
+\begin{gather}\label{4up1}
+  \textsf{WellFormed}(\sigma[ h(s(x,tid),f )\mapsto .s(z,tid)], h(.s(z,tid),f )\mapsto \sigma.s(y,tid) ] , O', U', T')
+\end{gather}
+
+From \ref{4ua1} we can assume
+
+\begin{gather} \label{4u1a1}
+(\sigma, O_{1}, U_{1}, T_{1} ) \in \llbracket \Gamma,\, x:\mathsf{rcuItr}\,\rho\,\N ( [f \rightharpoonup  y]), z:\mathsf{rcuFresh} \, \rho' \,\N([ f \rightharpoonup y]) \rrbracket_{M,tid} \\
+\label{4u2a1}
+(\sigma, O_{2}, U_{2}, T_{2}) = m
+\\
+\label{4ua3}
+O_{1} \bullet O_{2} = O
+\\
+\label{4ua4}
+U_{1} \cup U_{2} = U
+\\
+\label{4ua5}
+T_{1} \cup T_{2} = T
+\\
+\label{4ua6}
+\textsf{WellFormed}(\sigma,O_{1},U_{1},T_{1})
+\\
+\label{4ua7}
+\textsf{WellFormed}(\sigma,O_{2},U_{2},T_{2})
+\end{gather}
+
+To prove \ref{4up1} we choose
+
+\begin{gather}
+\label{4xup}
+O' = O [\sigma.s(z,tid) \mapsto O(\sigma.s(z,tid)) \setminus \{\mathsf{fresh}\}  \cup \{ \mathsf{iterator }tid\} ]\\
+\label{4xup1}
+U' = U\\
+\label{4xup2}
+T' = T
+\end{gather}
+
+
+We must prove there exists $O'_{1}, O'_{2}, U'_{1}, U'_{2}, T'_{1}, T'_{2}$ such that
+
+\begin{gather}\label{4u1p1}
+(\sigma',O'_{1},U'_{1}, T'_{1})  \in \llbracket \Gamma, \,  x:\mathsf{rcuItr} \, \rho \,\N([ f \rightharpoonup z]),  z:\mathsf{rcuItr} \, \rho' \,\N([ f \rightharpoonup y]) \rrbracket_{M,tid}
+\\
+\label{4u2p1}
+(\sigma',O'_{2},U'_{2}, T'_{2}) \in \mathcal{R}(\{m\})
+\\
+\label{4up3}
+O'_{1} \bullet O'_{2} = O'
+\\
+\label{4up4}
+U'_{1} \cup U'_{2} = U'
+\\
+\label{4up5}
+T'_{1} \cup T'_{2} = T
+\\
+\label{4up6}
+\textsf{WellFormed}(\sigma',O'_{1},U'_{1},T'_{1}) \\
+\label{4up7}
+\textsf{WellFormed}(\sigma',O'_{2},U'_{2},T'_{2})
+\end{gather}
+We choose \[O_{2}' = O_{2}, U_{1}' = U_{1}, U_{2}' = U_{2}, T_{1}' = T_{1}, T_{2}' = T_{2}\] so that \ref{4up4} follows from \ref{4ua4} and for the rest for the proof, we claim that
+
+\begin{equation} \label{4ua8}
+T_{1} = \{tid\} \land tid =  \sigma.l
+\end{equation}
+which follows directly from \ref{4ua1}.
+
+We set $O'_1$ as
+\begin{gather}
+\label{4xup3}
+O'_1 = O_1 [  \sigma.s(z,tid) \mapsto \sigma.s(z,tid) \setminus \{\mathsf{fresh}\} \cup \{\mathsf{iterator }tid\} ]
+\end{gather}
+
+As $O_{2}'$ is chosen as $O_{2}$ and we know equations \ref{4xup3}, \ref{4xup1} and \ref{4ua3}, we can show that \ref{4up3} holds.
+
+From \ref{4u1a1} we can assume that there exists $\hat{O_1}$, $\hat{\hat{O_1}}$,  $\hat{\hat{\hat{O_1}}}$ and $\hat{\hat{\hat{\hat{O_1}}}}$ such that
+\begin{gather}\label{4uahat1}
+  (\sigma, \hat{O_1}, U_1,T_1) \in \llbracket \Gamma \rrbracket_{M,tid} \\
+  \label{4uahat2}
+  (\sigma, \hat{\hat{O_1}}, U_1 ,T_1) \in \llbracket x:\mathsf{rcuItr}\,\rho\,\N ( [f \rightharpoonup  y]) \rrbracket_{M,tid} \\
+\label{4uahat3}
+ (\sigma, \hat{\hat{\hat{O_1}}}, U_1 ,T_1) \in \llbracket z:\mathsf{rcuFresh} \, \N([ f \rightharpoonup u]) \rrbracket_{M,tid} \\
+  \label{4uahat4}
+  \hat{O_1} \bullet \hat{\hat{O_1}} \bullet \hat{\hat{\hat{O_1}}}  = O_1
+  \end{gather}
+
+To show \ref{4u1p1} we need to show that there exists $\hat{O}'_{1}$, $\hat{\hat{O}}'_{1}$ and $\hat{\hat{\hat{O'_1}}}$
+
+\begin{gather}
+\label{4uphat1}
+  (\sigma',\hat{O}'_{1},U_1, T_1) \in \llbracket \Gamma \rrbracket_{M,tid} \\
+  \label{4uphat2}
+   (\sigma',\hat{\hat{O}}'_{1},U_1, T_1) \in \llbracket   x:\mathsf{rcuItr} \, \rho \,\N([ f \rightharpoonup z]) \, \rrbracket_{M,tid} \\
+\label{4uphat3}
+(\sigma',\hat{\hat{\hat{O}}}'_{1},U_1, T_1) \in \llbracket   z:\mathsf{rcuItr}\, \rho' \,\N([ f \rightharpoonup y]) \rrbracket_{M,tid} \\
+\label{4uphat4}
+\hat{O'_1} \bullet \hat{\hat{O'_1}} \bullet \hat{\hat{\hat{O'_1}}} \bullet \hat{\hat{\hat{\hat{O'_1}}}} = O'_1
+\end{gather}
+
+We choose $\hat{O'}_1$ as $\hat{O}_1$ and $\hat{\hat{O'}}_1$ as $\hat{\hat{O}}_1$  so that \ref{4uphat1} and \ref{4uphat2}  follow from \ref{4uahat1} and \ref{4uahat2}.
+
+However, $\hat{\hat{\hat{O'}}}_1$ and $\hat{\hat{\hat{O}}}_1$ are different observations so \ref{4uphat3} does not follow from \ref{4uahat3}. To prove \ref{4up6} we need to recall \ref{4ua6}, \ref{3xup3} and $tid = \sigma.l \land T_1 = \{tid\}$.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{itemize}
+\item \textsf{\ref{4up6}.Ownership}: [TODO : A wierd question to Colin]
+\item \textsf{\ref{4up6}.Reader-Writer-Iterator-Coexistence-Ownerhsip}: trivial.
+\item \textsf{\ref{4up6}.Iterators-Free-List} and \textsf{\ref{4up6}.Free-List-Reachability}: From equations \ref{4uahat3}, \ref{4uphat3} and \ref{4xup3} we know that $\textsf{fresh} \in O_1(s(z,tid))$ and $\textsf{iterator }tid \in O'_1(s'(z,tid))$. $T'_1$ is chosen as $T_1$ and recalling equation \ref{4ua8} together with operational semantics for free-list updates we conclude that $T$ in $\forall_{T}\ldotp (T,o) \in \sigma'.F$ is empty.
+\item \textsf{\ref{4up6}.Unlinked-Reachability}:trivial.
+\item \textsf{\ref{4up6}.Writer-Unlink}: Facts from type environment of the \textsf{rcuItr} shown in figure \ref{fig:denotingtypeenviroment}makes this proof trivial.
+\item \textsf{\ref{4up6}.Fresh-Reachable}:trivial.
+\item \textsf{\ref{4up6}.Fresh-By-Mutator}:trivial.
+\item \textsf{\ref{4up6}.Writer-Not-Reader}:trivial.
+\item \textsf{\ref{4up6}.Readers-In-Free-List}:trivial.
+\item \textsf{\ref{4up6}.To-Be-In-Free-List}:trivial.
+\item \textsf{\ref{4up6}.MustBeAllocated}:trivial.
+\item \textsf{\ref{4up6}.Heap-Domain}: Facts from type environment of the \textsf{rcuItr} and \textsf{rcuFresh} shown in figure \ref{fig:denotingtypeenviroment} makes this proof trivial.
+\item \textsf{\ref{4up6}.Unique-Root}:
+  \begin{itemize}
+  \item Recalling \ref{4ua6}, we know that there exists no observable type state that violates the \textsf{Unique-Root} invariant.
+  \item As \ref{4uphat2} is shown as valid by choosing $\hat{\hat{O'}}_1$ as $\hat{\hat{O}}_1$ and recalling equation \ref{4xup3} shows that linking $z$ as fresh node preserves \textsf{Unique-Root} invariant.
+  \end{itemize}
+\item \textsf{\ref{4up6}.Unique-Reachable}:
+  \begin{itemize}
+   \item Recalling \ref{4ua6}, we know that there are no observed type states in $O_1$ violating the \textsf{Unique-Reachable} property.
+   \item \todo{add to type env of fresh that there exists no rcu heap node pointing to it}.
+     \item From \ref{4ua1} and \ref{4ua6} we know that $\rho$ is valid unique path. From \ref{4ua1} we also know that $x$ points to $y$ via field $f$. From path arithmetic that we introduce, we can suppose that we have $\rho' = \rho.f$.  In addition, \ref{4uphat2} is shown as valid by choosing $\hat{\hat{O'}}_1$ as $\hat{\hat{O}}_1$. Therefore recalling equation \ref{4xup3} shows preservation of \textsf{Unique-Reachability}.
+  \end{itemize}
+\end{itemize}
+To show  \ref{4u2p1} we need to show that
+\[(\sigma, O_2, U_2, T_2) \mathcal{R} (\sigma', O'_2, U'_2, T'_2)  \]
+which by definition means that we must show
+\begin{gather}\label{4ir1}
+\sigma.l \in T_2 \implies \sigma.h = \sigma'.h \\
+\label{4ir2}
+\textsf{iterator} \, tid \in O_2(o) \implies o \in dom(\sigma'.h) \\
+\label{4ir3}
+O_2  = O'_2\\
+\label{4ir4}
+U_2 = U'_2\\
+\label{4ir5}
+T_2 = T'_2\\
+\label{4ir6}
+\forall_{t \in T_2, x} \ldotp \sigma.s(x,t) = \sigma'.s(x,t)
+\end{gather}
+
+\begin{itemize}
+\item We know that $tid \in T_1 \land \sigma.l = tid$ therefore $\forall_{t\in T_2}\ldotp t \neq tid$. Also recall that $T'_1$ is chosen as $T_1$ and $T'_2$ is chosen as $T_2$ where all implies \ref{4ir1}.
+\item Recall that  $U'_2$ is chosen as $U_2$, $T'_2$ is chosen as $T_2$, $O'_2$ is chosen as $O_2$ therefore \ref{4ir3}-\ref{4ir5} holds.
+\item Recall from equation \ref{4xup3} that the only changed map is $O_1$. Also recall that $O_2'$ is chosen as $O_2$ and $T'_2$ is chosen as $T_2$ which means $\forall_{x,f\fname,t\in T_2} \ldotp O_2(h(s(x,t),f)) = O'_2(h'(s'(x,t),f))$. Therefore \ref{4ir2} and \ref{4ir6} hold.
+\end{itemize}
+\end{proof}
+
+\begin{Lemma}[Stack-Read]\scriptsize
+\begin{align*}
+\llbracket y:=x \rrbracket( \lfloor \llbracket \Gamma,y:\_,x:\mathsf{rcuItr} \rho \, \N \rrbracket_{\textsf{R,M},tid} * \{m\}\rfloor)  \subseteq \\
+\lfloor \llbracket \Gamma,y:\mathsf{rcuItr} \, \rho \, \N ,x:\mathsf{rcuItr} \rrbracket_{\textsf{R,M},tid}  * \mathcal{R}(\{m\})\rfloor
+\end{align*}
+\end{Lemma}
+
+\begin{Lemma}[Heap-Allocate]\scriptsize
+\begin{align*}
+  \llbracket y := new \rrbracket (\lfloor \llbracket \Gamma,y:\_ \rrbracket_{\textsf{M},tid} * \{m\}\rfloor)  \subseteq \\
+  \lfloor \llbracket \Gamma,y:\mathsf{rcuFresh} \, \N_{\emptyset} \rrbracket_{\textsf{M},tid}  * \mathcal{R}(\{m\})\rfloor
+\end{align*}
+\end{Lemma}
+
+
+\begin{Lemma}[Asych-Free]\scriptsize
+\begin{align*}
+\llbracket  \mathsf{asyncDelayedFree}(x) \rrbracket (\lfloor \llbracket \Gamma,x:\mathsf{unlinked} \rrbracket_{\textsf{M},tid} * \{m\}\rfloor)  \subseteq \\
+\lfloor \llbracket \Gamma,x:\mathsf{undef} \rrbracket_{\textsf{M},tid}  * \mathcal{R}(\{m\})\rfloor
+\end{align*}
+\end{Lemma}
+

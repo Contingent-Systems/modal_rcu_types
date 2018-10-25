@@ -1,0 +1,392 @@
+\begin{comment}
+\newpage
+\subsubsection{Deprecated \textsf{WellFramedness} and Framing/Unframing Proofs}
+\begin{figure*} \tiny
+\[
+\begin{array}{c}\tiny
+  \wellframed
+\end{array}
+\]
+\label{fig:wfrmd}
+\caption{Wellframed Type Contexts}
+\end{figure*}
+  \begin{case}-\textbf{M}: frame case where $C$ has the form $\Gamma,\Gamma_1 \vdash_{M} C \dashv \Gamma, \Gamma_2$.
+
+    We know
+         \begin{gather}\label{s'l5a1}
+       \Gamma_1 \vdash_{M} C \dashv \Gamma_2 \\
+       \label{s'l5a2}
+       \textsf{WellFramed}\left(\Gamma, \Gamma_1\right)\\
+       \label{s'l5a3}
+      \textsf{WellFramed}\left(\Gamma, \Gamma_2\right) \\        
+        \label{s'l5a5}
+       \{\llbracket \Gamma_1 \rrbracket_{M,tid}\}  C  \{\llbracket \Gamma_2 \rrbracket_{M,tid}\}
+      \end{gather}
+
+         We need to show
+         \begin{gather}\label{s'l5p1}
+           \{\llbracket \Gamma,\Gamma_1\rrbracket_{M,tid}\} C \{\llbracket \Gamma,\Gamma_2\rrbracket_{M,tid}\}
+         \end{gather}
+
+From \ref{s'l5a2}, \ref{s'l5a3} we know disjointness of $\Gamma$ with $\Gamma_1$ and $\Gamma_2$. By using \ref{s'l5a5} as antecedent for frame rule of  View's Logic, we can conclude 
+\begin{gather}\label{s'l5a6}
+\{\llbracket \Gamma\rrbracket_{M,tid}* \llbracket \Gamma_1 \rrbracket_{M,tid}\}  C  \{\llbracket \Gamma \rrbracket_{M,tid}*\llbracket \Gamma_2 \rrbracket_{M,tid}\}
+\end{gather}     
+
+From \ref{s'l5a2} and \ref{lem:fr} we know 
+\begin{gather}\label{s'l5a7}
+\llbracket \Gamma, \Gamma_1 \rrbracket_{M,tid} \sqsubseteq \llbracket \Gamma\rrbracket_{M,tid} *\llbracket \Gamma_1 \rrbracket_{M,tid}
+\end{gather}   
+
+From \ref{s'l5a3} and \ref{lem:ufr} we know 
+\begin{gather}\label{s'l5a8}
+\llbracket \Gamma \rrbracket_{M,tid}* \llbracket \Gamma_2 \rrbracket_{M,tid} \sqsubseteq \llbracket \Gamma , \Gamma_2 \rrbracket_{M,tid}
+\end{gather}     
+
+By using \ref{s'l5a8} and \ref{s'l5a7} as antecedents of consequence rule of View's Logic we can conclude 
+\begin{gather}\label{s'l5p8}
+\{\llbracket \Gamma,\Gamma_1\rrbracket_{M,tid}\} C \{\llbracket \Gamma,\Gamma_2\rrbracket_{M,tid}\}
+\end{gather}
+
+  \end{case}
+
+  \begin{corollary}[Framing-M]\scriptsize
+\label{lem:fr}
+\[\forall_{tid,\Gamma,\Delta} \ldotp \textsf{WellFramed}(\Gamma,\Delta) \implies \llbracket \Gamma, \Delta \rrbracket_{tid,M}  \sqsubseteq \llbracket \Gamma \rrbracket_{tid,M} * \llbracket  \Delta \rrbracket_{tid,M}  \]
+\end{corollary}
+\begin{proof}
+  By induction on $\Delta$
+  \begin{itemize}
+ \item \textsf{case} $\Delta$ = .  : We need to show that
+    \begin{gather}\label{cp1}
+      \llbracket \Gamma \rrbracket_{M,tid} \sqsubseteq \llbracket \Gamma \rrbracket_{M,tid} * \llbracket . \rrbracket_{M,tid}
+    \end{gather}
+    Since $\llbracket . \rrbracket_{M,tid}$ is set of all logical states, $\textsf{LState}$, we need to show \ref{cp2}
+    \begin{gather}\label{cp2}
+      \begin{array}{l}
+        \llbracket \Gamma \rrbracket_{M,tid} \sqsubseteq \\
+        \llbracket \Gamma \rrbracket_{M,tid} * \textsf{LState}
+        \end{array}
+    \end{gather}
+    which is to show \ref{cp3} when we expand the definition of *
+    \begin{gather}\label{cp3}
+      \begin{array}{l}
+        \forall_{m}\ldotp m \in \llbracket \Gamma \rrbracket_{M,tid} \implies \\
+        \exists_{m',m''}\ldotp m'\in \llbracket \Gamma \rrbracket_{M,tid} \land \\
+        m''\in \textsf{LState} \land m' \bullet m'' = m
+        \end{array}
+    \end{gather}
+    We can draw conclusion for \ref{cp3} by choosing $m'$ as $m$ and $m''$ as unit.
+  \item \textsf{case} $\Delta$ = $\Delta'$,x:T.
+Inductive hypothesis is
+    \begin{gather}\label{1ca1}
+      \begin{array}{l}
+      \llbracket\Gamma,\Delta' \rrbracket_{M,tid} \sqsubseteq \\
+      \llbracket \Gamma \rrbracket_{M,tid} * \llbracket \Delta' \rrbracket_{M,tid}
+      \end{array}
+    \end{gather}
+    From inductive hypothesis we know
+    \begin{gather}\label{1ca11}
+      \begin{array}{l}
+        \forall_{m }\ldotp m\in \llbracket \Gamma,\Delta'\rrbracket_{M,tid}\ldotp \implies \\
+        \exists_{m',m''}\ldotp m' \in \llbracket \Gamma \rrbracket_{M,tid} \land m'' \in \llbracket \Delta' \rrbracket_{M,tid} \land m = m' \bullet m''
+        \end{array}
+    \end{gather}
+    We need to show 
+    \begin{gather}\label{1cp1}
+      \begin{array}{l}
+        \llbracket \Gamma,\Delta',x:t\rrbracket_{M,tid} \sqsubseteq \\
+        \llbracket \Gamma \rrbracket_{M,tid} * \llbracket \Delta',x:T\rrbracket_{M,tid}
+        \end{array}
+    \end{gather}
+    When we expand the * in \ref{1cp1} we get
+    \begin{gather}\label{1cpp1}
+      \begin{array}{l}
+     \forall_{m} \ldotp m \in \llbracket \Gamma,\Delta',x:t\rrbracket_{M,tid} \implies \\
+     \exists_{m',m''} \ldotp m' \in \llbracket \Gamma \rrbracket_{M,tid} \land  m'' \in \llbracket \Delta',x:T\rrbracket_{M,tid} \land \\
+     m=m'\bullet m''     
+        \end{array}
+    \end{gather}
+    
+     From  the hypothesis in \ref{1cpp1} we know 
+    \begin{gather}\label{1ca12}
+      \begin{array}{l}
+        m \in \llbracket \Gamma \rrbracket_{M,tid} \cap
+        \llbracket \Delta' \rrbracket_{M,tid} \cap 
+        \llbracket x:T \rrbracket_{M,tid}
+        \end{array}
+    \end{gather}
+    
+
+We need to show 
+    \begin{gather} \label{1cpf}
+      \exists_{m',m''} \ldotp m' \in \llbracket \Gamma \rrbracket_{M,tid} \land m'' \in \llbracket \Delta',x:T \rrbracket_{M,tid} \land m = m' \bullet m''
+    \end{gather}
+
+    From \ref{1ca12}, we know that m supports $\llbracket \Gamma \rrbracket_{M,tid}$, $\llbracket \Delta \rrbracket_{M,tid}$ and $\llbracket x:T \rrbracket_{M,tid}$.
+
+    By application of inductive hypothesis, we get $m' \in \llbracket \Gamma \rrbracket_{M,tid}$ and $m'' \in \llbracket \Delta' \rrbracket_{M,tid}$ whose composition is $m$.
+
+    Despite the fact that we know
+    \[m' \in \llbracket \Gamma \rrbracket_{M,tid} \land m'' \in \llbracket \Delta' \rrbracket_{M,tid}\]
+    we do not know which parts $m'$ and $m''$ support in $\llbracket x:T \rrbracket_{M,tid}$. We need to show having any part of $\llbracket x:T \rrbracket_{M,tid}$ supported by any of $m'$ and $m''$ preserves composition
+    \[m' \bullet m'' = m\]
+    We also need to show that supporting a specific part of the $\llbracket x:T \rrbracket_{M,tid}$ is context invariant to supporting other parts of the $\llbracket x:T \rrbracket_{M,tid}$.
+
+    We can show this either via showing that peeling out the $\llbracket x:T \rrbracket_{M,tid}$ from $m' \in \llbracket \Gamma, x:T\rrbracket_{M,tid}$ and concatenating to the $m'' \in \llbracket \Delta', x:T\rrbracket_{M,tid}$ preserves or just copying the $\llbracket x:T \rrbracket_{M,tid}$ to the $\llbracket \Delta' \rrbracket_{M,tid}$ 
+        \begin{gather} \label{1cpff}
+    m' \in \llbracket \Gamma \rrbracket_{M,tid}\land m' \bullet m'' = m 
+        \end{gather}
+    We need to show this against all possible behaviour showing up in the context due to diffrent types of $T$.
+
+   Case analysis on $T$:
+    \begin{itemize}
+    \item \textbf{rcuItr}: We know that $m' \bullet m'' = m$ is composition of the corresponding componontents of the $m'$ and $m''$. For the observation map we know that
+      \[O' \bullet O'' = O\]
+      where composition is union operation. Since the composition operation is union, adding/copying observations for denotation of $x$ to $O''$ together with keeping $O'$ same preserve \ref{1cpff}.
+
+      For the heap, we know that composition
+      \[h= h' \bullet h''\]
+      behaves like the union operator for defined heap locations, in other words, composition occurs when two heap maps agree on the value of the heap location otherwise it is an undefined heap location. We also know from the hypothesis that $\llbracket \Gamma \rrbracket$ and $\llbracket \Delta',x:\textsf{rcuItr} \rrbracket_{M,tid}$  are \textsf{Wellframed} which makes copying adding/copying heap from denotation of $x$ to the heap from denotation of $\llbracket \Delta' \rrbracket_{M,tid}$ preserves having no aliases through path and field map to $\llbracket \Gamma \rrbracket_{M,tid}$ and preserves \ref{1cpff}.
+
+      Stack composition is disjoint union of the stack.
+      \[s' \uplus s'' = s\]
+      Peeling out the stack for denotation of $x$ from $s'$ preserves the residual $s'$ still supporting the $m'$  as we know from \textsf{Wellframed}ness of  $\llbracket \Gamma \rrbracket$ and $\llbracket \Delta',x:\textsf{rcuItr} \rrbracket_{M,tid}$ that there exists no name aliasing in between the contexts so that peeling $x$ from one context,$\llbracket \Gamma,x:rcuItr\rrbracket_{M,tid}$ , and concatenating it to another,$\llbracket \Delta' \rrbracket_{M,tid}$, preserves \ref{1cpff}.
+      
+      $x:\textsf{rcuItr}$ denotation does not touch to other maps so it is like cutting empty maps from m' so it is trivial to show.
+      
+    \item \textbf{rcuFresh}: We know from denotation of the \textsf{fresh} that the freshly allocated heap location is isolated such that there exists no access from any other heap location.
+
+      We know that composition of observation map is
+      \[O' \bullet O'' = O\]
+      where composition is union operation. Since the composition operation is union, adding/copying observations for denotation of $x$ to $O''$ together with keeping $O'$ same preserve \ref{1cpff}.
+      
+      For the stack we know that composition
+      \[s' \uplus s'' = s\]
+     is disjoint union. We know from hypothesis that  $\llbracket \Gamma \rrbracket$ and $\llbracket \Delta',x:\textsf{rcuItr} \rrbracket_{M,tid}$  are \textsf{Wellframed} that there exists no name aliasing in between the contexts so that peeling $x$ from one context,$\llbracket \Gamma,x:rcuItr\rrbracket_{M,tid}$ , and concatenating it to another,$\llbracket \Delta' \rrbracket_{M,tid}$, preserves \ref{1cpff}.
+      
+     We know from denotation of the \textsf{rcuFresh} that it is isolated from the rest of the heap. We also know from hypothesis that  $\llbracket \Gamma \rrbracket$ and $\llbracket \Delta',x:\textsf{rcuItr} \rrbracket_{M,tid}$  are \textsf{Wellframed} where there exists no aliasing over path and fields in between the contexts which makes copying/adding heap from denotation of $x$ to heap from $\llbracket \Delta' \rrbracket_{M,tid}$ preserve\ref{1cpff}.     
+   \item \textbf{unlinked}: Denotation of \textsf{unlinked} touches only to observation map and heap map. The reasoning that we did for observation map composition in other cases also apply to this case to show \ref{1cpff}.
+      \item \textbf{undef}: Composition of undefined map is
+        \[U' \cup U'' = U\]
+       is union operation so the reasoning that we did for observation map composition in other cases also apply to this case to show \ref{1cpff}.
+      \item \textbf{rcuRoot}:Similar reasoning we do for \textsf{rcuFresh} case applies for this case as well. 
+    \end{itemize}
+    
+    \end{itemize}
+\end{proof}
+
+\begin{corollary}[UnFraming]\scriptsize
+\label{lem:ufr}
+\[\forall_{tid,\Gamma,\Delta} \ldotp \textsf{WellFramed}(\Gamma,\Delta)\implies \llbracket \Gamma\rrbracket_{tid,M} * \llbracket \Gamma' \rrbracket_{tid,M}  \sqsubseteq \llbracket \Gamma, \Delta \rrbracket_{tid,M} \]
+\end{corollary}
+\begin{proof}
+  By induction on $\Delta$
+  \begin{itemize}
+  \item \textsf{case} $\Delta$ = . : We need to show that
+    \begin{gather}\label{up1}
+ \llbracket \Gamma \rrbracket_{M,tid} * \llbracket . \rrbracket_{M,tid} \sqsubseteq  \llbracket \Gamma \rrbracket_{M,tid}
+    \end{gather}
+    Since $\llbracket . \rrbracket_{M,tid}$ is set of all logical states, $\textsf{LState}$, we need to show \ref{up2}
+    \begin{gather}\label{up2}
+      \llbracket \Gamma \rrbracket_{M,tid} * \textsf{LState}  \sqsubseteq \llbracket \Gamma \rrbracket_{M,tid}   
+    \end{gather}
+    Expanding definition of * we get
+    \begin{gather}\label{up3}
+      \begin{array}{l}
+        \forall_{m} \ldotp m\in \llbracket \Gamma \rrbracket_{M,tid}*\textsf{LState} \implies \\
+        \exists_{m',m''} \ldotp m'\in \llbracket \Gamma \rrbracket_{M,tid} \land \\
+        m'' \in \textsf{LState} \land \\
+        m' \bullet m'' = m \implies m\in \llbracket \Gamma \rrbracket_{M,tid}
+        \end{array}
+      \end{gather}
+    Choosing $m'$ as $m$ and $m''$ as unit, we can show $m\in \llbracket \Gamma \rrbracket_{M,tid}$
+  \item \textsf{case} $\Delta$ = $\Delta',x:T$  :
+Inductive hypothesis is
+    \begin{gather}\label{u'a1}
+      \llbracket \Gamma \rrbracket_{M,tid} * \llbracket \Delta' \rrbracket_{M,tid} \sqsubseteq \llbracket \Gamma,\Delta'\rrbracket_{M,tid}
+    \end{gather}
+ When we expand the definition of * and concatenation in hypothesis, we get
+    \begin{gather}\label{u'a11}
+      \begin{array}{l}
+        \forall_{m} \ldotp m  \in \llbracket \Gamma \rrbracket_{M,tid} * \llbracket \Delta' \rrbracket_{M,tid} \implies \\
+        \exists_{m',m''}\ldotp m' \in \llbracket \Gamma \rrbracket_{M,tid} \land \\
+        m'' \in \llbracket \Delta' \rrbracket_{M,tid} \land m = m' \bullet m'' \implies \\
+        m \in \llbracket \Gamma \rrbracket_{M,tid} \cap \llbracket \Delta' \rrbracket_{M,tid}
+        \end{array}
+    \end{gather}
+
+    We need to show that
+    \begin{gather}\label{u'p1}
+      \begin{array}{l}
+         \llbracket \Gamma \rrbracket_{M,tid} * \llbracket \Delta',x:T \rrbracket_{M,tid} \sqsubseteq \\
+        \llbracket \Gamma,\Delta',x:T\rrbracket_{M,tid}
+        \end{array}
+    \end{gather}
+    When we expand the definition of * and concatenation in the goal  \ref{u'p1} we get
+    \begin{gather}\label{u'p1'}
+      \begin{array}{l}
+        \forall_{m} \ldotp m\in \llbracket \Gamma \rrbracket_{M,tid} * \llbracket \Delta',x:T \rrbracket_{M,tid} \implies \\
+        \exists_{m',m''}\ldotp m' \in \llbracket \Gamma \rrbracket_{M,tid} \land \\
+        m'' \in \llbracket \Delta',x:T \rrbracket_{M,tid} \land m = m' \bullet m'' \implies \\
+        m\in \llbracket \Gamma \rrbracket_{M,tid} \cap \llbracket \Delta',x:T\rrbracket_{M,tid}
+        \end{array}
+    \end{gather}
+  
+        From the hypothesis in \ref{u'p1'} we know 
+\begin{gather} \label{u'a2}
+ m'' \in \llbracket \Delta' \rrbracket_{M,tid} \cap \llbracket x:T \rrbracket_{M,tid}
+    \end{gather}
+and 
+\begin{gather}\label{u'a3}
+m = m' \bullet m''
+\end{gather}
+We need to show  
+\begin{gather}\label{u'p2}
+    m\in \llbracket \Gamma \rrbracket_{M,tid} \cap \llbracket \Delta',x:T\rrbracket_{M,tid}
+\end{gather}
+Knowing \ref{u'a11}, \ref{u'a2} and \ref{u'a3}, we do case analysis on $T$ to show \ref{u'p2} which is to show the composition of instrumented states with respect to $T$. Stack and free list compositions are simply disjoint union, observation  and undefined map compositions are union operations and showing their composition for each of the $T$ is trivial.  
+
+We know that type contexts are wellframed which means we know that there exists no name aliasing. We also know that there exists disjointness among the field mappings and the paths for the variables in different contexts. Wellframedness assumption makes composition of the heap trivial to show. 
+\end{itemize}
+\end{proof}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    
+ \begin{Lemma}[\textsc{Free}]
+   \label{lemma:free}
+\begin{align*}
+  \llbracket Free(x) \rrbracket (\lfloor \llbracket x:\textsf{freeable} \rrbracket_{M,tid} * \{m\}\rfloor)  \subseteq \\
+                                                              \lfloor \llbracket x:\textsf{undef} \rrbracket  * \mathcal{R}(\{m\})\rfloor
+\end{align*}
+ \end{Lemma}
+ \begin{proof}
+   Trivial
+
+    We assume
+\begin{gather}\label{ahu1fr}
+  \begin{aligned}
+    (\sigma, O, U, T) \, \in &  \llbracket \Gamma'',\Gamma \rrbracket_{M,tid} * \{m\}
+    \end{aligned} \\
+\textsf{WellFormed}(\sigma,O,U,T)
+\label{ahu2fr}
+\end{gather}
+
+
+We split the composition in  \ref{ahu1fr} as 
+\begin{gather} \label{ahu11fr}
+  \begin{aligned}
+    (\sigma, O_{1}, U_{1}, T_{1} ) \in & \llbracket  \Gamma'',\Gamma \rrbracket_{M,tid} \end{aligned}\\
+  \label{ahu12fr}
+(\sigma, O_{2}, U_{2}, T_{2}) = m
+\\
+\label{ahu13fr}
+O_{1} \bullet_{O} O_{2} = O
+\\
+\label{ahu14fr}
+U_{1} \cup U_{2} = U
+\\
+\label{ahu15fr}
+T_{1} \cup T_{2} = T
+\\
+\label{ahu16fr}
+\textsf{WellFormed}(\sigma,O_{1},U_{1},T_{1})
+\\
+\label{ahu17fr}
+\textsf{WellFormed}(\sigma,O_{2},U_{2},T_{2})
+\end{gather}
+We must show there exists $O'_{1}, O'_{2}, U'_{1}, U'_{2}, T'_{1}, T'_{2}$ such that
+\begin{gather}\label{phu5fr}
+\begin{aligned}
+(\sigma',O'_{1},U'_{1}, T'_{1})  \in \llbracket \Gamma',\Gamma'' \rrbracket_{M,tid}
+\end{aligned}\\
+\label{phu6fr}
+(\sigma',O'_{2},U'_{2}, T'_{2}) \in \mathcal{R}(\{m\})
+\\
+\label{phu7fr}
+O'_{1} \bullet_{O} O'_{2} = O'
+\\
+\label{phu8fr}
+U'_{1} \cup U'_{2} = U'
+\\
+\label{phu9fr}
+T'_{1} \cup T'_{2} = T'
+\\
+\label{phu10fr}
+\textsf{WellFormed}(\sigma',O'_{1},U'_{1},T'_{1}) \\
+\label{phu11fr}
+\textsf{WellFormed}(\sigma',O'_{2},U'_{2},T'_{2})
+\end{gather}
+
+We also know from operational semantics that the machine state has changed as
+\begin{gather}\label{ahusfr}
+\sigma' =  \sigma
+\end{gather}
+
+There exists no change in the observation of heap locations
+\begin{gather}\label{ahus1fr}
+  O'_1 =  O_1(s(x,tid))^{\textsf{undef}\mapsto \textsf{fresh}}
+\end{gather}
+
+\ref{ahus2fr} follows from \ref{ahu1fr}
+\begin{gather}\label{ahus2fr}
+  T_1 = \{tid\} \text{ and } tid = \sigma.l
+\end{gather}
+
+$T'_1$ to be $T_1$ follows from \ref{ahus2fr} and the fact that we know from operational semantics(lock is not released , $\sigma.l = \sigma'.l$. From operational semantics, we know that undefined map has not changed so we can pick $U'_1$ as $U_1$ and show \ref{phu5fr}.
+
+In the rest of the proof, we prove \ref{phu10fr} and \ref{phu11fr}. To prove \ref{phu10fr}, we need to show that each of the memory axioms in Section \ref{sec:memaxioms} holds for the state $(\sigma',O'_1,U_1',T_1')$.
+\todo{stop here}
+\begin{case} - \textbf{UNQR} %By \ref{ahu16wf}.\textbf{UNQR}, \ref{phu10wf}.\textbf{FR}(proved) and $\sigma.rt = \sigma.rt'$.
+\end{case}
+\begin{case} - \textbf{OW} %By \ref{ahuswf},\ref{ahus1wf} and \ref{ahu16wf}.\textbf{OW}
+\end{case}
+\begin{case} - \textbf{RWOW} %By \ref{ahuswf}, \ref{ahus1wf} and \ref{ahu16wf}.\textbf{RWOW}
+\end{case}
+\begin{case} - \textbf{AWRT} %Trivial. 
+\end{case}
+\begin{case} - \textbf{IFL} % By \ref{ahu16wf}.\textbf{WULK}, \ref{ahus1wf} and operational semantics.
+\end{case}
+\begin{case} - \textbf{FLR}  %By operational semantics(\ref{ahuswf}) we know that free list has not changed. Trivial by \ref{ahu16wf}. 
+\end{case}
+\begin{case} - \textbf{WULK} % By \ref{ahu16wf}.\textbf{WULK}, \ref{ahus1wf} and operational semantics($\sigma.l = \sigma.l'$).
+\end{case}
+\begin{case} - \textbf{WF} %By \ref{ahu16wf}.\textbf{WF}, \ref{ahus2wf}, \ref{ahus1wf} and operational semantics(\ref{ahuswf}).
+\end{case}
+\begin{case} - \textbf{FR} %By \ref{ahu16wf}.\textbf{FR}, \ref{ahus2wf}, \ref{ahus1wf} and operational semantics(\ref{ahuswf}).
+\end{case}
+\begin{case} - \textbf{FNR} %By \ref{ahu16wf}.\textbf{FNR}, \ref{ahus2wf}, \ref{ahus1wf} and operational semantics(\ref{ahuswf}).
+\end{case}
+\begin{case} - \textbf{FSF} %By \ref{ahu16wf}.\textbf{FSF} and denotation of p ($\N_{f,\emptyset}$) in \ref{ahu11wf}
+\end{case} 
+\begin{case} - \textbf{HD} 
+\end{case}
+\begin{case} - \textbf{WNR} %By \ref{ahus2wf} and operational semantics($\sigma.l = \sigma.l'$).
+\end{case}
+\begin{case} - \textbf{RINFL}% By operational semantics(\ref{ahuswf}) we know that free list and bounding threads have not changed. Trivial by \ref{ahu16wf}. 
+\end{case}
+\begin{case} - \textbf{ULKR} %Trivial. 
+\end{case}
+\begin{case} - \textbf{UNQRT} %By \ref{ahu16wf}.\textbf{UNQRT}, \ref{ahus1wf} and \ref{ahuswf}.
+\end{case}
+
+To prove \ref{phu11fr}, we need to show that \textsf{WellFormed}ness is preserved under interference relation
+\[(\sigma, O_2, U_2, T_2) \mathcal{R} (\sigma', O'_2, U'_2, T'_2)  \]
+which by definition means that we must show 
+\begin{gather}\label{phu17fr}
+  \sigma_2.l  \in  T_2 \rightarrow (\sigma_2.h =\sigma'_2.h \land \sigma_2.l=\sigma'_2.l)\\
+  \label{phu18fr}
+  l\in T_2\rightarrow F_2=F_2'\\
+    \label{phu19fr}
+  T_2\cap B_2= T'_2 \cap B_2'\\
+  \label{phu20fr}
+  \forall tid,o\ldotp\textsf{iterator} \, tid \in O_2(o) \rightarrow o \in dom(\sigma_2.h) \\
+  \label{phu21fr}
+  \forall tid,o\ldotp\textsf{iterator} \, tid \in O_2(o) \rightarrow o \in dom(\sigma'_2.h) \\
+  \label{phu22fr}
+  O_2 = O_2' \land U_2 = U_2' \land T_2 = T_2'\land B_2 = B_2' \land \sigma_2.rt = \sigma'_2.rt \\
+  \label{phu23fr}
+  \forall x, t \in T \ldotp \sigma_2.s(x,t) = \sigma'_2.s(x,t)
+\end{gather}
+ \end{proof}
+ \end{comment}

@@ -1,0 +1,102 @@
+\makeatletter
+\makeatother
+\section{RCU Bag with Linked-List}
+\label{appendix:bag_paul}
+\[\small
+\begin{array}{@{}l@{}}
+  BagNode\; head;\\
+  int \;member\;(int\;toRead)\;\{\\
+   \;\;ReadBegin; \\
+   \;\;int\;result =0; \\
+   \;\;\specline{parent:undef,\, head:rcuRoot}\\
+   \;\;BagNode \;parent = head; \\
+   \;\;\specline{parent:rcuItr}\\
+\;\;\specline{current:\_}\\
+   \;\;current = parent.Next; \\
+   \;\;\specline{current:rcuItr,\, parent:rcuItr}\\
+      \;\;\specline{current:rcuItr}\\
+   \;\;while(current.data\; != \;toRead \&\& current.Next \neq null)\{\\
+     \;\;\;\;\specline{parent:rcuItr}\\
+      \;\;\;\;\specline{current:rcuItr}\\
+     \;\;\;\;parent= current;\\
+     \;\;\;\;current = parent.Next ;\\
+  \;\;\;\;\specline{parent:rcuItr}\\
+      \;\;\;\;\specline{current:rcuItr}\\
+     \;\;\}\\
+   \;\;\specline{parent:rcuItr}\\
+   \;\;\specline{current:rcuItr}\\
+   \;\;result = current.data;\\
+   \;\;ReadEnd;\\
+   \;\;return \; result;\\
+  \}\\
+\end{array}
+\]
+\[\small
+\begin{array}{@{}l@{}}
+   void\; remove\;(int \;toDel\;)\;\{\\
+   \;\;WriteBegin;\\
+   \;\;BagNode\; current,\;parent\;=\;head;\\
+   \;\;current\;=\; parent.Next;\\
+   \;\;\specline{current:rcuItr\; Next \; \{\}}\\
+   \;\;\specline{parent:rcuItr\; \epsilon\; \{Next \mapsto current\}}\\
+   \;\;while\;(current.Next != null \&\& current.data \neq toDel)\;\{\\
+   \;\;\;\;\specline{parent:rcuItr\; (Next)^{k} \; \{Next \mapsto current \}}\\
+   \;\;\;\;\specline{current:rcuItr\; Next.(Next)^{k}.Next \; \{ \}}\\
+   \;\;\;\;parent= current;\\
+   \;\;\;\;\specline{current:rcuItr\; Next.(Next)^{k}.Next \; \{ \}}\\
+   \;\;\;\;\specline{parent:rcuItr\; Next.(Next)^{k}.Next \; \{ \}}\\
+   \;\;\;\;current = parent.Next;\\
+   \;\;\;\;\specline{parent:rcuItr\; Next.(Next)^{k}.Next \; \{Next \mapsto current \}}\\
+   \;\;\;\;\specline{current:rcuItr\; Next.(Next)^{k}.Next.Next \; \{ \}}\\
+   \;\;\}\\
+   \;\;\text{//We don't need to be precise on whether next of current is null or not} \\
+   \;\;\specline{parent:rcuItr\; Next.(Next)^{k}.Next \; \{Next \mapsto current \}}\\
+   \;\;\specline{current:rcuItr\; Next.(Next)^{k}.Next.Next.Next \; \{Next \mapsto null \} }\\
+   \;\;BagNode \;currentL= current.Next;\\
+   \;\;\specline{parent:rcuItr\; Next.(Next)^{k}.Next \; \{Next \mapsto itr \}}\\
+   \;\;\specline{currentL:rcuItr\; Next.(Next)^{k}.Next.Next.Next \; \{\} }\\
+   \;\;\specline{current:rcuItr \; Next.(Next)^{k}.Next.Next \;\{Next \mapsto currentL\} }\\
+   \;\;current.Next=currentL;\\
+   \;\;\specline{parent:rcuItr\; Next.(Next)^{k}.Next \; \{Next \mapsto itrN \}}\\
+   \;\;\specline{currentL:rcuItr\; Next.(Next)^{k}.Next.Next \; \{\} }\\
+   \;\;\specline{current:unlnked }\\
+   \;\;SyncStart;\\
+   \;\;SyncStop;\\
+   \;\;\specline{current:freeable}\\
+   \;\;Free(current);\\
+   \;\;\specline{current:undef}\\
+   \;\;WriteEnd;\\
+   \}\\
+   \end{array}
+\]
+\[\small
+\begin{array}{@{}l@{}}
+  void \; add(int toAdd)\{\\
+    \;\;WriteBegin;\\
+    \;\;BagNode \;nw = new;\\
+    \;\; nw.data  =  toAdd;\\
+    \;\;\specline{nw:rcuFresh \, \{ \} }\\
+    \;\;BagNode\; current,\;parent\;=\;head;\\
+    \;\;parent.Next\;=\;current;\\
+    \;\;\specline{current:rcuItr\; Next \; \{\}}\\
+    \;\;\specline{parent:rcuItr\; \epsilon\; \{Next \mapsto current\}}\\
+    \;\;while\;(current.Next != null )\;\{\\
+    \;\;\;\;\specline{parent:rcuItr\; (Next)^{k} \;\{Next \mapsto current \}}\\
+    \;\;\;\;\specline{current:rcuItr\; Next.(Next)^{k}.Next\; \{ \}}\\
+    \;\;\;\;parent = current;\\
+    \;\;\;\;current = parent.Next;\\
+    \;\;\;\;\specline{parent:rcuItr\; (Next)^{k}.Next \;\{Next \mapsto current \}}\\
+    \;\;\;\;\specline{current:rcuItr\; Next.(Next)^{k}.Next.Next\; \{ \}}\\
+    \;\;\}\\
+    \;\;\specline{parent:rcuItr\; (Next)^{k}.Next \;\{Next \mapsto current \}}\\
+    \;\;\specline{current:rcuItr\; Next.(Next)^{k}.Next.Next\; \{ Next \mapsto null \}}\\
+    \;\;nw.next= null;\\
+    \;\;\specline{nw:rcuFresh\; \{Next \mapsto null\}}\\
+    \;\;current.Next=nw\\
+    \;\;\specline{parent:rcuItr\; (Next)^{k}.Next \;\{Next \mapsto nw \}}\\
+    \;\;\specline{current:rcuItr\; (Next)^{k}.Next.Next \;\{Next \mapsto nw \}}\\
+    \;\;\specline{nw:rcuItr\; Next.(Next)^{k}.Next.Next.Next\; \{Next \mapsto null \}}\\
+    \;\;WriteEnd;\\
+  \}\\  
+\end{array}
+\]

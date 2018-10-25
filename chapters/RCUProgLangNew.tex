@@ -1,0 +1,658 @@
+\makeatletter % allow us to mention @-commands
+\def\arcr{\@arraycr}
+\makeatother
+\section{Type System \& Programming Language}
+In this section, we present a simple object oriented programming language with two block constructs for modelling \textsf{RCU}, and a type system that ensures proper (memory-safe) use of the language.
+To ensure memory safety, we must show how our type system makes programs preserve the following properties:
+\begin{itemize}
+\item A heap node can only be freed if it is no longer accessible from an RCU data structure or from local variables of other threads. To achieve this we ensure the reachability and access which can be suitably restricted. We explain how our types support a delayed ownership transfer for the deallocation.
+\item Local variables may not point inside an RCU data structure unless they are inside an \textsf{RCU} read or write block.
+\item Heap mutations are \textit{local}: each unlinks or replaces exactly one node.
+\item The RCU data structure remains a tree.  While not a fundamental constraint of RCU, it is a common constraint across known RCU data structures because it simplifies reasoning (by developers or a type system) about when a node has become unreachable in the heap.
+\end{itemize}
+
+We also demonstrate that the type system is not only sound, but useful:
+we show how it types Figure \ref{fig:rculist}'s list-based bag implementation~\cite{McKenney2015SomeEO}.
+We also give type checked fragments of a binary search tree to motivate advanced features of the type system; the full typing derivation can be found in Appendix \ref{appendix:bst_del}. The BST requires type narrowing operations that refine a type based on dynamic checks (e.g., determining which of several fields links to a node).
+In our system, we presume all objects contain all fields, but the number of fields is finite (and in our examples, small). This avoids additional overhead from tracking well-established aspects of the type system --- class and field types and presence, for example --- and focus on checking correct use of RCU primitives.  Essentially, we assume the code our type system applies to is already type-correct for a system like C or Java's type system.
+
+\subsection{\textsf{RCU} Type System for \textsf{Write} Critical Section}
+\label{subsection:rcu-typing}
+Section \ref{subsection:rcu-typing} introduces \textsf{RCU} types and the need for subtyping. Section \ref{subsection:type-action}, shows how types describe program states, through code for Figure \ref{fig:rculist}'s list-based bag example. Section \ref{subsection:type-rules} introduces the type system itself.
+
+\subsubsection{\textsf{RCU} Types}
+\label{subsection:typwrt}
+There are six types used in \textsf{Write} critical sections
+
+\[
+\tau ::=  \textsf{rcuItr}\;\rho\;\N \mid \textsf{rcuFresh}\;\N  \mid \textsf{unlinked} \mid \textsf{undef} \mid \textsf{freeable}
+\mid \textsf{rcuRoot}\]
+
+\textit{\textbf{rcuItr}} is the type given to references pointing into a shared RCU data structure. A \textsf{rcuItr} type can be used in either a write region or a read region (without the additional components). It indicates both that the reference points into the shared \textsf{RCU} data structure and that the heap location referenced by \textsf{rcuItr} reference is reachable by following the path $\rho$ from the root. A component $\N$ is a set of field mappings taking the field name to local variable names. Field maps are extended when the referent's fields are read.
+The field map and path components track reachability from the root, and local reachability between nodes.  These are used to ensure the structure remains acyclic, and for the type system to recognize exactly when unlinking can occur.
+ %The field map and path components are important for keeping track of heap locations through \textit{reached-by} and \textit{points-to} relations so that effects of mutations using references in \textsf{rcuItr} type are \textit{localized}.
+%In general, we utilize path information to ensure that we preserve well shaped heap for the data structures, e.g. acyclicity. In conjuction with the path component, we employ the field mappings to assist in checking whether proper linking/mapping exists between the related nodes shown by references when unlinking occurs.
+
+Read-side critical sections use \textsf{rcuItr} without path or field map components.  These components are both unnecessary for readers (who perform no updates) and would be invalidated by writer threads anyways.
+%Similar to the ones in \textsf{Write} critical section, they  point into a shared RCU data structure. 
+The read-side rules essentially only ensure the reader performs no writes, so
+we show all type rules related to \textsf{Read} critical section in \ref{fig:tssr} Appendix \ref{appendix:readtypes} together with the other standard rules (\textsc{T-Exchange}, \textsc{T-Par}, \textsc{T-Seq}, \textsc{T-Conseq} and \textsc{T-Skip}).
+
+\textit{\textbf{unlinked}} is the type given to references to unlinked heap locations --- objects previously part of the structure, but now unreachable via the heap. A heap location referenced by an unlinked reference may still be accessed by reader threads, which may have aquired their own references before the node became unreachable.  Newly-arrived readers, however, will be unable to gain access to these referents.
+
+\textit{\textbf{freeable}} is the type given to references pointing at unlinked heap location which is safe to reclaim because it is known that no concurrent readers hold references to it.
+Unlinked references become freeable after a writer has waited for a full grace period.
+
+\textit{\textbf{undef}} is the type given to references where the content of the referenced location is inaccessible. A freeable object becomes undefined after it is reclaimed.
+
+\textit{\textbf{rcuFresh}} is the type given to references to freshly allocated heap locations. Similar to \textsf{rcuItr} type, it has field mappings set $\N$. We set the field mappings in the set of an existsing \textsf{rcuFresh} reference to be the same as field mappings in the set of \textsf{rcuItr} reference when we replace the heap referenced by \textsf{rcuItr} with the heap referenced by \textsf{rcuFresh} for memory safe replacement.
+
+\textit{\textbf{rcuRoot}} is the type given to the fixed reference to the root of the RCU data structure.  It may not be overwritten.
+%An undefined reference can be loaded with a value -- it becomes \textsf{rcuItr} -- once we read the global unique root to it.
+
+\subsubsection{Subtyping}
+%%%%%%%%%%%%%%%%%%%%%%%%SUB TYPING JUDGEMENTS%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{figure}[t]\scriptsize
+\begin{mathpar}
+ \fmapempty \quad \fmapfieldemp\quad\fmapextendn \quad \fmapname  \and \fmapdiff \and \fmapwithf \and \fmapextend %\and \typelocalmap %\and  \ftypedecl \and \rpth 
+\\
+\fbox{$\vdash \, \N \subt \N'$}
+\and
+\inferrule[\scriptsize{T-NSub3}]
+{
+}
+{\vdash \, \N_{f,\emptyset} \subt \N([f \rightharpoonup y]) }
+\and
+\inferrule[\scriptsize{T-NSub4}]
+{
+}
+{\vdash \,  \N_{\emptyset} \subt \N}
+\and
+\inferrule[\scriptsize{T-NSub5}]
+{
+}
+{\vdash \, \N \subt \N}
+\and
+\inferrule*[left=\scriptsize{T-NSub2}]
+{
+}
+{\vdash \, \N([f_2 \rightharpoonup y]) \subt \N([f_1|f_2 \rightharpoonup y])}
+\and
+\inferrule*[left=\scriptsize{T-NSub1}]
+{
+}
+{\vdash \, \N([f_1 \rightharpoonup y]) \subt  \N([f_1|f_2 \rightharpoonup y])}
+\and
+\fbox{$\vdash \, \rho \subt \rho'$} \;\;
+\inferrule*[left=\scriptsize{T-PSub1}]
+{
+}
+{
+ \vdash  \rho.f_1 \subt \rho.f_1|f_2
+}
+\and
+\inferrule*[left=\scriptsize{T-PSub2}]
+{
+}
+{
+ \vdash  \rho.f_2 \subt  \rho.f_1|f_2
+}
+\and
+\inferrule*[left=\scriptsize{T-PSub3}]
+{
+}
+{
+ \vdash  \rho \subt  \rho
+}
+\\
+\fbox{$\vdash \, T \subt T'$} 
+\and
+\inferrule[\scriptsize{T-TSub2}]
+{
+}
+{
+\vdash \textsf{rcuItr}   \subt \textsf{rcuItr}
+}
+\and
+\inferrule[\scriptsize{T-TSub}]
+{
+}
+{
+\vdash \textsf{rcuItr}\; \_   \subt \textsf{undef}
+}
+\and
+\inferrule[\scriptsize{T-TSub1}]
+{
+\vdash\rho\subt \rho' \qquad \vdash \N \subt \N'
+}
+{
+\vdash \textsf{rcuItr} \, \rho \, \N  \subt  \textsf{rcuItr} \, \rho' \, \N'
+}
+\and
+\fbox{$\vdash \, \Gamma \subt \Gamma'$} \;\;
+\inferrule*[left=\scriptsize{T-CSub1}]
+{
+\vdash\Gamma \subt \Gamma' \;\; \vdash \text{T}  \subt \text{T'}
+}
+{
+\vdash \Gamma\, , x:\text{T}  \subt \Gamma'\, , x:\text{T'}
+}
+\and
+%\inferrule*[left=\scriptsize{T-CSub2}]
+%{
+%\Gamma' = \Gamma[\rho.f^{k}/\rho.f^{k}.f]
+%}
+%{
+% \vdash  \Gamma \subt \Gamma'
+%}
+%\and
+\inferrule*[left=\scriptsize{T-CSub}]
+{
+}
+{
+ \vdash \Gamma \subt  \Gamma
+}
+\end{mathpar}
+\vspace{-2em}
+\caption{Sub-Typing Judgements}
+\label{fig:sub-typing}
+\end{figure}
+
+It is sometimes necessary to use imprecise types --- mostly for control flow joins.  Our type system performs these abstractions via subtyping on individual types and full contexts, as in Figure \ref{fig:sub-typing}.  We discuss subtyping before the full type rules to give a sense of what kinds of imprecision exist in our type system.
+
+Figure \ref{fig:sub-typing} includes four judgments.  The first two --- $\vdash\N\prec:\N'$ and $\vdash\rho\prec:\rho'$ --- describe relaxations of field maps and paths respectively.  $\vdash\N\prec:\N'$ is read as ``the field map $\N$ is more precise than $\N'$'' and similarly for paths.
+The third judgment $\vdash T\prec:T'$ uses path and field map subtyping to give subtyping among \textsf{rcuItr} types --- one \textsf{rcuItr} is a subtype of another if their paths and field maps are similarly more precise --- and to allow \textsf{rcuItr} references to be ``forgotten'' --- this is occasionally needed to satisfy non-interference checks in the type rules.
+The final judgment $\vdash\Gamma\prec:\Gamma'$ extends subtyping to all assumptions in a type context, allowing any or all types in the context to be relaxed to a supertype.
+
+
+\begin{figure}\scriptsize
+\begin{mathpar}
+\fbox{$\Gamma \vdash_{M} \bar{s} \dashv \Gamma'$} \;\;
+\inferrule*[left=\scriptsize(T-Branch1)]
+{
+ \Gamma\, ,x:\textsf{rcuItr}\,\rho \, \N([f_1 \rightharpoonup  z]) \vdash \bar{s}_1 \dashv\Gamma_4 \and
+  \Gamma\, ,x:\textsf{rcuItr}\, \rho \, \N([f_2 \rightharpoonup z]) \vdash \bar{s}_2 \dashv \Gamma_4
+}
+{
+\Gamma\, ,x:\textsf{rcuItr}\, \rho \, \N([f_1\mid f_2 \rightharpoonup z]) \vdash \textsf{if}(x.f_1==z)  \textsf{ then } \bar{s}_1 \textsf{ else } \bar{s}_2 \dashv \Gamma_4
+}
+\and
+\inferrule*[left=\scriptsize(T-Branch3)]
+{
+ \Gamma,\,x:\textsf{rcuItr} \, \rho \, \N([f\rightharpoonup y \setminus \textsf{null}]) \vdash \bar{s}_1 \dashv \Gamma' \and \Gamma,\,x:\textsf{rcuItr} \, \rho \, \N([f\rightharpoonup y]) \vdash \bar{s}_2 \dashv \Gamma'
+}
+{
+\Gamma,\,x:\textsf{rcuItr} \, \rho \, \N([f\rightharpoonup y]) \vdash \textsf{if}(x.f == \textsf{null}) \textsf{ then } \bar{s}_1  \textsf{ else } \bar{s}_2 \dashv \Gamma'
+}
+\and
+\inferrule[\scriptsize(T-Loop2)]
+{
+\Gamma,\, x:\textsf{rcuItr}\;\rho \; \N([f\rightharpoonup \_]) \vdash \bar{s} \dashv \Gamma, x:\textsf{rcuItr}\;\rho' \; \N([f\rightharpoonup \_])
+}
+{
+\Gamma,\, x:\textsf{rcuItr}\;\rho \; \N([f\rightharpoonup \_]) \vdash \textsf{while}(x.f \neq \textsf{null})\{\bar{s}\} \dashv   x:\textsf{rcuItr}\;\rho' \; \N([f\rightharpoonup \textsf{null}]) ,\,  \Gamma
+}
+\and
+\inferrule[\scriptsize(T-ReIndex)]
+{
+}
+{
+\Gamma \vdash \bar{s}_{k} \dashv  \Gamma[\rho.f^{k}/\rho.f^{k}.f]
+}
+\end{mathpar}
+\vspace{-2em}
+\caption{Type Judgements for Control-Flow.}
+\label{fig:type-judgements-for-cf}
+\end{figure}
+%%%%%%%%%%%%%%%COND TYPE JUDGEMENTS ENDS%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%(\textit{\textbf{Approximation on Fields}}) - 
+It is often necessary to abstract the contents of field maps or paths, without simply forgetting the contents entirely.  In a binary search tree, for example, it may be the case that one node is a child of another, but \emph{which} parent field points to the child depends on which branch was followed in an earlier conditional (consider the lookup in a BST, which alternates between following left and right children).
+%Since our list based bag example's objects have single field($Next$), we take small code snippet from our \textsf{BST} type checking effort in Appendix \ref{appendix:bst_del} in which objects have two fields $Left$ and $Right$. Field mappings take field names to local variable names. They are added to the field map, $\N$, when the object's fields are read. 
+In Listing \ref{lst:altfield}, we see that \texttt{current} aliases different fields of \texttt{parent} --- either $Left$ or $Right$ --- in different branches of the conditional.
+%We see the join of the type assertions in lines 6 and 11 to the one in the line 12. 
+The types after the conditional must overapproximate this, here as $Left|Right\mapsto current$ in \texttt{parent}'s field map, and a similar path disjunction in \texttt{current}'s path.
+This is reflected in Figure \ref{fig:sub-typing}'s \textsc{T-NSub1-5} and \textsc{T-PSub1-2} --- within each branch, each type is coerced to a supertype to validate the control flow join.
+
+\begin{lstlisting}[caption={Choosing fields to read},label={lst:altfield}, numbers=left, numberstyle=\tiny\color{red}, numbersep=5pt,basicstyle=\scriptsize\ttfamily]%, ]
+
+$\assert{current:\mathsf{rcuItr}\; Left|Right \;\{\},\;\;parent:\mathsf{rcuItr}\;  \epsilon \;\{Left|Right\mapsto current\}}$
+if(parent.Left == current){
+  $\assert{current:\mathsf{rcuItr}\; Left \;\{\} ,\;\; parent:\mathsf{rcuItr}\;  \epsilon \;\{Left\mapsto current\}}$
+  parent = current;
+  current = parent.Left;
+  $\assert{current:\mathsf{rcuItr}\; Left.Left \;\{\}, \;\; parent:\mathsf{rcuItr}\;  Left \;\{Left\mapsto current\}}$
+}else{
+  $\assert{current:\mathsf{rcuItr}\; Right \;\{\}, \;\; parent:\mathsf{rcuItr}\;  \epsilon \;\{Right\mapsto current\}}$
+  parent = current;
+  current = parent.Right;
+  $\assert{current:\mathsf{rcuItr}\; Right.Right \;\{\}, \;\; parent:\mathsf{rcuItr}\;  Right \;\{Right\mapsto current\}}$
+}$\assert{current:\mathsf{rcuItr}\; Left|Right.Left|Right \;\{\}, \;\; parent:\mathsf{rcuItr}\;  Left|Right \;\{Left|Right\mapsto current\}}$
+\end{lstlisting}
+
+Another type of control flow join is handling loop invariants --- where paths entering the loop meet the back-edge from the end of a loop back to the start for repetition.
+Because our types include paths describing how they are reachable from the root, some abstraction is required to give loop invariants that work for any number of iterations --- in a loop traversing a linked list, the iterator pointer would na\"ively have different paths from the root on each iteration, so the exact path is not loop invariant.  However, the paths explored by a loop are regular, so we can abstract the paths by permitting (implicitly) existentially quantified indexes on path fragments, which express the existence of \emph{some} path, without saying \emph{which} path.  The use of an explicit abstract repetition allows the type system to preserve the fact that different references have common path prefixes, even after a loop.
+
+Assertions for \texttt{add} function in lines 19 and 20 in Figure \ref{fig:rculist} show the \textit{loop}'s effects on paths of iterator references used inside the loop, \texttt{current} and \texttt{parent}. 
+On line 20, \texttt{parent}'s path contains has $(Next)^{k}$.
+The $k$ in the $(Next)^{k}$ abstracts the number of loop iterations run, implicitly assumed to be non-negative.
+The trailing $Next$ in \texttt{current}'s path on line 19 --- $(Next)^{k}.Next$ --- expresses the relationship between \texttt{current} and \texttt{parent}: \texttt{parent} is reachable from the root by following $Next$ $k$ times, and \texttt{current} is reachable via one additional $Next$.
+The types of 19 and 20, however, are not the same as lines 23 and 24, so an additional adjustment is needed for the types to become loop-invariant.
+\emph{Reindexing} (\textsc{T-ReIndex} in Figure \ref{fig:type-judgements-for-cf}) effectively increments an abstract loop counter, contracting $(Next)^k.Next$ to $Next^k$ everywhere in a type environment.  This expresses the same relationship between \texttt{parent} and \texttt{current} as before the loop, but the choice of $k$ to make these paths accurate after each iteration would be one larger than the choice before.
+Reindexing the type environment of lines 23--24 yields the type environment of lines 19--20, making the types loop invariant.
+
+%(\textit{\textbf{Choosing Fields to Read}}) - However, w
+While abstraction is required to deal with control flow joins, reasoning about whether and which nodes are unlinked or replaced, and whether cycles are created, requires precision.  Thus the type system also includes means (Figure \ref{fig:type-judgements-for-cf}) to refine imprecise paths and field maps.
+%
+%We should also note that being precise in the field names is so crucial for mutation actions. This means we need to know which fields are used to replace/unlink a heap node. Then, what is the mechanism to become more/less precise in the fields used in both path and field mappings of the \textsf{rcuItr} type? 
+In Listing \ref{lst:altfield}, we see a conditional with the condition $parent.Left == current$. The type system matches this condition to the imprecise types in line 1's typing assertion, and refines the initial type assumptions in each branch accordingly (lines 3 and 8) based on whether execution reflects the truth or falsity of that check.
+Similarly, it is sometimes required to check --- and later remember --- whether  a field is null, and the type system supports this.
+%refines the assertions in Listing \ref{lst:altfield} line 1 to the one in the line 3 for the \textit{then} branch and to the one in the line 8 for the \textit{else} branch via making types more precise on the object fields(\textsc{T-Branch1} shown in Figure \ref{fig:type-judgements-for-cf}).
+
+%(\textit{\textbf{Points to }}\textsf{null}) - Typing rules(\textsc{T-Branch3} and \textsc{T-Loop2}) in Figure \ref{fig:type-judgements-for-cf} refine field mappings with respect to \texttt{null} value in control flow statements.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Types in Action}
+\label{subsection:type-action}
+%%%%%%%%%%%%%%%%%%%%%%TYPE JUDGEMENTS ENDS%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%We have typing context $\Gamma$ of the form $x_1 : T_1, \ldots x_n : T_n$.
+
+The system has three forms of typing judgement: 
+$\Gamma \vdash C$ for standard typing outside RCU critical sections; 
+$\Gamma \vdash_R C \dashv \Gamma'$ for reader critical sections, and
+$\Gamma \vdash_M C \dashv \Gamma'$ for writer critical sections.
+The first two are straightforward, essentially preventing mutation of the data structure, and preventing nesting of a writer critical section inside a reader critical section.
+The last, for writer critical sections, is flow sensitive: the types of variables may differ before and after program statements.  This is required in order to reason about local assumptions at different points in the program, such as recognizing that a certain action may unlink a node.
+Our presentation here focuses exclusively on the judgment for the write-side critical sections.
+
+Below, we explain our types through the list-based bag implementation~\cite{McKenney2015SomeEO} from Figure \ref{fig:rculist}, highlighting how the type rules handle different parts of the code.
+Figure \ref{fig:rculist} is annotated with ``assertions'' --- local type environments --- in the style of a Hoare logic proof outline.  As with Hoare proof outlines, these annotations can be used to construct a proper typing derivation.
+%  We aim to
+%\begin{itemize}
+%\item explain why we employ each of these components. How do they serve to certify memory safety in \textsf{RCU} programs? How do they represent the program?
+%\item explain the \textit{flow-sensitive} nature of the type system. 
+%\end{itemize}
+%The code fragments we refer to below from \ref{fig:rculist} are annotated with assertions about type environments between each statement (in the style of a proof outline in Hoare Logic) to demonstrate informally how types change before and after various statements.
+
+\mypar{Reading a Global \textsf{RCU} Root}
+All \textsf{RCU} data structures have fixed roots, which we characterize with the \textsf{rcuRoot} type.  Each operation in Figure \ref{fig:rculist} begins by reading the root into a new \textsf{rcuItr} reference used to begin traversing the structure.
+After each initial read (line 12 of \lstinline|add| and line 4 of \lstinline|remove|), the path of \texttt{current} reference is the empty path ($\epsilon$) and the field map is empty ($\{\}$), because it is an alias to the root, and none of its field contents are known yet.
+
+\mypar{Reading an Object Field and a Variable}
+As expected, we explore the heap of the data structure via reading the objects' fields. 
+Consider line 6 of \lstinline|remove| and its corresponding pre- and post- type environments.  Initially \texttt{parent}'s field map is empty.  After the field read, its field map is updated to reflect that its $Next$ field is aliased in the local variable \texttt{current}.  Likewise, afer the update, \texttt{current}'s path is $Next$ ($=\epsilon\cdot Next$), extending the parent node's path by the field read.  This introduces field aliasing information that can subsequently be used to reason about unlinking.
+%For example, the assertion of \textsf{remove} function in line 7 says that the path to reach the heap node pointed by \texttt{current} is $Next$. The assertion in line 8 for \texttt{parent} tells that there exists a link from the referent of \textsf{parent} to the referent of \textsf{current}. As we observe in the post condition in the lines 7 and 8, reading \texttt{current} to \texttt{parent}'s $Next$ field in line 6 adds the field mapping entry $Next \mapsto \texttt{current}$ to the field mapping set of \texttt{parent} and extends the path of \texttt{current} with $Next$. We call this "properly" linked heap nodes which is a requirement for safe unlinking.
+
+%(\textit{\textbf{Mutation - Unlinking a Heap Node}}) - When we unlink a heap node, the type of the reference to it changes from \textsf{rcuItr} to \textsf{unlinked}. We observe this change for \texttt{current} reference in the assertions of \texttt{remove} in lines 22 and 26.
+\mypar{Unlinking Nodes}
+Line 24 of \lstinline|remove| in Figure \ref{fig:rculist} unlinks a node.
+The type annotations show that before that line \lstinline|current| is in the structure (\textsf{rcuItr}), while afterwards its type is \textsf{unlinked}.
+The type system checks that this unlink disconnects only one node: note how the types of \lstinline|parent|, \lstinline|current|, and \lstinline|currentL| just before line 24 completely describe a section of the list.
+
+%(\textit{\textbf{Mutation - Reclaiming a Heap Node after a Grace Period}}) - 
+\mypar{Grace and Reclamation}
+After the referent of \texttt{current} is unlinked, concurrent readers traversing the list may still hold references.  So it is not safe to actually reclaim the memory until after a grace period.
+Lines 28--29 of \lstinline|remove| initiate a grace period and wait for its completion.  At the type level, this is reflected by the change of \lstinline|current|'s type from \textsf{unlinked} to \textsf{freeable}, reflecting the fact that the grace period extends until any reader critical sections that might have observed the node in the structure have completed.
+This matches the precondition required by our rules for calling \lstinline|Free|, which further changes the type of \lstinline|current| to \textsf{undef} reflecting that \lstinline|current| is no longer a valid reference.  The type system also ensures no local (writer) aliases exist to the freed node.
+
+\mypar{Fresh Nodes}
+Some code must also allocate new nodes, and the type system must reason about how they are incorporated into the shared data structure.
+Line 8 of the \texttt{add} method allocates a new node \texttt{nw}, and lines 10 and 29 initialize its fields.
+The type system gives it a \textsf{fresh} type while tracking its field contents, until line 32 inserts it into the data structure.  The type system checks that nodes previously reachable from \lstinline|current| remain reachable: note the field maps of \lstinline|current| and \texttt{nw} in lines 30--31 are equal (trivially, though in general the field need not be  null).
+%and set its fields in lines 10 and 29. The type of the variable \texttt{nw} in line 9 represents a freshly allocated heap node, whose fields are not set yet. A \textsf{rcuFresh} reference can be used either in setting the fields of a fresh object or linking the fresh object. We will investigate  linking a fresh object in the next analysis but, first we anaylze how we set the fields of the fresh object. In  line 29, we set the fields of the object referenced by \texttt{nw} and we end up having the type in line 30 which seems similar to a type \textsf{rcuItr} with empty path. We will justify why we have separate type \textsf{rcuFresh} instead of typing the freshly allocated heap with \textsf{rcuItr} when we explain the type rules.
+
+\subsection{Type Rules}
+\label{subsection:type-rules}
+\begin{figure}[t!]\scriptsize
+\begin{mathpar}
+\fbox{$\Gamma \vdash_{M} \alpha \dashv \Gamma'$} \;\;
+\inferrule*[left=\scriptsize(T-Root)]
+{ %\textsf{FV}(\Gamma) \cap \{r,y\}  =\emptyset
+  y\not\in\textsf{FV}(\Gamma)
+}
+{\Gamma\,,r:\textsf{rcuRoot}\,,y:\textsf{undef} \vdash y = r \dashv y: \textsf{rcuItr}\, \epsilon \, \N_{\emptyset}\,,r:\textsf{rcuRoot}\,,\Gamma}
+\and
+\inferrule*[left=\scriptsize(T-ReadS)]
+{ %\textsf{FV}(\Gamma) \cap \{z,x\}  =\emptyset 
+  z\not\in\textsf{FV}(\Gamma)
+}
+{
+\Gamma\,, z:\_ \, ,\rcuitrT{x}{G}{k}{k+1}{\_} \vdash z=x \dashv  \rcuitrT{x}{G}{k}{k+1}{\_}\, , \rcuitrT{z}{G}{k}{k+1}{\_} \,, \Gamma
+}
+\and
+\inferrule*[left=\scriptsize(T-Alloc)]
+{
+}
+{
+ \Gamma\,, x:\textsf{undef} \vdash x = \NEW \dashv x:\textsf{rcuFresh} \, \N_{\emptyset} \, ,  \Gamma
+}
+\;\;
+\inferrule*[left=\scriptsize(T-Free)]
+{
+}
+{
+ x:\textsf{freeable} \vdash \textsf{Free}(x) \dashv x:\textsf{undef}
+}
+\and
+\inferrule*[left=\scriptsize(T-ReadH)]
+{
+\rho.f=\rho' \\
+ %\textsf{FV}(\Gamma) \cap \{z,x\} =\emptyset
+  z\not\in\textsf{FV}(\Gamma)
+}
+{
+ \Gamma\, , z:\_ \, ,  x:\textsf{rcuItr} \, \rho \, \N   \vdash
+ 	z=x.f
+ \dashv  x:\textsf{rcuItr} \, \rho \, \N([f\rightharpoonup z])\, ,z:\textsf{rcuItr} \, \rho' \, \N_{\emptyset} \, , \Gamma
+}
+\and
+\inferrule[\scriptsize(T-WriteFH)]
+{
+z:\textsf{rcuItr} \; \rho.f \; \_ \quad \N(f)=z \quad f \notin dom (\N')
+}
+{
+ \Gamma, p:\textsf{rcuFresh}\,\N',\; x:\textsf{rcuItr}\;\; \rho \;\; \N
+  \vdash_{M} p.f = z \dashv
+  p:\textsf{rcuFresh}\,\N'([f\rightharpoonup z])  \, , x:\textsf{rcuItr}\, \rho \, \N([f\rightharpoonup z]), \, \Gamma
+}
+\and
+\inferrule*[left=\scriptsize(T-Sync)]
+{
+}
+{
+\Gamma \vdash \textsf{SyncStart};\textsf{SyncStop} \dashv \Gamma[\overline{x:\textsf{freeable}/x:\textsf{unlinked}}]
+}
+\and
+\inferrule[\scriptsize(T-UnlinkH)]
+{
+%\textsf{FV}(\Gamma) \cap \{x,z,r\} = \emptyset  \\ 
+\rho.f_1=\rho' \\
+\rho'.f_2=\rho'' \\
+\forall_{f\in dom(\N')} \ldotp f\neq f_2 \implies (\N'(f) = \textsf{null})
+\\
+\N(f_1)=z\\
+\N'(f_2)=r\\
+\begin{array}{l}
+\forall_{n\in \Gamma,m,\N''', p''',f}\ldotp n:\textsf{rcuItr}\,\rho'''\,\N'''([f\rightharpoonup m]) \implies %\arcr
+\left\{\begin{array}{l}
+((\neg\mathsf{MayAlias}(\rho''',\{\rho,\rho',\rho''\})  ) \land (m\not\in\{z,r\} ) ) \arcr
+\land (\forall_{\rho''''\neq \epsilon} \ldotp \neg\mathsf{MayAlias}(\rho''', \rho''.\rho'''') )
+\end{array}\right.
+\end{array}
+}
+{
+\Gamma,\,x:\textsf{rcuItr}\, \rho \, \N \, ,
+z:\textsf{rcuItr}\, \rho' \, \N' \, ,  r:\textsf{rcuItr} \, \rho'' \, \N''\, 
+\vdash x.f_1=r \dashv
+z:\unlinked\, ,
+x:\textsf{rcuItr} \, \rho \, \N([f_1\rightharpoonup  r])\, ,
+r:\textsf{rcuItr} \, \rho' \, \N'',\, \Gamma
+}
+\and
+\inferrule[\scriptsize(T-LinkF)]
+{
+\rho.f  = \rho'  \\ 
+\N' = \N'' \\
+\textsf{FV}(\Gamma) \cap \{p,o,n\}  =\emptyset \\
+\N(f)=o\\
+\forall_{x \in \Gamma, \N''', \rho'',f',y} \ldotp (x:\textsf{rcuItr}\,\rho''\,\N'''([f'\rightharpoonup y])) \implies (\neg\mathsf{MayAlias}(\rho'',\{\rho,\rho'\}) \land (y\neq o  ))
+}
+{
+\Gamma,\,
+ p:\textsf{rcuItr}\, \rho \, \N \, ,
+  o:\textsf{rcuItr}\, \rho' \, \N' \, , n:\textsf{rcuFresh} \, \N''
+  \vdash p.f = n \dashv
+  p:\textsf{rcuItr}\, \rho \, \N([f \rightharpoonup  n]) \, ,
+  n:\textsf{rcuItr}\, \rho' \, \N'' \,
+  o:\unlinked\, ,  \Gamma
+}
+\and
+\inferrule*[left=\scriptsize(ToRCUWrite)]
+{
+ \Gamma\, , y : \textsf{rcuItr}\, \_ \vdash_M \bar{s} \dashv \Gamma' \;\; \textsf{FType}(f)=\textsf{RCU} \;\;  \textsf{NoFresh}(\Gamma') \;\; \textsf{NoUnlinked}(\Gamma')
+}
+{
+\Gamma \vdash \textsf{RCUWrite}\, x.f \textsf{ as }y\textsf{ in } \{ \bar{s} \}
+}
+\end{mathpar}
+\caption{Type Rules for \textsf{Write} side critical section}
+\label{fig:tss}
+\end{figure}
+
+Figure \ref{fig:tss} gives the primary type rules used in checking write-side critical section code as in Figure \ref{fig:rculist}.
+%Our aim in this section is to investigate potential memory safety issues, discuss what memory inconsistencies they can cause and how type rules prevent it and justify why the flow of change in types serves to the correct \textsf{RCU} programming.
+
+\textsc{T-Root} reads a root pointer into an \textsf{rcuItr} reference, and \textsc{T-ReadS} copies a local variable into another.  In both cases, the free variable condition ensures that updating the modified variable does not invalidate field maps of other variables in $\Gamma$. These free variable conditions recur throughout the type system, and we will not comment on them further.
+\textsc{T-Alloc} and \textsc{T-Free} allocate and reclaim objects. These rules are relatively straightforward.
+\textsc{T-ReadH} reads a field into a local variable.
+As suggested earlier, this rule updates the post-environment to reflect that the overwritten variable $z$ holds the same value as $x.f$.
+\textsc{T-WriteFH} updates a field of a \emph{fresh} (thread-local) object, similarly tracking the update in the fresh object's field map at the type level.
+The remaining rules are a bit more involved, and form the heart of the type system.
+
+\mypar{Grace Periods}
+\textsc{T-Sync} gives pre- and post-environments to the compound statement \lstinline|SyncStart;SyncStop|, which implements a grace period.  As mentioned earlier, this works in any type environment, and updates the environment afterwards to reflect that any nodes \textsf{unlinked} before the wait become \textsf{freeable} after the wait.
+
+\mypar{Unlinking}
+\textsc{T-UnlinkH} type checks heap updates that remove a node from the data structure.  The rule assumes three objects $x$, $z$, and $r$, whose identities we will conflate with the local variable names in the type rule.  The rule checks the case where $x.f_1==z$ and $z.f_2==r$ initially (reflected in the path and field map components, and a write $x.f_1=r$ removes $z$ from the data structure (we assume, and ensure, the structure is a tree).
+%(\textit{\textbf{Mutation - Unlinking a Heap Node}}) - Preserving invariants of a data structure against possible mutations under \textsf{RCU} semantics is challenging. Unlinking a heap node is one way of mutating the heap and the type rule for unlinking(\textsc{T-UnlinkH}) enforces the locality on the effect of unlinking to enforce memory safety. First essential property is "proper local linkage" in between the heap nodes involved in unlinking(footpring of unlinking). The type rule asserts that the $x$, $z$ and $r$ references are linked with field mappings $\N([f_1\rightharpoonup z])$ e.g. ($Left \mapsto current$) of $x$, $\N'([f_2\rightharpoonup r])$ e.g. ($Left \mapsto currentL$) of $y$. In accordance with the field mappings, the type rule also asserts that $x$ has the path $\rho$ e.g. ($(Left)^{k}$), $y$ has the path $\rho.f_1$ e.g. ($(Left)^{k}.Left$) and $z$ has the path $\rho.f_1.f_2$ e.g. ($(Left)^{k}.Left.Left$).
+
+The rule must also avoid unlinking multiple nodes: this is the purpose of the first (smaller) implication: it ensures that beyond the reference from $z$ to $r$, all fields of $z$ are null.
+
+Finally, the rule must ensure that no types in $\Gamma$ are invalidated.  This could happen one of two ways: either a field map in $\Gamma$ for an alias of $x$ duplicates the assumption that $x.f_1==z$ (which is changed by this write), or $\Gamma$ contains a descendant of $r$, whose path from the root will change when its ancestor is modified.
+The final assumption of \textsc{T-UnlinkH} (the implication)
+checks that for every \textsf{rcuItr} reference $n$ in $\Gamma$, it is not a path alias of $x$, $z$, or $r$; no entry of its field map ($m$) refers to $r$ or $z$ (which would imply $n$ aliased $x$ or $z$ initially); and its path is not an extension of $r$ (i.e., it is not a descendant).
+\textsf{MayAlias} is a predicate on two paths (or a path and set of paths) which is true if it is possible that any concrete paths the arguments may abstract (e.g., via adding non-determinism through $|$ or abstracting iteration with indexing) \emph{could} be the same.  The negation of a \textsf{MayAlias} use is true only when the paths are guaranteed to refer to different locations in the heap.
+
+%Restricting the unlink to a single node prevents unintentionally disconnecting large sections of the tree.. So, sharing through aliasing to the resources under mutation needs to be handled carefully. Aliasing can occur via either through  object fields -- via field mappings -- or stack references -- via path components. Assume that we have \textit{path-aliases}, $a_1$, $a_2$ and $a_3$ to $x$, $z$ and $r$ respectively. The reason for framing-out path aliases is to prevent inconsistencies in components of the aliases since unlinking the heap node in the middle which is referenced by $z$ has effects:
+%\begin{itemize}
+%\item on the next field of $x$ which makes next field map of $a_1$ inconsistent.
+%\item on the type of $z$, it becomes \textsf{unlinked}. This makes the unlinked(not reachable from the root) node pointed by a reference, $a_2$, in \textsf{rcuItr} type. This makes system unsound.
+%\item on the path reaching to the referent of $r$. It changes from $\rho.f_1.f_2$ to $\rho.f_1$. However, $a_3$ still has $\rho.f_1.f_2$ and this makes paths reaching to the referent heap node inconsistent. This makes system unsound with respect to the invariant asserting that each heap node reachable from the root must be reached via unique path.
+%\end{itemize}
+%Path aliases from other contexts are prevented via asserting $((\rho \neq \rho''' \land \rho' \neq \rho''' \land \rho'' \neq \rho''')  )$. As a part of framing for safe unlinking, we should also note that there is no reachability from the nodes in the footprint to the deeper heap nodes(captures by the last implication in the frame assertion). We call this part of the assertion as "ignorance of the deeper heap" and it prevents inconsistency due to unlinking on path components($\rho'''$) of references to deeper heap. The inconsistency would occur as all paths reaching to deeper heap nodes would get shortened but unlinking action does not globally update all paths affected since we are updating references($x$,$z$ and $r$) in the footpring of unlinking \textit{locally}. 
+%
+%In addition to \textit{path-aliasing}, there can also be aliasing via \textit{field-mappings} which we call \textit{field-aliasing} e.g $x.f_1$ is aliased with $a_2$. We also frameout any field aliases to $z$ and $r$  with the same justification we make for \textit{path-aliasing}. The type rule prevents \textit{field-aliases} via asserting $\lnot(\{m\} \cap \{z,r\} \neq \emptyset)$ to make sure that there exists no object field from any other context pointing either to the variable points the heap node that is under mutation(unlinking) -- $z$ -- or to the variable which points to the new $f_1$ of $x$ after unlinking -- $r$. We should also note that it is expected to have object fields in other contexts to point to $x$ as they are not in the footprint of unlinking. We should note that the type system must also forbid sharing the variable names variables in different contexts $\textsf{FV}(\Gamma) \cap \{x,z,r\} = \emptyset$. Once we unlink the heap node, it cannot be accessed by the new coming reader threads the ones that are currently reading this node cannot access to the rest of the heap.
+%
+%Being aware of how much of the heap is under mutation is important, e.g. a whole subtree or a single node. Our type system ensures that there can be only just one heap node unlinked at a time by atomic field update action. To be able to ensure this, in addition to the proper linkage enforcement, the rule also asserts that all other object fields which are not under mutation must either not exists or point to \texttt{null}.
+%
+%Effects of the unlinking, path aliases, field aliases and assertions of the type rule can be found pictorially at Figures \ref{fig:bframeout} and \ref{fig:bunlinkframeout} in Appendix \ref{appendix:rcuunlink}.
+
+\begin{figure}\scriptsize
+ \centering
+\begin{subfigure}[b]{.4\linewidth}
+ \centering
+ \begin{tikzpicture}[>=stealth',node distance=1.3cm,semithick,auto]
+ \tikzstyle{hollow node}=[circle,draw,inner sep=1]
+ \tikzstyle{sub node}=[triangle,draw,inner sep=1]
+ \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+ \tikzstyle{solids node}=[rectangle,draw=red,inner sep=1.5]
+  \tikzstyle{solidss node}=[dashed,rectangle,draw=red,inner sep=1.5]
+  \tikzstyle{freshollow node}=[dashed,circle,draw=green,inner sep=1]
+
+ \tikzstyle{fresh node}=[dashed,rectangle,draw=green,inner sep=1.5]
+  
+ \tikzstyle{null node}=[circle,draw=red,fill=red]
+ \tikzset{
+ 	red node/.style={rectangle,draw=black,fill=red,inner sep=1.5},
+ 	blue node/.style={rectangle,draw=black,inner sep=1.5},
+ 	reader node/.style={circle,draw=black,inner sep=1},
+        redreader node/.style={circle,draw=red,inner sep=1},
+        readerr node/.style={dashed,circle,draw=black,inner sep=1},
+ 	writer node/.style={circle,draw=black,inner sep=1}
+ }
+
+       \node[solid node] (R) {$R$};
+       \node[solids node] (0) [right of=R] {$H_0$};
+       \node[solids node] (1) [right of=0] {$H_1$};
+       \node[fresh node] (2) [above of=1] {$H_f$};
+       \node[solid node] (3) [right of=1] {$H_2$};
+       \node[solid node] (4) [above  of=3] {$H_4$};
+              \node[solid node] (5) [above left of=0] {$H_5$};
+       \node[solid node] (6) [above left of = 1]{$H_6$};
+      
+
+       \node[redreader node] (r0) [below  of= 0]  {$pr$};
+       \node[redreader node] (r1) [below  of= 1]  {$cr$};
+       \node[freshollow node] (f)  [above  of= 2] {$cf$};
+        \node[reader node] (crl)  [right  of= 3] {$crl$};
+       \node[reader node] (lm) [right  of= 4]  {$lm$};
+       \node[readerr node] (r1a) [below   of= R]  {$a_0$};
+       \node[readerr node] (r2a)  [below of= 3] {$a_1$};
+
+       \node[reader node] (r1f) [above  of= 5]  {$a_5$};
+       \node[reader node] (r2f)  [above  of= 6] {$a_6$};
+
+     \path[->]  (R) edge node[below] {$l$} (0);
+     \path[draw=red,->]  (0) edge node[below] {$l$} (1);
+     \path[->]  (crl) edge  node {} (3);
+     \path[dashed,draw=green,->]  (f) edge node {} (2);
+     \path[dashed,draw=green,->]  (2) edge node {$r$} (4);
+     \path[dashed,draw=green,->]  (2) edge node {$l$} (3);
+
+
+     \path[dashed,->]  (5) edge node {$l$} (0);
+     \path[dashed,->]  (6) edge node {$l$} (1);
+
+
+     \path[draw=red,->]  (1) edge node {$r$} (4);
+     \path[draw=red,->]  (1) edge node {$l$} (3);
+     
+     \path[draw=red,->]  (r0) edge node {} (0);
+     \path[draw=red,->]  (r1) edge node  {}  (1);
+     \path[->]  (lm) edge  node  {}   (4);
+
+     \path[dashed,->]  (r1a) edge node {} (0);
+     \path[dashed,->]  (r2a) edge node  {}  (1);
+     
+     \path[->]  (r1f) edge  node  {}   (5);
+     \path[->]  (r2f) edge  node  {}   (6);
+
+
+     %\path[draw=red, ->] (2) edge node[below] {$r$} (nl);
+ ;
+ \end{tikzpicture}
+
+ \caption{Safe linking of the \textit{fresh} heap node pointed by \texttt{currentF}-$cf$}
+ \label{fig:frframeout}
+ \end{subfigure} \quad
+ \begin{subfigure}[b]{.4\linewidth}
+ \centering
+ \begin{tikzpicture}[>=stealth',node distance=1.3cm,semithick,auto]
+ \tikzstyle{hollow node}=[circle,draw,inner sep=1]
+ \tikzstyle{sub node}=[triangle,draw,inner sep=1]
+ \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+ \tikzstyle{solids node}=[rectangle,draw=red,inner sep=1.5]
+  \tikzstyle{solidss node}=[dashed,rectangle,draw=red,inner sep=1.5]
+  \tikzstyle{freshollow node}=[dashed,circle,draw=green,inner sep=1]
+
+ \tikzstyle{fresh node}=[dashed,rectangle,draw=green,inner sep=1.5]
+  
+ \tikzstyle{null node}=[circle,draw=red,fill=red]
+ \tikzset{
+ 	red node/.style={rectangle,draw=black,fill=red,inner sep=1.5},
+ 	blue node/.style={rectangle,draw=black,inner sep=1.5},
+ 	reader node/.style={circle,draw=black,inner sep=1},
+        redreader node/.style={circle,draw=red,inner sep=1},
+        readerr node/.style={dashed,circle,draw=black,inner sep=1},
+ 	writer node/.style={circle,draw=black,inner sep=1},
+               rredreader node/.style={dashed,circle,draw=red,inner sep=1}
+ }
+
+       \node[solid node] (R) {$R$};
+       \node[solids node] (0) [right of=R] {$H_0$};
+       \node[solidss node] (1) [right of=0] {$H_1$};
+       \node[solid node] (2) [above of=1] {$H_f$};
+       \node[solid node] (3) [right of=1] {$H_2$};
+       \node[solid node] (4) [above  of=3] {$H_4$};
+       \node[solid node] (5) [above of=R] {$H_5$};
+       \node[solid node] (6) [above of = 0]{$H_6$};
+
+       \node[redreader node] (r0) [below  of= 0]  {$pr$};
+       \node[rredreader node] (r1) [below  of= 1]  {$cr$};
+       \node[reader node] (f)  [above  of= 2] {$cf$};
+        \node[reader node] (crl)  [ right  of= 3] {$crl$};
+       \node[reader node] (lm) [right  of= 4]  {$lm$};
+       \node[readerr node] (r1a) [below   of= R]  {$a_0$};
+       \node[readerr node] (r2a)  [below of= 3] {$a_1$};
+
+      \node[reader node] (r1f) [above  of= 5]  {$a_5$};
+      \node[reader node] (r2f)  [above  of= 6] {$a_6$};
+
+     \path[->]  (R) edge node[below] {$l$} (0);
+    % \path[draw=red,->]  (0) edge node[below] {$l$} (1);
+     \path[->]  (crl) edge  node {} (3);
+     \path[->]  (f) edge node {} (2);
+     \path[->]  (2) edge node {$r$} (4);
+     \path[->]  (2) edge node {$l$} (3);
+     \path[dashed,draw=red,->]  (1) edge node {$r$} (4);
+     \path[dashed,draw=red,->]  (1) edge node {$l$} (3);
+
+
+
+
+     \path[draw=red,->]  (r0) edge node {} (0);
+     \path[dashed,draw=red,->]  (r1) edge node  {}  (1);
+     \path[->]  (lm) edge  node  {}   (4);
+
+     \path[dashed,->]  (r1a) edge node {} (0);
+     \path[dashed,->]  (r2a) edge node  {}  (1);
+          \path[dashed,->]  (5) edge node {$l$} (0);
+     \path[dashed,->]  (6) edge node {$l$} (1);
+
+
+     %\path[dashed,->]  (r2a) edge  node  {}   (4);
+
+     \path[draw=red,->]  (0) edge node  {$l$}  (2);
+
+
+     \path[->]  (r1f) edge  node  {}   (5);
+     \path[->]  (r2f) edge  node  {}   (6);
+
+
+ ;
+ \end{tikzpicture}
+
+ \caption{Safe replacement of the heap node pointed by \texttt{current}-$cr$ by the \textit{fresh} heap node pointed by \texttt{currentF}-$cf$}
+ \label{fig:freshframeout}
+ \end{subfigure}
+ \caption{Linking and replacing nodes}
+ \label{fig:alloc}\vspace{-2mm}
+ \end{figure}
+%\textit{\textbf{Creating a Fresh Node}} - We deffered answering the question: "Why do we need a separate type \textsf{rcuFresh} instead of using \textsf{rcuItr} for typing a freshly allocated heap node in \textsf{Write} critical section ?". To understand and answer the question easily, we illustrate the setting for creating a fresh \textsf{BST} heap node and linking it in Figures \ref{fig:frframeout} and \ref{fig:freshframeout}.
+\mypar{Linking a Fresh Node}
+Linking a \textsf{rcuFresh} reference faces the same aliasing complications as direct unlinking.
+We illustrate these challenges in Figures \ref{fig:frframeout} and \ref{fig:freshframeout}.
+The square $R$ nodes are root nodes, and $H$ nodes are general heap nodes.
+All resources in red and green form the memory foot print of unlinking. The hollow red circular nodes -- $pr$ and $cr$ -- point to the nodes involved in replacing $H_1$ (referenced by \texttt{cr}) wih $H_f$ (referenced by $cf$) in the structure.
+We we may have $a_0$ and $a_1$ which are aliases with $pr$ and $cr$ respectively. They are \textit{path-aliases} as they share the same path from root to the node that they reference. 
+Edge labels $l$ and $r$ are abbreviations for the $Left$ and $Right$ fields of a binary search tree.
+The dashed green $H_f$ denotes the freshly allocated heap node referenced by green dashed  $cf$. The dashed green field $l$ is set to point to the referent of $cl$ and the green dashed field $r$ is set to point to the referent of the heap node referenced by $lm$.
+
+$H_f$ initially (Figure \ref{fig:frframeout}) is not part of the shared structure.  If it was, it would violate the tree shape requirement imposed by the type system.  This is why we highlight it separately in green --- its static type would be \textsf{rcuFresh}.
+Note that we cannot duplicate a \textsf{rcuFresh} variable, nor read a field of an object it points to.
+This restriction localizes our reasoning about the effects of linking to just one fresh reference and the object it points to.
+Otherwise another mechanism would be required to ensure that once a fresh reference was linked into the heap, there were no aliases still typed as fresh --- since that would have risked linking the same reference into the heap in two locations.
+
+The transition from the Figure \ref{fig:frframeout} to \ref{fig:freshframeout} illustrates the effects of the heap mutation (linking a fresh node). The reasoning in the type system for linking a fresh node is nearly the same as for unlinking an existing node, with one exception.
+In linking a fresh node, there is no need to consider the paths of nodes deeper in the tree than the point of mutation.  In the unlinking case, those nodes' static paths would become invalid.  In the case of linking a fresh node, those descendants' paths are preserved.
+Our type rule for ensuring safe linking (\textsc{T-LinkF}) prevents path aliasing (nonexistence of $a_0$ and $a_1$) by negating a \textsf{MayAlias} query and prevents field mapping aliasing (nonexistence of any object field from any other context pointing to $cr$) via asserting $(y\neq o)$. It is important to note that objects($H_4,H_2$) in the field mappings of the $cr$ whose referent is to be unlinked captured by the heap node's field mappings referenced by $cf$ in \textsf{rcuFresh}. This is part of enforcing locality on the heap mutation and captured by assertion $\N = \N'$ in the type rule(\textsc{T-LinkF}). 
+ 
+%(\textit{\textbf{Mutation - Reclaiming a Heap Node after a Grace Period}}) - The reason why we have type \textsf{freeable} after the grace period is to prevent the ability to call \texttt{Free} before the grace period ends. This means that we cannot give ownership of a heap node to heap right after unlinking. Our type rule(\textsc{T-Sync}) ensures this via enforcing that we call \texttt{Free} only with a reference in type \textsf{freeable}. To get \textsf{freeable} reference, first we wait the grace period \texttt{SyncStart};\texttt{SyncStop} for unlinked heap nodes to end. The \texttt{SyncStart} does not have any effect on type of the variables.
+
+There is also another rule, \textsc{T-LinkF-Null}, not shown in Figure \ref{fig:tss}, which handles the case where the fields of the fresh node are not object references, but instead all contain null (e.g., for appending to the end of a linked list or inserting a leaf node in a tree).
+
+\mypar{Entering a Critical Section}
+(\textit{\textbf{Referencing inside \textsf{RCU} Blocks} }) - 
+There are two rules(\textsc{ToRCURead} in Figure \ref{fig:tssr} Appendix \ref{appendix:readtypes} and \textsc{ToRCUWrite} in Figure \ref{fig:tss}) for moving to \textsf{RCU} typing: one for entering a write region, and one for a read region.
+
+\section{Evaluation}
+\label{sec:eval}
+We have used our type system to check correct use of RCU primitives in two RCU data structures representative of the broader space.
+
+Figure \ref{fig:rculist} gives the type-annotated code for \lstinline|add| and \lstinline|remove| operations on a linked list implementation of a bag data structure, following McKenney's example~\cite{McKenney2015SomeEO}.
+Appendix \ref{appendix:bag_paul} contains the code for membership checking.
+
+We have also type checked the most challenging part of an RCU binary search tree, the deletion (which also contains the code for a lookup).
+Our implementation is a slightly simplified version of the Citrus BST~\cite{Arbel:2014:CUR:2611462.2611471} (their code supports multiple writers, while ours uses only one).
+For lack of space the annotated code is only in Appendix \ref{appendix:bst_del}, but it motivates some of the conditional-related flexibility discussed in Section \ref{subsection:type-action}.
+
+To the best of our knowledge, we are the first to check such code for memory-safe use of RCU primitives modularly, without appeal to the specific implementation of RCU primitives.

@@ -1,0 +1,608 @@
+%!TEX root = ./paper.tex
+\section{Soundness}
+\label{sec:meminv}
+To prove soundness, we define dynamic language semantics and relate with typing rules. We relate the type rules to the semantics by defining a denotation of type environments in terms of an extended machine state.
+
+We define logic states, $\textsf{LState}$, ranged over by $\Sigma$ to be 
+\begin{itemize}
+\item A machine state, $\sigma$; 
+\item An observation map, O, of type $ \textsf{Loc} \to \mathcal{P}(\textsf{obs})$
+\item Undefined variable map, $U$, of type $\mathcal{P}(\textsf{Var})$
+\item Set of threads, $T$, of type $\mathcal{P}(\textsf{TIDS})$
+\end{itemize}
+Reification is then trivially given by the first component.
+
+Each memory region can be observed in the following types in a snapshot taken at any time.
+\[
+\textsf{obs} := \texttt{iterator} \; \mathrm{tid} \mid
+			    \texttt{unlinked} \mid
+			    \texttt{fresh}
+\]
+
+[Perhaps add a toBeFreed observation, that accounts for the time after the deferred free call, before it is actually freed.]
+
+\[
+\begin{array}{cl}
+\mathcal{M}_{RCU} \stackrel{def}{=} &\{ m \in \textsf{MState} \times O \times U \times T \mid  \textsf{WellFormed}( m) \}
+\end{array}
+\]
+and we define the set of objects that are involved in an RCU datastructure as:
+\[
+\textsf{RCU} =  
+\{ o \mid \textsf{ftype}(f) = \textsf{rcu} \land \exists o' \ldotp h(o',f) = o \}
+\]
+where
+\[
+\begin{array}{cl}
+\textsf{WellFormed}(\sigma,O,U,T) \stackrel{def}{=} 		&\textbf{\textsf{Ownership}}(\sigma,O,U,T)\\
+								&\land$ $\textbf{\textsf{Iterator I}}(\sigma,O,U,T)\\
+								&\land$ $\textbf{\textsf{Iterator II}}(\sigma,O,U,T)\\
+								&\land$ $\textbf{\textsf{Iterator III}}(\sigma,O,U,T)\\
+								&\land$ $\textbf{\textsf{Unlinked I}}(\sigma,O,U,T)\\
+								&\land$ $\textbf{\textsf{Unlinked II}}(\sigma,O,U,T)\\	
+								&\land$ $\textbf{\textsf{Unlinked III}}(\sigma,O,U,T)\\					
+								&\land$ $\textbf{\textsf{Fresh I}}(\sigma,O,U,T)\\
+								&\land$ $\textbf{\textsf{Fresh II}}(\sigma,O,U,T)\\
+								&\land$ $\textbf{\textsf{Writer Not Reader}}(\sigma,O,U,T)\\
+								&\land$ $\textbf{\textsf{Freeing I}}(\sigma,O,U,T)\\
+								&\land$ $\textbf{\textsf{Freeing II}}(\sigma,O,U,T)\\
+								&\land$ $\textbf{\textsf{MustBeAllocated}}(\sigma,O,U,T)\\
+								&\land$ $\textbf{\textsf{InDomain}}(\sigma,O,U,T)\\
+\end{array}
+\]
+
+\begin{figure*}[!htbp]
+\footnotesize
+
+\[
+\textbf{IdenticalSequences}((f_1 \ldots f_n), (f'_1 \ldots f'_m) ) =
+\left\{
+\begin{array}{cl}
+	& n = m \\
+	& \land \forall_{1 \leq i \leq n} \ldotp \textsf{ftype}(f_i) = \textsf{ftype}(f'_i) = \textsf{rcu} \\
+	& \land  f_i = f'_i 
+\end{array}
+\right\}
+\]
+
+\[
+\textbf{h$^{*}$}(o = \textsf{UniqueRoot}, (f_1 \ldots f_n)) = 
+\left\{
+\begin{array}{cl}
+	&\textbf{h$^{*}$}_{0}(o,(f_1 \ldots f_n)) \\
+	&\textbf{h$^{*}$}_{1}( h(o,f_1), (f_2 \ldots f_n))   \\ 
+	&\textbf{h$^{*}$}_{2}(h( h(o,f_1), f_2), (f_3 \ldots f_n))  \\
+	&\ldotp \\ 
+	&\ldotp \\
+	&\textbf{h$^{*}$}_{n-1}(h(\ldots(h(o,f_1),\ldots, f_{n-1}),f_n)\\
+	&\textbf{h$^{*}$}_{n}(h(\ldots(h(o,f_1),\ldots, f_{n}), \_)
+\end{array}
+\right\}
+\]
+\[
+\textbf{PathsToNode}(o = \textsf{UniqueRoot} , o') = 
+\left\{ (f_1 \ldots f_n) | \textbf{h$^{*}$}(o,f_1 \ldots f_n ) = o' \right\}
+\]
+\[
+\textbf{IsSingleton}(S = \{\ldots\} ) = \mid S \mid = 1
+\]
+
+\caption{Utility Definitions for Memory Invariants}
+\label{fig:definitionWellFormed-Utility}
+\end{figure*}
+
+\begin{figure*}[!htbp]
+\footnotesize
+\[
+\textbf{Ownership}(\sigma,O,U,T) =
+\left\{
+\begin{array}{cl}
+ 	 & \forall f,o,o',f' \ldotp \\
+	& \sigma.h(o,f) = v \land \sigma.h(o',f') = v \\
+	& \land v \in \textsf{OID} \\
+	& \land  \textsf{ftype}(f) = \textsf{rcu} \\
+ 	&\implies\left\{ 
+		\begin{array}{cl} 
+			&  o=o' \land f=f' \\
+			& \lor\textsf{unlinked} \in O(o) \\ 
+			& \lor \textsf{unlinked} \in O(o') \\
+			& \lor  (\_, o) \in \sigma.F \\ 
+			& \lor  (\_, o') \in \sigma.F 
+		\end{array}
+		\right\}
+\end{array}
+\right\}
+\]
+\[
+\textbf{A Reference Cross Read/Write Blocks-Iterator I}(\sigma,O,U,T)=
+\left\{
+\begin{array}{cl}
+	& \forall tid,o \in \textsf{RCU} \ldotp \\ 
+	& \sigma.s(x,tid) = o  \\
+	& \land (x,tid) \notin U \\
+&\implies \left\{
+		\begin{array}{cl}
+ 			& \textsf{iterator } \, tid \in O(o) \\
+ 			& \lor \sigma.l=tid \land (\textsf{unlinked} \in O(o) \\
+			& \lor (\_,o) \in \sigma.F) 
+		\end{array}
+	\right\}
+\end{array}
+\right\}
+\]
+\[
+\textbf{Single Reader Reference-Iterator II}(\sigma,O,U,T) =
+\left\{
+\begin{array}{cl}
+ & \forall tid \in \sigma.R, o,o' \ldotp \\
+&\textsf{iterator } \, tid \in O(o)  \\
+&\land \textsf{iterator} \, tid \in O(o') \\
+&\implies \left\{ 
+		\begin{array}{cl}
+			o=o'
+		\end{array}
+	\right\}
+\end{array}
+\right\}
+\]
+\[
+\textbf{References In Free List-Iterator III}(\sigma,O,U,T)=
+\left\{
+\begin{array}{cl}
+	&\forall tid, o \ldotp \\ 
+	& \textsf{iterator} \, tid \in O(o) \\
+	& \land \exists T \ldotp (T,o) \in \sigma.F \\
+& \implies \left\{ 
+		\begin{array}{cl}
+  			tid \in T
+		\end{array}
+	\right\}
+\end{array}
+\right\}
+\]
+%%%
+\[
+\textbf{Aliasing Path-Iterator IV} = 
+\left\{
+\begin{array}{cl}
+\left\{
+\begin{array}{cl}
+& \forall x,y \ldotp \sigma.s(x,tid) = o' \land \sigma.s(y,tid) = o'' \\
+&\land \textsf{iterator} \, tid \in O(o') \land \textsf{iterator} \, tid \in O(o'') \\
+& \land P_1 = \textsf{PathToNode}(o = \textsf{UniqueRoot}, o') \\
+&\land P_2 = \textsf{PathToNode}(o = \textsf{UniqueRoot}, o'') \\
+& \land \textsf{IsSingleton}(P_1) \land \textsf{IsSingleton}(P_2) \\
+&\textsf{IdenticalSequences}( P_1, P_2) \\
+\end{array}
+\right\}
+& \implies \left\{
+		\begin{array}{cl}
+		 \sigma.h^{*}(o,P_1) = \sigma.h^{*}(o,P_2) 
+		\end{array}
+	\right\}
+\end{array}
+\right\}
+\]
+\[
+\textbf{Disjoint Path-Iterator V} =
+\left\{
+\begin{array}{cl}
+\left\{
+\begin{array}{cl}
+& \forall_{x,y \in VA} \ldotp \sigma.s(x,tid) = o' \land \sigma.s(y,tid) = o'' \\
+&\land \textsf{iterator} \, tid \in O(o') \land \textsf{iterator} \, tid \in O(o'') \\
+& \land P_1 = \textsf{PathToNode}(o = \textsf{UniqueRoot}, o') \\ 
+&\land P_2 = \textsf{PathToNode}(o = \textsf{UniqueRoot}, o'') \\
+& \land \textsf{IsSingleton}(P_1) \land \textsf{IsSingleton}(P_2) \\
+&\lnot \textsf{IdenticalSequences}( P_1, P_2) \\
+\end{array}
+\right\}
+& \implies \left\{
+		\begin{array}{cl}
+	             \sigma.h^{*}(o,P_1) \neq \sigma.h^{*}(o,P_2) 
+		\end{array}
+	\right\}
+\end{array}
+\right\}
+\]
+%%%
+\[
+\textbf{Unlinked Points To Unlinked-Unlinked I}(\sigma,O,U,T) =
+\left\{
+\begin{array}{cl}
+&\forall o \ldotp \textsf{unlinked} \in O(o) \\
+&\implies\left\{ 
+	\begin{array}{cl}
+		&\forall o',f '\ldotp \\ 
+ 		&\sigma.h(o',f') = o \\
+		&\implies \left\{
+			\begin{array}{cl} 
+				&\textsf{unlinked} \in O(o') \\
+				&\lor (\_,o') \in \sigma.F
+			\end{array}
+		\right\}
+	\end{array}
+	\right\}
+\end{array}
+\right\}
+\]
+\[
+\textbf{Free List Inclusion-Unlinked II}(\sigma,O,U,T) =
+\left\{
+\begin{array}{cl}
+	&\forall o \ldotp (T, o) \in \sigma.F \\
+	&\implies \left\{
+ 	\begin{array}{cl}
+		&\forall o',f' \ldotp \sigma.h(o',f') = o \\
+		&\implies \left\{
+   		\begin{array}{cl}
+   	 		&(T',o') \in \sigma.F \\
+    			&\land T' \subseteq T
+    		\end{array}
+ 		\right\}
+ 	\end{array}
+ 	\right\}
+\end{array}
+\right\}
+\]
+\[
+\textbf{Unlinked Not Iterator-Unlinked III}(\sigma,O,U,T) =
+\left\{
+\begin{array}{cl}
+	&\forall o \ldotp \textsf{iterator} \, \sigma.l \in O(o) \\
+	& \implies \left\{ 
+	\begin{array}{cl}
+		&\textsf{unlinked} \notin O(o)	
+	\end{array}
+	\right\}
+\end{array}
+\right\}
+\]
+\[
+\textbf{Unlinked Refences In Free List-Unlinked IV}(\sigma,O,U,T) =
+\left\{
+\begin{array}{cl}
+ \lnot (\forall o \ldotp \textsf{unlinked} \in O(o) \land (\_,o) \notin \sigma.F)
+\end{array}
+\right\}
+\]
+\[
+\textbf{Fresh Points To Fresh-Fresh I}(\sigma,O,U,T) =
+\left\{
+\begin{array}{cl}
+&\forall o \ldotp \textsf{fresh} \in O(o) \\
+&\implies \left\{ 
+          \begin{array}{cl}
+	&\forall o',f' \ldotp  \sigma.h(o',f') = o \\
+&\implies \left\{ 
+	\begin{array}{cl}
+	&\textsf{fresh} \in O(o')
+	\end{array}
+\right\}
+\end{array}
+\right \}
+\end{array}
+\right\}
+\]
+\[
+\textbf{Fresh Reference In Write Block-Fresh II}(\sigma,O,U,T) =
+\left\{
+\begin{array}{cl}
+& \forall tid,x,o \ldotp \sigma.s(x,tid) = o \\
+&\land \textsf{fresh} \in O(o)\\
+&\implies \left \{
+	tid = \sigma.l
+\right\}
+\end{array}
+\right\}
+\]
+\[
+\textbf{Writer Not Reader}(\sigma,O,U,T) =
+\left\{
+\begin{array}{cl}
+ \sigma.l \notin \sigma.R
+\end{array}
+\right\}
+\]
+\[
+\textbf{Free List Threads Subset Of Readers-Freeing I}(\sigma,O,U,T) =
+\left\{
+\begin{array}{cl}
+\forall o \ldotp (T,o) \in \sigma.F \implies T \subseteq \sigma.R
+\end{array}
+\right\}
+\]
+\[
+\textbf{Type of Reference in Free List-Freeing II}(\sigma,O,U,T) =
+\left\{
+\begin{array}{cl}
+&\forall tid,o \ldotp (T,o) \in \sigma.F \\ 
+&\land \textsf{iterator} \, tid \in O(o)\\ 
+&\implies \left\{ 
+	tid \in T
+\right\}
+\end{array}
+\right\}
+\]
+\[
+\textbf{MustBeAllocated}(\sigma,O,U,T) =
+\left\{
+\begin{array}{cl}
+ &\textbf{\textsf{MustBeAllocated}}_{0}(\sigma,O,U,T) = \{o | \mathsf{iterator} \, tid \in O(o)\} \\
+ &\textbf{\textsf{MustBeAllocated}}_{n+1} (\sigma,O,U,T)= \{ o' | o \in \textbf{\textsf{MustBeAllocated}}_{n}(\sigma,O,U,T) \lor \sigma.h(o,f) =o'\}
+\end{array}
+\right\}
+\]
+\[
+\textbf{InDomain}(\sigma,O,U,T) =
+\left\{
+\begin{array}{cl}
+&\forall o,f',o' \ldotp  \sigma.h(o,f) = o' \\
+&\implies \left\{ o' \in dom(\sigma.h) \right\}
+	\end{array}
+\right\}
+\]
+
+\caption{Definition of WellFormedness: Memory Invariants}
+\label{fig:definitionWellFormed}
+\end{figure*}
+
+We view type environments denotationally, in terms of the set of instrumented states permitted by a given environment. Figure \ref{fig:denotingtypeenviroment} defines the type environment denotation :
+\[ \llbracket \Gamma  \rrbracket_{tid} \] 
+Type denotations are mostly straightforward, though they rely on a notion of partial separating conjunction ∗ of instrumented states. To define this separation, we must first define composition of instrumented states which is an operation $\bullet$ : $\mathcal{M} \longrightarrow \mathcal{M} \longrightarrow \mathcal{M}$ that is commutative and associative. It is defined over observation map as exclusive union of observed type states:
+
+\[O_{1} \bullet O_{2}(loc) =  O_{1}(loc) \uplus O_{2}(loc)\]
+
+Separation algebra is define as :
+
+\begin{gather}
+ * = ( \land,\bullet,\uplus,\uplus) 
+\\
+\textsf{iterator} \, tid \in O \rightarrow tid \in T
+\\
+\textsf{unlinked} \in O \rightarrow \sigma.l \in T
+\\
+\textsf{fresh} \in O \rightarrow \sigma.l \in T
+\end{gather}
+
+Partial separating conjunction then simply requires the existence of two states that compose:
+\[ m \in P \ast Q   \stackrel{def}{=} \exists m' \ldotp \exists m'' \ldotp m' \in P \land m'' \in Q \land m \in m' \bullet m''  \]
+
+[TODO : Explain previous separating conjuction clearly]
+
+\subsection{Views Framework}
+Our soundness proof builds upon a version of the Views Framework [15], which is in some sense a generalization of the ideas behind separation logic and rely-guarantee reasoning. We gave the definitions required by Views Framework, $\mathcal{M}_{RCU}$, $*$ and $\bullet$. We define some relations over $\mathcal{M}$ to enable Views Framework give us structure to the soundness proof as an embedding of the type derivations into the view's program logic.
+
+Thread interference relation $\mathcal{R} \subseteq \mathcal{M} \times \mathcal{M}$  defines permissible interference on an instrumented state. The relation must distribute over composition:
+\[
+   \forall m_{1}, m_{2}, m\ldotp (m_{1} \bullet  m_{2}) \Longrightarrow \exists  m'_{1} m'_{2} \ldotp m_{1} \mathcal{R} m'_{1} \land m_{2} \mathcal{R} m'_{2} \land m \in m'_{1} \bullet m'_{2}
+\]
+
+where $\mathcal{R}$ is transitive-reflexive closure of $\mathcal{R}_{0}$ shown at Figure \ref{fig:threadInterferenceRel}. A unit $\in \mathcal{M}$, a state with all maps are empty, to $\bullet$ is closed with respect to $\mathcal{R}$.
+\begin{figure*}[!htbp]
+\[
+(\sigma, O, U, T) \, \mathcal{R}_{0} \, (\sigma', O', U', T') = \left\{
+ \begin{array}{ll}
+  \sigma.l  \in  T \rightarrow \sigma.h = \sigma'.h \land\\
+  \textsf{iterator} \, tid \in O(o) \rightarrow o \in dom(\sigma'.h) \land \\
+  O = O' \land U = U' \land T = T' \land\\
+ t \in T \rightarrow \forall x \ldotp \sigma.s(x,t) = \sigma'(x,t)
+ \end{array}
+ \right.
+\]
+\caption{Thread Interference Relation}
+\label{fig:threadInterferenceRel}
+\end{figure*}
+
+In the Views Framework, program logic itself contains judgements of the form $\{ p \} C \{ q \}$ for views p and q and commands $C$. A denotation of static assertions are in terms of instrumented states : $\llbracket \Gamma \rrbracket_{tid}$. Proving derivation of typing, ($\llbracket  \Gamma \vdash C \dashv \Gamma \rrbracket$ ) forms the basis of soundness.
+
+This rule shows how types changed soundly in a concurrent setting. Denotation of a typing context:
+\[
+ \llbracket \Gamma \rrbracket : \mathcal{P}(\textsf{LState})
+\]
+
+\begin{figure*}[!htbp]
+\centering
+\[
+\begin{array}{l@{\;\;=\;\;}l}
+\llbracket \, x : \textsf{rcuIterator}\,  \rrbracket_{tid}
+&
+\{ (s,h,l,R,F), O,U \mid \textsf{iterator } \, tid\in  O(s(x)) 
+\land x \notin U
+\}
+\\
+
+\llbracket \, x : \textsf{unlinked} \, \rrbracket_{tid}
+&
+\{ (s,h,l,R,F), O,U \mid \textsf{unlinked}\in  O(s(x)) 
+\land l = tid 
+\land x \notin U
+\}
+
+\\
+
+\llbracket \, x : \textsf{rcuNext } f_1\,x_1, \ldots f_n\,x_n  \, \rrbracket_{tid}
+&
+\left
+\{ 
+\begin{array}{l|l}
+(s,h,l,R,F), O,U 
+&
+\textsf{iterator } \, tid\in  O(s(x)) 
+\land x \notin U\\
+&{}\land  s(x_1) = h(s(x), f_1) \\
+&{}\ldots \\
+&{}\land s(x_n) = h(s(x), f_n)
+\end{array}
+\right\}
+\\
+%x : rcuNext ft : y
+\llbracket \, x : \textsf{rcuNext} f_1 \ldots f_n \, | \, y  \, \rrbracket_{tid}
+&
+\left
+\{
+\begin{array}{l|l}
+(s,h,l,R,F),O,U
+&
+  \textsf{iterator } \, tid \in  O(s(x)) \\
+&{}\textsf{iterator } \, tid \in O(s(y)) \\
+&{}\land x \notin U \land y \notin U \,  \\
+&{}\land  s(x_1) = h(s(x), f_1)  \\ &{}\ldots  \\ &{}\land s(y) = h(s(x), f_n)
+\end{array}
+\right\}
+\\
+%x:rcuIterator | y
+\llbracket \, x : \textsf{rcuIterator} \, | \text{Bounding Set} = \mathcal{P}(\textsf{VAR})  \, \rrbracket_{tid}
+&
+\left
+\{
+\begin{array}{l|l}
+(s,h,l,R,F),O,U
+&
+  \forall y \in \text{Bounding Set} \ldotp \\
+&{}\textsf{iterator } \, tid\in  O(s(y)) \\
+&{}\textsf{iterator }\, tid \in O(s(x)) \\
+&{}\land y \notin U \land x \notin U\\
+&{}\land  s(y_1) = h(s(y), f_1) \\ &{} \ldots \\ &{}\land s(x) = h(s(y), f_n)
+\end{array}
+\right\}
+\\
+\llbracket \, x : \textsf{fresh } f_1\,x_1, \ldots f_n\,x_n \,  \rrbracket_{tid}
+&
+\left
+\{ 
+\begin{array}{l|l}
+(s,h,l,R,F), O,U 
+&
+\textsf{fresh}\in  O(s(x)) 
+\land x \notin U\\
+&{}\land  s(x_1) = h(s(x), f_1) \\
+&{}\ldots \\
+&{}\land s(x_n) = h(s(x), f_n)
+\end{array}
+\right\}
+\\
+
+
+\llbracket \, x : \textsf{undef }\rrbracket_{tid}
+&
+
+\{ 
+(s,h,l,R,F), O,U 
+\mid
+x \in U\}
+\\
+
+\llbracket \, x : \textsf{normal }\rrbracket_{tid}
+&
+
+\{ 
+(s,h,l,R,F), O,U 
+\mid
+x \notin U\}
+\\
+\end{array}
+\]
+\caption{Denoting Types and Type Environments}
+\label{fig:denotingtypeenviroment}
+\end{figure*}
+
+We then define this on typing contexts as 
+\begin{gather*}
+\llbracket x_1 : T_1, \ldots x_n : T_n \rrbracket_{tid,\textsf{RMO}} = \\
+\llbracket x_1 : T_1 \rrbracket_{tid}*_{local} \ldots *_{local} \llbracket x_n : T_n \rrbracket_{tid} *_{local} \llbracket \textsf{RMO} \rrbracket_{tid}
+\end{gather*}
+where
+$\llbracket \textsf{R} \rrbracket_{tid} = \{ (s,h,l,R,F), O,U  \mid tid \in R \}$, 
+$\llbracket \textsf{M} \rrbracket_{tid} = \{ (s,h,l,R,F), O,U  \mid tid = l \}$, and
+$\llbracket \textsf{O} \rrbracket_{tid} = \{ (s,h,l,R,F), O,U  \mid tid \neq l \land tid \notin R \}$, and
+
+
+Given the specific definitions of composition and interference, the Views Framework defines a number of useful concepts to help structure and simplify the soundness proof. First, it defines a view as the subset of instrumented states that are stable under interference:
+\[ \textsf{View} \stackrel{def}{=} \{ M \in \mathcal{M} | \mathcal{R}(M) \subseteq M\} \] such that: 
+The program logic is proven sound with respect to views, and our denotation of type environments is a valid view (stable with respect to R). The framework also describes a useful concept called the view shift operator $\subseteq$, that describes a way to reinterpret a set of instrumented states as a new set of instrumented states. It requires that :
+\[p \sqsubseteq q \stackrel{def}{\Leftrightarrow} \forall m\in\mathcal{M} \ldotp \lfloor p * \{ m \} \rfloor \subseteq \lfloor q* \mathcal{R}(\{m\})\rfloor\]
+This specifies how the region information can be changed soundly. That is, we can only change the region information such that all other possible threads can maintain compatible views.
+
+To use the Views Framework soundness result we need to show for each axiom, $\Gamma_{1} \vdash_{\textsf{RMO}} \alpha \dashv \Gamma_{2}$, that
+\[
+\forall r\ldotp   \llbracket \alpha \rrbracket  \lfloor \llbracket \Gamma_{1} \rrbracket_{\textsf{RMO},tid}  * \{m\} \rfloor \subseteq \\
+  \lfloor \llbracket \Gamma_{2} \rrbracket_{\textsf{RMO},tid} * \mathcal{R}(\{m\}) \rfloor
+\]
+\begin{theorem}[Axiom Soundness]
+For each axiom, $\Gamma_{1} \vdash_{\textsf{RMO}} \alpha \dashv \Gamma_{2}$, we must show
+\[
+\forall r\ldotp   \llbracket \alpha \rrbracket  \lfloor \llbracket \Gamma_{1} \rrbracket_{\textsf{RMO},tid}  * \{m\} \rfloor \subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{\textsf{RMO},tid} * \mathcal{R}(\{m\}) \rfloor
+\]
+\end{theorem}
+
+We can define the denotation typing judgement as: 
+
+\[ \llbracket \Gamma_{1} \vdash C \dashv \Gamma_{2} \rrbracket \stackrel{def}{=} \{ \llbracket \Gamma_{1} \rrbracket_{tid}\} C \{ \llbracket \Gamma_{2} \rrbracket_{tid}\} \]
+
+%%%
+For soundness proof, we describe the important lemmas supporting soundness proof, and omit natural uninteresting lemmas. Lemmas of the proof are described in detail in Appendix \ref{sec:lemmas}.
+%%%
+[TODO: Matthew, Is it ok or enough to give pointer to the real proofs of these lemmas at appendix in here ?]
+\begin{Lemma}[Safe ReadBlock Traversal]
+\begin{gather*}
+\llbracket x:=x.f \rrbracket \lfloor \llbracket \Gamma,x:\mathsf{rcuIterator} \rrbracket_{\textsf{R},tid} * \{m\}\rfloor\subseteq \\
+\lfloor \llbracket \Gamma,x:\mathsf{rcuIterator} \rrbracket_{\textsf{R},tid}  * \mathcal{R}(\{m\})\rfloor 
+\end{gather*}
+\end{Lemma}
+\begin{proof}
+\end{proof}
+
+[TODO: Explain what we prove and tell detailed is in Appendix]
+
+\begin{Lemma}[Safe MutatorBlock Unlink]
+\begin{gather*}
+\llbracket x.f:=z \rrbracket = \lfloor \llbracket \Gamma,x:\mathsf{rcuNext} \, f \, y, y:\mathsf{rcuNext} \, f \, z \rrbracket_{M,tid} * \{m\}\rfloor  \subseteq 
+\\ \lfloor \llbracket \Gamma,x:\mathsf{rcuNext} \, f \, z, y:\mathsf{unlinked} \rrbracket  * \mathcal{R}(\{m\})\rfloor 
+\end{gather*}
+\end{Lemma}
+\begin{proof}
+\end{proof}
+
+[TODO: Explain what we prove and tell detailed is in Appendix]
+
+\begin{Lemma}[Safe MutatorBlock Link]
+\begin{gather*}
+\llbracket x.f:=z \rrbracket \lfloor \llbracket \Gamma,x:\mathsf{rcuNext} \, f \, y \, , z:\mathsf{fresh} \, f \, y \rrbracket_{\textsf{M},tid} * \{m\}\rfloor \subseteq \\ \lfloor \llbracket \Gamma,x:\mathsf{rcuNext} \, f \, z \, , z:\mathsf{rcuNext} \, f \, y  \rrbracket_{\textsf{M},tid}  * \mathcal{R}(\{m\})\rfloor 
+\end{gather*}
+\end{Lemma}
+\begin{proof}
+\end{proof}
+
+[TODO: Explain what we prove and tell detailed is in Appendix]
+
+\begin{Lemma}[Safe MutatorBlock Allocate a Node]
+\[
+\llbracket y := new \rrbracket \lfloor \llbracket \Gamma,y:\_ \rrbracket_{\textsf{M},tid} * \{m\}\rfloor  \subseteq \lfloor \llbracket \Gamma,y:\mathsf{fresh} \rrbracket_{\textsf{M},tid}  * \mathcal{R}(\{m\})\rfloor 
+\]
+\end{Lemma}
+\begin{proof}
+\end{proof}
+
+[TODO: Explain what we prove and tell detailed is in Appendix]
+
+\begin{Lemma}[Safe MutatorBlock Free an Unlinked Node]
+\begin{gather*}
+\llbracket  \mathsf{delayedfree}(x) \rrbracket \lfloor \llbracket \Gamma,x:\mathsf{unlinked} \rrbracket_{\textsf{M},tid} * \{m\}\rfloor  \subseteq \\ 
+\lfloor \llbracket \Gamma,x:\mathsf{undef} \rrbracket_{\textsf{M},tid} * \mathcal{R}(\{m\})\rfloor 
+\end{gather*}
+\end{Lemma}
+\begin{proof}
+\end{proof}
+
+[TODO: Explain what we prove and tell detailed is in Appendix]
+%%%
+
+Using the soundness theorem from the Views framework ~\cite{views} with the previous theorem we can show our type system is sound.
+
+\begin{theorem}[Type Soundness]
+\[ \Gamma_{1} \vdash C \dashv \Gamma_{2} \Longrightarrow \llbracket \Gamma_{1} \vdash C \dashv \Gamma_{2} \rrbracket \]
+\end{theorem}
+\begin{proof}
+By induction on the derivation $ \Gamma_{1} \vdash C \dashv \Gamma_{2}$. 
+\end{proof}

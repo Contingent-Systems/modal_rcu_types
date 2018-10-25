@@ -1,0 +1,1219 @@
+%!TEX root = ./paper.tex
+\section{Soundness}
+\label{sec:lemmas}
+
+\begin{Lemma}[Safe ReadBlock Traversal]
+\begin{gather}
+\llbracket x:=x.f \rrbracket \lfloor \llbracket \Gamma,x:\mathsf{rcuIterator} \rrbracket_{\textsf{R},tid} * \{m\}\rfloor  \subseteq \\ 
+\lfloor \llbracket \Gamma,x:\mathsf{rcuIterator} \rrbracket_{\textsf{R},tid}  * \mathcal{R}(\{m\})\rfloor 
+\end{gather}
+\end{Lemma}
+\begin{proof}
+We assume 
+\begin{gather} \label{l1e1}
+(\sigma,O,U,T) \, \in \, \llbracket \Gamma,x:\textsf{rcuIterator} \rrbracket_{\textsf{R},tid} * \{m\}
+\\
+\label{l1ewfa}
+\textsf{WellFormed}(\sigma,O,U,T)
+\end{gather}
+And must show that there exists $O',U',T'$ such that
+\begin{gather} \label{l1e3}
+%\begin{gather}
+(\sigma[ \sigma.s(x,tid) \mapsto \sigma.h(\sigma.s(x,tid),f) ], O',U',T') \in \\
+\llbracket \Gamma,x:\textsf{rcuIterator} \rrbracket_{\textsf{R},tid} * \mathcal{R}(\{m\})
+%\end{gather}
+\\
+\label{l1ewfa}
+\textsf{WellFormed}(\sigma[ \sigma.s(x,tid) \mapsto \sigma.h(\sigma.s(x,tid),f)  ],O',U',T')
+\end{gather}
+%
+From \ref{l1e1} we can assume
+%
+%%% gather formats a collection of numbered equations nicely
+\begin{gather} \label{l1e4}
+(\sigma,O_{1},U_{1},T_{1}) \in \llbracket \Gamma, x:\textsf{rcuIterator} \rrbracket_{\textsf{R},tid}
+\\
+ \label{l1e5}
+(\sigma,O_{2},U_{2},T_{2}) = m 
+\\
+ \label{l1e6}
+O_{1} \bullet O_{2} = O
+\\
+ \label{l1e7}
+U_{1} \cup U_{2} = U 
+\\
+ \label{l1e8}
+T_{1} \uplus T_{2} = T
+\\
+\label{l1wfa1}
+\textsf{WellFormed}(\sigma,O_{1},U_{1},T_{1})
+\\
+\label{l1wfa2}
+\textsf{WellFormed}(\sigma,O_{2},U_{2},T_{2})
+\end{gather}
+%
+To prove \ref{l1e3} choose 
+%
+\[
+\begin{array}{cl}
+O' = O[ \sigma.s(x,tid) \mapsto O \setminus \textsf{iterator} \, tid  \cup \textsf{iterator} \, tid ] \\
+U' = U \\
+T' = T
+\end{array}
+\]
+We must prove there exists $O'_{1}, O'_{2}, U'_{1}, U'_{2}, T'_{1}, T'_{2}$ such that
+\begin{gather}\label{l1e9}
+(\sigma',O'_{1},U'_{1}, T'_{1}) \in \llbracket \Gamma,x:\textsf{rcuIterator} \rrbracket_{R,tid}
+\\
+\label{l1e10}
+(\sigma',O'_{2},U'_{2}, T'_{2}) \in \mathcal{R}(\{m\})
+\\
+ \label{l1e11}
+O'_{1} \bullet O'_{2} = O'
+\\
+\label{l1e12}
+U'_{1} \cup U'_{2} = U' 
+\\
+\label{l1e13}
+T'_{1} \uplus T'_{2} = T
+\\
+\label{l1wfp1}
+\textsf{WellFormed}(\sigma',O_{1}',U_{1}',T_{1}')
+\\
+\label{l1wfp2}
+\textsf{WellFormed}(\sigma',O_{2}',U_{2}',T_{2}')
+\end{gather}
+%
+We choose $O_{2}' = O_{2}$, $U_{1}' = U_{1}$, $U_{2}' = U_{2}$, $T_{1}' = T_{1}$ and $T_{2}' = T_{2}$.
+So \ref{l1e12} follows from \ref{l1e7} and \ref{l1e13} follows from \ref{l1e8}.
+
+In the rest of the proof it is useful to know that 
+\begin{equation} \label{l1e14}
+T_{1} = \{tid\}
+\end{equation}
+which follows directly from \ref{l1e4}.
+
+To show \ref{l1e11}, pick
+\[
+O_{1}'  = O_{1}[\sigma.s(x,tid) \mapsto O_{1} \setminus \textsf{iterator} \;  tid \cup \textsf{iterator} \; tid]
+\]
+$O'_{1} \bullet O'_{2} = O'$, follows, as we know $O'_{2}$ does not include $tid$.
+
+From \ref{l1e4} we can assume 
+
+\begin{gather} \label{l1e18}
+(\sigma,\hat{O}'_{1}, U, T) \in \llbracket \Gamma \rrbracket_{R,tid}
+\\
+ \label{l1e19}
+(\sigma,\hat{O}''_{1}, U, T) \in \llbracket x:\textsf{rcuIterator} \rrbracket_{R,tid}
+\\
+ \label{l1e20}
+\hat{O}'_{1} \bullet \hat{O}''_{1} = O_{1}
+\end{gather}
+
+To show \ref{l1e9}, we need to show that there exists $O''_{1}$ and $O'''_{1}$ such that
+\begin{gather} \label{l1e15}
+(\sigma',O''_{1}, U, T) \in \llbracket \Gamma \rrbracket_{R,tid}
+\\
+ \label{l1e16}
+(\sigma',O'''_{1}, U, T) \in \llbracket x:\textsf{rcuIterator} \rrbracket_{R,tid}
+\\
+ \label{l1e17}
+O''_{1} \bullet O'''_{1} = O'_{1}
+\end{gather}
+
+Choosing $O''_{1} = \hat{O}'_{1}$, \ref{l1e15} follows  from \ref{l1e18}.
+
+Assume that \[ o = \sigma.s(x,tid)\]
+
+From semantics of \[ \llbracket x:\mathsf{rcuIterator} \rrbracket_{tid} \] we know that \[ \mathsf{iterator} \, tid \in O(o) \land x\notin U \]
+
+By choosing $O'''_{1}$ to contain the new iterator from $O'_{1}$, , we know that
+
+\[ x \notin dom(\Gamma) \]
+
+as \[ \forall y \ldotp \sigma(y) = \sigma'(y) where x \neq y \]
+
+as a result  
+
+\ref{l1e15} implies \ref{l1e9}.
+
+To show \ref{l1e10} we need to show that
+\[
+(\sigma, O_{2}, U_{2}, T_{2}) \mathcal{R} (\sigma', O_{2}, U_{2}, T_{2})
+\]
+%$\sigma$ agrees with $\sigma'$ on the heap and the stack for threads other than $tid$. By \ref{l1e8} and \ref{l1e14}, $tid \notin T_{2}$ so this is allowed.
+which by definition means we must show
+\begin{gather}
+\label{l1re1}
+\sigma.l \in T_{2} \rightarrow \sigma.h = \sigma'.h
+\\
+\label{l1re2}
+\textsf{iterator} \, tid \in O_{2}(o) \rightarrow  o \in dom(\sigma'.h)
+\\
+\label{l1re3}
+O_{2} = O_{2}
+\\
+\label{l1re4}
+U_{2} = U_{2}
+\\
+\label{l1re5}
+T_{2} = T_{2}
+\\
+\label{l1re6}
+t \in T_{2} \rightarrow \forall x \ldotp \sigma.s(x,t) = \sigma'.s(x,t)
+\end{gather}
+
+\ref{l1re3}-\ref{l1re5} hold trivially. To show \ref{l1re1} we know $\sigma' = \sigma [  \sigma.s(x,tid) \mapsto \sigma.h(\sigma.s(x,tid),f)  ]$. So $\sigma'.h = \sigma.h$ as only $\sigma.s$ changes. To show \ref{l1re2} we know by \textsf{\textbf{MustBeAllocated}} that $o \in dom(\sigma.h)$ and thus $o \in dom(\sigma'.h)$. To show \ref{l1re6} we know $T_{1} = \{tid\} \land tid \notin T_{2}$.  We can assume $t \in T_{2} \land t \ne tid$ and must prove that 
+\[
+\forall x \ldotp \sigma.s(x,t) = \sigma'.s(x,t) 
+\]
+Which holds by the definition of $\sigma'$ as only $tid$s variables could be updated. 
+
+%%%%%%Equation 21
+
+To show \ref{l1wfp1} we assume \ref{l1wfa1} and pick
+\[
+O_{1}'  = O_{1}[\sigma.s(x,tid) \mapsto O_{1} \setminus \mathsf{iterator} \,  tid \cup \mathsf{iterator} \, tid]
+\]
+
+In addition, we know \ref{l1e14} and $tid  \in R$.
+
+Assume that \[ o = \sigma'.s(x,tid)\]
+
+From semantics of \[ \llbracket x:\mathsf{rcuIterator} \rrbracket_{R,tid} \] we know that \[ \mathsf{iterator} \, tid \in O(o) \land x\notin U \]
+
+(\ref{l1wfp1} $\ldotp$ \textsf{Iterator I}) holds as $\mathsf{iterator} \, tid \in O'_{1}(o)$.
+
+ 
+\[
+O_{1}'  = O_{1}[\sigma.s(x,tid) \mapsto O_{1} \setminus \mathsf{iterator} \,  tid  \cup \mathsf{iterator} \, tid]
+\]
+
+\[ o = \sigma.s(x,tid) \in O_{1}\]
+
+\[ o' = \sigma'.s(x,tid) \in O'_{1}\]
+
+
+ As we know that $o \notin O'_{1}$ but $o' \in O_{1}'$, we can deduce that a thread $tid \in R$ can only have one pointer to a particular memory location.  This implies that (\ref{l1wfp1} $\ldotp$ \textsf{Iterator II}) holds. 
+
+To show (\ref{l1wfp1} $\ldotp$ \textsf{Iterator III}), we know that for some $o$  where $s(x,tid) = o$
+\[ \mathsf{iterator} \, tid\, \in O(o) \land  \exists T \ldotp T(T,o) \in F\]
+and we need to show that 
+\[tid \in T\].
+
+As we know from semantics of 
+\[
+(\texttt{delayedFree}(x), s,h,l,R,F) 
+\;\;\Downarrow_{\mathrm{tid}}\;\;
+(s,h,l,R,F \uplus \{ (R,S(x))\} 
+\]
+that
+\[s(x,tid) \in S(x)\]
+then we conclude that 
+\[tid \in T\]
+
+In addition to (\ref{l1wfp1} $\ldotp$ \textsf{Iterator II}), we know that heap owns all locations that it owns before so  (\ref{l1wfp1} $\ldotp$ \textsf{Ownership}) holds as
+
+\begin{gather*}
+ \forall  o'' \, \ldotp \, h(o,f) = v \, \land \, h(o'',f') = v\, \land \, v \in  \mathsf{OID} \, \land \, \mathsf{ftype}(f) = \mathsf{rcu}, \, \implies \\
+ o=o'' \land f=f'' \end{gather*}
+
+holds.
+
+(\ref{l1wfp1} $\ldotp$ \textsf{UnlinkedI}), (\ref{l1wfp1}$\ldotp$ \textsf{UnlinkedII}),(\ref{l1wfp1}$\ldotp$ \textsf{UnlinkedIII}), (\ref{l1wfp1}$\ldotp$ \textsf{FreshI}), (\ref{l1wfp1}$\ldotp$ \textsf{Freeing I}),(\ref{l1wfp1}$\ldotp$ \textsf{Freeing II}) and (\ref{l1wfp1}$\ldotp$ \textsf{MustBeAllocated}) are trivial
+
+
+%%%%%%%%%%%%%Note:Check Equation_21.MustBeAllocated and others. Equation_22 
+
+To show \ref{l1wfp2} we assume \ref{l1wfa2} and we already know that $O_{2}' = O_{2}$,  $U_{2}' = U_{2}$ and $T_{2}' = T_{2}$  .
+
+ We know $tid' \in T_{2}$. (\ref{l1wfp2}$\ldotp$ \textsf{Ownership}), (\ref{l1wfp2}$\ldotp$ \textsf{IteratorI}), (\ref{l1wfp2}$\ldotp$ \textsf{IteratorII}), (\ref{l1wfp2}$\ldotp$ \textsf{UnlinkedI}), (\ref{l1wfp2}$\ldotp$ \textsf{UnlinkedII}),(\ref{l1wfp2}$\ldotp$ \textsf{UnlinkedIII}), (\ref{l1wfp2}$\ldotp$ \textsf{FreshI}), (\ref{l1wfp2}$\ldotp$ \textsf{Freeing I}), (\ref{l1wfp2}$\ldotp$ \textsf{Freeing II}) and (\ref{l1wfp2}$\ldotp$ \textsf{MustBeAllocated}) hold as only $s$ changes and $h$, $F_{2}$, $O_{2}$ do not change. 
+
+\begin{comment}
+For proof of  \ref{l1wfp2}$\ldotp$ \textsf{FreshII}, we can assume that 
+\[o = O_{2}(x,t) \land o' = O'_{2}(x,t)\]
+and we know that 
+\[
+\sigma' = \sigma [  \sigma.s(x,t) \mapsto \sigma.h(x,f) ]   \land \sigma.h = \sigma.h' 
+\]
+As heap does not change and assuming that 
+
+\[ \mathsf{fresh} \in O_{2}'(o') \]
+
+there exists only one action that preserves observation of a thread for a node as \textsf{fresh}
+\[
+\Gamma,\, x:\textsf{fresh } f\,\_ \vdash_{M} x.f := z \dashv x:\textsf{fresh }f\,z \,,\Gamma
+\]
+ which is a mutator action and this implies that 
+
+\[t = l\]
+
+For another case of \ref{l1wfp2}$\ldotp$ \textsf{FreshII} where 
+
+\[t\in T_{2} \land t \in R\]
+
+proof is trivial.
+\end{comment}
+
+%%%%
+To show (\ref{l1wfp2}$\ldotp$ \textsf{IteratorIII}) we can assume for all \[x,tid', o\]
+we can assume 
+\[ \sigma'.s(x,tid') = o \land \mathsf{iterator} \, tid' \in O'_{2}(o) \land \exists T \ldotp (T,o)  \in F' \]
+and we must prove 
+\[tid' \in T\]
+From assumption ( \ref{l1wfa2}$\ldotp$ \textsf{IteratorIII} ) we know for all \[x,tid',o\] 
+\[\sigma.s(x,tid') = o \land \mathsf{iterator} \, tid' \, \in O_{2}(o) \land \exists T \ldotp (T,o) \in F \]
+As
+\[O_{2} = O'_{2} \land T_{2} = T'_{2}\]
+and using 
+\[\sigma'.s(x,tid') = o \land \mathsf{iterator} \, tid' \, \in O'_{2}(o) \land \exists T \ldotp (T,o) \in F' \]
+and 
+all updates in $\sigma$ are done to $tid$ associated variables and \[tid \notin T_{2}\]
+implies that 
+\[tid' \in T_{2} \land tid' \in T\].
+
+%%%%
+
+To prove (\ref{l1wfp2}$\ldotp$ \textsf{FreshII}) we can assume for some \[ x, tid', o \]
+we can assume
+\[ \sigma'.s(x,tid') = o \land \mathsf{fresh} \in O_{2}(o) \land tid' \in T_{2} \]
+and we must prove 
+\[tid' = \sigma'.l\]
+From assumption ( \ref{l1wfa2}$\ldotp$ \textsf{FreshII} ) we know 
+\begin{gather*}
+\forall x,tid',o \ldotp \sigma.s(x,tid') = o \land \mathsf{fresh} \in O_{2}(o) \land tid' \in T_{2} \implies \\
+tid' = \sigma.l 
+\end{gather*}
+As
+\[O_{2} = O'_{2} \land T_{2} = T'_{2}\]
+and using 
+\[ \sigma'.s(x,tid') = o \land \mathsf{fresh} \in O_{2}(o) \land tid' \in T_{2} \]
+we conclude that 
+\[ \forall x,tid',o \ldotp \sigma.s(x,tid') = o \implies tid' = \sigma.l \]
+
+If we knew $\sigma.s(x,tid') = \sigma'.s(x,tid')$ then we would be done. As we know $\sigma$ and $\sigma'$ only differ on variables associated to $tid$, and moreover $tid \notin T_{2}$, then we know that equality, and thus
+\[tid' = \sigma.l\]
+as required.
+
+\end{proof}
+
+\begin{Lemma}[Safe MutatorBlock Unlink]
+\begin{gather}
+\llbracket x.f:=z \rrbracket = \lfloor \llbracket \Gamma,x:\mathsf{rcuNext} \, f \, y, y:\mathsf{rcuNext} \, f \, z \rrbracket_{M,tid} * \{m\}\rfloor  \subseteq \\
+\lfloor \llbracket \Gamma,x:\mathsf{rcuNext} \, f \, z, y:\mathsf{unlinked} \rrbracket  * \mathcal{R}(\{m\})\rfloor 
+\end{gather}
+
+\end{Lemma}
+
+\begin{proof}
+
+We can  assume 
+
+\begin{gather} \label{l2e2}
+(\sigma,O,U,T) \, \in \, \llbracket \Gamma,x:\mathsf{rcuNext} \, f \, y, y:\mathsf{rcuNext} \, f \, z \rrbracket_{M,tid} * \{m\}
+\\
+\label{l2ewfa}
+\textsf{WellFormed}(\sigma,O,U,T)
+\end{gather}
+
+And must show that there exists $O',U',T'$ such that
+
+\begin{gather} \label{l2e3}
+(  \sigma [ \sigma.s(x,tid),f \mapsto \sigma.s(z,tid) ]  , O', U', T') \in \\
+ \llbracket \Gamma,x:\mathsf{rcuNext} \, f \,z, y:\mathsf{unlinked} \rrbracket_{M,tid} * \mathcal{R}(\{m\})
+\\
+\label{l2ewfa}
+\textsf{WellFormed}(  \sigma [ (\sigma.s(x,tid),f \mapsto \sigma.s(z,tid) ] , O', U', T')
+\end{gather}
+
+From \ref{l2e2} we can assume 
+
+
+\begin{gather} \label{l2e4}
+(\sigma, O_{1}, U_{1}, T_{1}) \in \llbracket \Gamma, x:\mathsf{rcuNext} \, f \, y, y:\mathsf{rcuNext} \, f  \,z\rrbracket_{M,tid}
+\\
+ \label{l2e5}
+(\sigma, O_{2}, U_{2}, T_{2}) = m 
+\\
+\label{l2e6}
+O_{1} \bullet O_{2} = O
+\\
+ \label{l2e7}
+U_{1} \cup U_{2} = U
+\\
+ \label{l2e8}
+T_{1} \uplus T_{2} = T
+\\
+\label{l2wfa1}
+\textsf{WellFormed}(\sigma,O_{1},U_{1},T_{1})
+\\
+\label{l2wfa2}
+\textsf{WellFormed}(\sigma,O_{2},U_{2},T_{2})
+\end{gather}
+
+To prove \ref{l2e3} choose
+
+\[
+\begin{array}{cl}
+&O' = O[\sigma.s(y,tid) \mapsto O \setminus \mathsf{iterator} \, tid  \cup \mathsf{unlinked}]\\
+&U' = U\\
+&T' = T
+\end{array}
+\]
+
+We must prove there exists $O'_{1}, O'_{2}, U'_{1}, U'_{2}, T'_{1}, T'_{2}$ such that
+
+
+\begin{gather}\label{l2e9}
+(\sigma',O'_{1},U'_{1}, T'_{1}) \in \llbracket \Gamma,x:\mathsf{rcuNext}\,f \, z , \, y :\mathsf{unlinked}  \rrbracket_{M,tid}
+\\
+\label{l2e10}
+(\sigma',O'_{2},U'_{2}, T'_{2}) \in \mathcal{R}(\{m\})
+\\
+ \label{l2e11}
+O'_{1} \bullet O'_{2} = O'
+\\
+ \label{l2e12}
+U'_{1} \cup U'_{2} = U' 
+\\
+ \label{l2e13}
+T'_{1} \uplus T'_{2} = T
+\\
+\label{l2wfp1}
+\textsf{WellFormed}(\sigma',O'_{1},U'_{1},T'_{1})
+\\
+\label{l2wfp2}
+\textsf{WellFormed}(\sigma',O'_{2},U'_{2},T'_{2})
+\end{gather}
+
+We choose \[O_{2}' = O_{2}, U_{1}' = U_{1}, U_{2}' = U_{2}, T_{1}' = T_{1}, T_{2}' = T_{2}\]  so \ref{l2e12} follows from \ref{l2e7} and \ref{l2e13} follows from \ref{l2e8}
+
+In the rest of the proof, it is useful to know that 
+
+\begin{equation} \label{l2e14}
+T_{1} = \{tid\}
+\end{equation}
+which follows directly from \ref{l2e4}.
+
+
+To show \ref{l2e11}, pick
+
+\[O_{1}' = O_{1}[\sigma.s(y,tid) \mapsto O_{1} \setminus \textsf{iterator} \, tid \cup \textsf{unlinked}]\]
+$O'_{1} \bullet O'_{2} = O'$, follows, as we know $O'_{2}$ does not include $tid$.
+
+
+From \ref{l2e4} we can assume
+
+
+\begin{gather} \label{l2e14}
+(\sigma,\hat{O}'_{1},U_{1},T_{1})  \in \llbracket \Gamma \rrbracket_{M,tid}
+\\
+ \label{l2e15}
+(\sigma,\hat{O}''_{1},U_{1},T_{1})  \in \llbracket x:\mathsf{rcuNext} \, f \, y \rrbracket_{M,tid}
+\\
+\label{l2e16}
+(\sigma,\hat{O}'''_{1},U_{1},T_{1}) \in \llbracket y:\mathsf{rcuNext} \, f \, z \rrbracket_{M,tid}
+\\
+ \label{l2e17}
+\hat{O}'_{1} \bullet \hat{O}''_{1} \bullet \hat{O}'''_{1} = O_{1}
+\end{gather}
+
+
+To show \ref{l2e9}, we need to show that there exists  $O''_{1}$, $O'''_{1}$, $O''''_{1}$ such that 
+
+\begin{gather} \label{l2e18}
+(\sigma', O''_{1},U ,T) \in \llbracket \Gamma \rrbracket_{M,tid}
+\\
+ \label{l2e19}
+(\sigma', O'''_{1},U ,T) \in \llbracket x:\mathsf{rcuNext} \, f \, z \rrbracket_{M,tid}
+\\
+ \label{l2e20}
+(\sigma', O''''_{1},U ,T) \in \llbracket y:\mathsf{unlinked} \rrbracket_{M,tid}
+\\ 
+\label{l2e21}
+O''_{1} \bullet O'''_{1} \bullet O''''_{1} = O'_{1}
+\end{gather}
+
+Choosing $\hat{O}'_{1} = O''_{1}$, \ref{l2e18} follows from \ref{l2e14}.
+
+By choosing $O''''_{1}$ to contain the unlinked node and choosing $O'''_{1}$ to contain the iterator from ${O}'_{1}$, we show \ref{l2e21} where \ref{l2e9} follows from.
+
+To show \ref{l2e10} we need to show that 
+
+\[
+(\sigma, O_{2}, U_{2}, T_{2}) \mathcal{R} (\sigma', O_{2}, U_{2}, T_{2})
+\]
+%$\sigma$ agrees with $\sigma'$ on the heap and the stack for threads other than $tid$. By \ref{l1e8} and \ref{l1e14}, $tid \notin T_{2}$ so this is allowed.
+which by definition means we must show
+\begin{gather}
+\label{l2re1}
+\sigma.l \in T_{2} \rightarrow \sigma.h = \sigma'.h
+\\
+\label{l2re2}
+\textsf{iterator} \, tid \in O_{2}(o) \rightarrow  o \in dom(\sigma'.h)
+\\
+\label{l2re3}
+O_{2} = O_{2}
+\\
+\label{l2re4}
+U_{2} = U_{2}
+\\
+\label{l2re5}
+T_{2} = T_{2}
+\\
+\label{l2re6}
+t \in T_{2} \rightarrow \forall x \ldotp \sigma.s(x,t) = \sigma'.s(x,t)
+\end{gather}
+
+
+\ref{l2re3}-\ref{l2re5} holds trivially. We know that 
+\[T_{2} \subseteq R\]
+so \ref{l2re1} holds trivially.
+
+\ref{l2re2} holds as we know from \textsf{\textbf{MustBeAllocated}} that $o \in dom(\sigma.h)$ and thus $o \in dom(\sigma'.h)$. To show \ref{l2re6} we know $T_{1} = \{tid\} \land tid \notin T_{2}$.  We can assume $t \in T_{2} \land t \ne tid$ and must prove that 
+\[
+\forall x \ldotp \sigma.s(x,t) = \sigma'.s(x,t) 
+\]
+which holds by the definition of $\sigma'$ as only $tid$s variables could be updated. 
+
+
+To show \ref{l2wfp1} we assume \ref{l2wfa1} and pick
+
+\[O_{1}' = O_{1}[\sigma.s(y,tid) \mapsto O_{1} \setminus \mathsf{iterator} \, tid \cup \mathsf{unlinked}] \]
+
+In addition, we know  that 
+
+\[T_{1}=\{tid\} \land tid= l\]
+and  assume that 
+\[o = \sigma'.s(y,tid)\]
+
+(\ref{l2wfp1}.\textsf{IteratorI}) holds as 
+
+\[ l =  tid \land \textsf{unlinked} \in O'_{1}(o)\]
+
+(\ref{l2wfp1}.\textsf{IteratorII}) is trivial.
+
+ To show (\ref{l2wfp1}.\textsf{IteratorIII}), we know that 
+
+\[F \subseteq R\land tid \notin R\] implies that ( \ref{l2wfp1}.\textsf{IteratorIII}) is trivial.
+
+To show (\ref{l2wfp1}.\textsf{UnlinkedI}), we can assume that 
+\[ \sigma'.s(y,tid) = o \land \mathsf{unlinked} \in O'_{1}(o) \]
+and we show that 
+\[\forall o',f' \ldotp  h(o',f') = o \implies \mathsf{unlinked} \in O'_{1}(o') \lor ( \_ ,o') \in F\]
+As 
+\[\mathsf{unlinked} \in O'_{1}(\sigma'.s(y,tid)) \]
+(\ref{l2wfp1}.\textsf{UnlinkedI}) holds.
+
+(\ref{l2wfp1}.\textsf{UnlinkedII-III}) is trivial.
+
+(\ref{l2wfp1}.\textsf{FreshI-II}), (\ref{l2wfp1}.\textsf{WriterNotReader}), (\ref{l2wfp1}.\textsf{MustBeAllocated}) is trivial.
+
+To show (\ref{l2wfp1}.\textsf{FreeingI}) ...To show (\ref{l2wfp1}.\textsf{FreeingII}) ...
+%%%%%%%%%%%%%%%%
+
+To show \ref{l2wfp2} we assume \ref{l2wfa2} and we already know that $O_{2}' = O_{2}$,  $U_{2}' = U_{2}$ and $T_{2}' = T_{2}$  .
+
+To prove (\ref{l2wfp2}.\textsf{IteratorI}), for some 
+\[ x, o, tid' \]
+we assume
+\[
+\sigma'.s(x,tid') = o \land (x,tid') \notin U'_{2} \land tid' \in T'_{2}
+\]
+and it is enough to prove 
+\[ \mathsf{iterator} \, tid \in O'_{2} \]
+as 
+\[tid' \in R\]
+From assumption (\ref{l2wfp1}.\textsf{IteratorI}) we know
+\[ \sigma.s(x,tid') = o \land (x,tid') \notin U_{2} \land tid' \in T_{2} \implies \mathsf{iterator} \, tid \in O_{2}\]
+As
+\[  O_{2}' = O_{2}  \land U_{2}' = U_{2} \land T_{2}' = T_{2} \]
+and using
+\[
+\sigma'.s(x,tid') = o \land (x,tid') \notin U'_{2} \land tid' \in T'_{2}
+\]
+and as heap changes, we can conlclude that 
+\[\forall o,x \ldotp \sigma'.s(x,tid') = o \land (x,tid') \notin U'_{2} \land tid' \in T'_{2} \implies \mathsf{iterator} tid' \]
+
+Proving (\ref{l2wfp2}.\textsf{IteratorII}) is trivial.
+
+
+To prove (\ref{l2wfp2}.\textsf{IteratorIII}),  for some
+\[o,tid' \] where 
+\[tid' \in R\]
+we assume 
+\[ \mathsf{iterator} \, tid' \in O'_{2} \land \exists T \ldotp (T,o) \in  F \] to prove
+\[tid' \in T\]
+From assumption  (\ref{l2wfa2}.\textsf{IteratorIII}), we know that 
+\[\mathsf{iterator} \, tid' \in O_{2} \land \exists T \ldotp (T,o) \in  F  \implies tid' \in T \]
+and using 
+\[O_{2} = O'_{2} \land T_{2} = T'_{2}\] with
+\[ \mathsf{iterator} \, tid' \in O'_{2} \land \exists T \ldotp (T,o) \in  F \]
+enables us to conclude that 
+\[tid' \in T\]
+
+To prove (\ref{l2wfp2}.\textsf{Unlinked I}) for some $o$ we can assume
+\[\mathsf{unlinked} \in O'_{2}(o) \] and 
+\[\forall o',f' \ldotp \sigma'.h(o',f')= o\] to prove
+\[ \mathsf{unlinked} \in O'_{2}(o) \lor (\_,o') \in F\]
+From assumption (\ref{l2wfa2}.\textsf{Unlinked I})  we know that 
+\begin{gather}\mathsf{unlinked} \in O_{2}(o) \text{then} \forall o',f' \ldotp \sigma.h(o',f') = o \implies \\ 
+\mathsf{unlinked} \in O_{2}(o') \lor (\_,o') \in F \end{gather}
+Using 
+\[O_{2} = O'_{2} \land T_{2} = T'_{2}\] and 
+\[\mathsf{unlinked} \in O'_{2}(o) \]
+\[\forall o',f' \ldotp \sigma'.h(o',f')= o\] 
+we can conclude that 
+\[ \mathsf{unlinked} \in O'_{2}(o) \lor (\_,o') \in F\]
+
+Proving (\ref{l2wfp2}.\textsf{UnlinkedII-III}) is trivial.
+
+To prove (\ref{l2wfp2}.\textsf{FreshI}) we assume for some node $o$
+\[\mathsf{fresh} \in O'_{2}(o) \]
+\[\forall o',f'  \ldotp \sigma'.h(o',f') = o\]
+to prove
+\[ \mathsf{fresh} \in O'_{2}(o')\]
+From assumption (\ref{l2wfa2}.\textsf{FreshI}), we know that 
+\[ \forall o \ldotp \mathsf{fresh} \in O_{2}(o) \text{then} \forall o',f' \ldotp \sigma.h(o',f') = o \implies \mathsf{fresh} \in O_{2}(o') \]
+and using 
+\[ O_{2} = O'_{2} \land T_{2} = T'_{2} \] with 
+\[ \mathsf{fresh} \in O'_{2}(o) \]
+\[ \forall o',f'  \ldotp \sigma'.h(o',f') = o\]
+we conclude that 
+\[fresh \in O'_{2}(o')\]
+
+Proving (\ref{l2wfp2}.\textsf{FreshII}), (\ref{l2wfp2}.\textsf{FreeingI-II}) is trivial.
+
+\end{proof}
+\newcommand{\newln}{\\&\quad\quad{}} 
+
+
+\begin{Lemma}[Safe MutatorBlock Link]
+\begin{gather}
+\llbracket x.f:=z \rrbracket \lfloor \llbracket \Gamma,x:\mathsf{rcuNext} \, f \, y \, , z:\mathsf{fresh} \, f \, y \rrbracket_{\textsf{M},tid} * \{m\}\rfloor  \subseteq \\ 
+\lfloor \llbracket \Gamma,x:\mathsf{rcuNext} \, f \, z \, , z:\mathsf{rcuNext} \, f \, y  \rrbracket_{\textsf{M},tid}  * \mathcal{R}(\{m\})\rfloor 
+\end{gather}
+\end{Lemma}
+\begin{proof}
+We assume 
+\begin{gather} \label{l3e1}
+(\sigma,O,U,T) \, \in \, \llbracket \Gamma,x:\mathsf{rcuNext} \, f \, y \, , z:\mathsf{fresh} \, f \, y \rrbracket_{\textsf{M},tid} * \{m\}
+\\
+\label{l3ewfa}
+\textsf{WellFormed}(\sigma,O,U,T)\\
+\sigma.h(\sigma.s(x,tid),f) = \sigma.s(y,tid) 
+\end{gather}
+And must show that there exists $O',U',T'$ such that
+\begin{gather} 
+\begin{split}
+\label{l3e3} 
+(\sigma[ \sigma.s(x,tid),f \mapsto\sigma.s(z,tid) ], O',U',T')  \\
+\in \llbracket \Gamma,x:\mathsf{rcuNext} \, f \, z \, , z:\mathsf{rcuNext} \, f \, y \rrbracket_{\textsf{M},tid} * \mathcal{R}(\{m\})
+\end{split}
+\\
+\label{l3ewfa}
+\textsf{WellFormed}(\sigma[ \sigma.s(x,tid),f \mapsto\sigma.s(z,tid)],O',U',T')
+\end{gather}
+
+From \ref{l3e1} we can assume 
+
+\begin{gather} \label{l3e4}
+(\sigma, O_{1}, U_{1}, T_{1}) \in \llbracket \Gamma, x:\mathsf{rcuNext} \, f \, y, z:\mathsf{fresh} \, f \, y\rrbracket_{M,tid}
+\\
+ \label{l3e5}
+(\sigma, O_{2}, U_{2}, T_{2}) = m 
+\\
+\label{l3e6}
+O_{1} \bullet O_{2} = O
+\\
+ \label{l3e7}
+U_{1} \cup U_{2} = U
+\\
+ \label{l3e8}
+T_{1} \uplus T_{2} = T
+\\
+\label{l3wfa1}
+\textsf{WellFormed}(\sigma,O_{1},U_{1},T_{1})
+\\
+\label{l3wfa2}
+\textsf{WellFormed}(\sigma,O_{2},U_{2},T_{2})
+\end{gather}
+
+To prove \ref{l3e3} choose
+
+\[
+\begin{array}{cl}
+&O' = O[\sigma.s(z,tid) \mapsto O  \setminus \mathsf{fresh}  \cup \mathsf{iterator} \, tid]\\
+&U' = U\\
+&T' = T
+\end{array}
+\]
+
+We must prove there exists $O'_{1}, O'_{2}, U'_{1}, U'_{2}, T'_{1}, T'_{2}$ such that
+
+
+\begin{gather}\label{l3e9}
+(\sigma',O'_{1},U'_{1}, T'_{1}) \in \llbracket \Gamma,x:\mathsf{rcuNext}\,f \, z , \, z:\mathsf{rcuNext}\,f \, y  \rrbracket_{M,tid}
+\\
+\label{l3e10}
+(\sigma',O'_{2},U'_{2}, T'_{2}) \in \mathcal{R}(\{m\})
+\\
+ \label{l3e11}
+O'_{1} \bullet O'_{2} = O'
+\\
+ \label{l3e12}
+U'_{1} \cup U'_{2} = U' 
+\\
+ \label{l3e13}
+T'_{1} \uplus T'_{2} = T
+\\
+\label{l3wfp1}
+\textsf{WellFormed}(\sigma',O'_{1},U'_{1},T'_{1})
+\\
+\label{l3wfp2}
+\textsf{WellFormed}(\sigma',O'_{2},U'_{2},T'_{2})
+\end{gather}
+
+We choose 
+
+\[O'_{2} = O_{2}, U'_{1} = U_{1}, U'_{2} = U_{2}, T'_{1} = T_{1}, T'_{2} = T_{2}  \] so \ref{l3e12} follows from \ref{l3e7} and \ref{l3e13} follows from \ref{l3e8}.
+
+In the rest of the proof , it is useful to knowthat
+\begin{equation} \label{l3e14}
+T_{1} = \{tid\}
+\end{equation}
+which follows directly from \ref{l3e4}.
+
+To show \ref{l3e11}, pick
+
+\[O_{1}' = O_{1}[\sigma.s(z,tid) \mapsto O_{1} \setminus \textsf{fresh}  \cup \textsf{iterator} \, tid]\]
+$O'_{1} \bullet O'_{2} = O'$, follows, as we know $O'_{2}$ does not include $tid$.
+
+
+From \ref{l3e4} we can assume
+
+\begin{gather} \label{l3e14}
+(\sigma,\hat{O}'_{1},U_{1},T_{1})  \in \llbracket \Gamma \rrbracket_{M,tid}
+\\
+ \label{l3e15}
+(\sigma,\hat{O}''_{1},U_{1},T_{1})  \in \llbracket x:\mathsf{rcuNext} \, f \, y \rrbracket_{M,tid}
+\\
+\label{l3e16}
+(\sigma,\hat{O}'''_{1},U_{1},T_{1}) \in \llbracket z:\mathsf{fresh} \, f \, y \rrbracket_{M,tid}
+\\
+ \label{l3e17}
+\hat{O}'_{1} \bullet \hat{O}''_{1} \bullet \hat{O}'''_{1} = O_{1}
+\end{gather}
+
+
+To show \ref{l3e9}, we need to show that there exists  $O''_{1}$, $O'''_{1}$, $O''''_{1}$ such that 
+
+\begin{gather} \label{l3e18}
+(\sigma', O''_{1},U ,T) \in \llbracket \Gamma \rrbracket_{M,tid}
+\\
+ \label{l3e19}
+(\sigma', O'''_{1},U ,T) \in \llbracket x:\mathsf{rcuNext} \, f \, z \rrbracket_{M,tid}
+\\
+ \label{l3e20}
+(\sigma', O''''_{1},U ,T) \in \llbracket z:\mathsf{rcuNext} \,f \, y \rrbracket_{M,tid}
+\\ 
+\label{l3e21}
+O''_{1} \bullet O'''_{1} \bullet O''''_{1} = O'_{1}
+\end{gather}
+
+Choosing $\hat{O}'_{1} = O''_{1}$, \ref{l3e18} follows from \ref{l3e14}.
+
+By choosing $O''''_{1}$ and $O'''_{1}$ to contain the iterators from ${O}'_{1}$, we show \ref{l3e21} where \ref{l3e9} follows from.
+
+To show \ref{l3e10} we need to show that 
+
+\[
+(\sigma, O_{2}, U_{2}, T_{2}) \mathcal{R} (\sigma', O_{2}, U_{2}, T_{2})
+\]
+%$\sigma$ agrees with $\sigma'$ on the heap and the stack for threads other than $tid$. By \ref{l1e8} and \ref{l1e14}, $tid \notin T_{2}$ so this is allowed.
+which by definition means we must show
+\begin{gather}
+\label{l3re1}
+\sigma.l \in T_{2} \rightarrow \sigma.h = \sigma'.h
+\\
+\label{l3re2}
+\textsf{iterator} \, tid \in O_{2}(o) \rightarrow  o \in dom(\sigma'.h)
+\\
+\label{l3re3}
+O_{2} = O_{2}
+\\
+\label{l3re4}
+U_{2} = U_{2}
+\\
+\label{l3re5}
+T_{2} = T_{2}
+\\
+\label{l3re6}
+t \in T_{2} \rightarrow \forall x \ldotp \sigma.s(x,t) = \sigma'.s(x,t)
+\end{gather}
+
+\ref{l3re3}-\ref{l3re5} holds trivially. We know that 
+\[T_{2} \subseteq R\]
+so \ref{l3re1} holds trivially.
+
+\ref{l3re2} holds as we know from \textsf{\textbf{MustBeAllocated}} that $o \in dom(\sigma.h)$ and thus $o \in dom(\sigma'.h)$. To show \ref{l3re6} we know $T_{1} = \{tid\} \land tid \notin T_{2}$.  We can assume $t \in T_{2} \land t \ne tid$ and must prove that 
+\[
+\forall x \ldotp \sigma.s(x,t) = \sigma'.s(x,t) 
+\]
+which holds by the definition of $\sigma'$ as only $tid$s variables could be updated. 
+
+To prove \ref{l3wfp1} we know 
+\[O_{1}' = O_{1}[\sigma.s(z,tid) \mapsto O_{1} \setminus \mathsf{fresh}  \cup \mathsf{iterator} \, tid ] \]
+in addition to
+\[T_{1}=\{tid\} \land tid= l\]
+
+(\ref{l3wfp1}.\textsf{IteratorI}) holds as 
+
+\[ l =  tid \] for
+\[ o' = \sigma'.s(x,tid) \land o'' = \sigma'.s(z,tid) \] with knowing that
+\[O'_{1} = O_{1}[\sigma.s(z,tid) \mapsto O_{1}  \setminus \mathsf{fresh}  \cup \mathsf{iterator} \, tid]\]
+we can conclude that (\ref{l3wfp1}.\textsf{IteratorI}) holds as  
+\[ \textsf{iterator} \, tid \in O'_{1}(o') \land \textsf{iterator} \, tid \in O'_{1}(o'') \]
+
+Proving (\ref{l3wfp1}.\textsf{IteratorII})  is trivial.
+ To show (\ref{l3wfp1}.\textsf{IteratorIII}), we know that 
+
+Knowing that \[F \subseteq R\land tid \notin R\] makes ( \ref{l3wfp1}.\textsf{IteratorIII}) is trivial.
+
+Proving (\ref{l3wfp1}.\textsf{Unlinked I}) is trivial.
+
+To prove (\ref{l3wfp1}.\textsf{Unlinked II}) we can assume 
+\begin{gather} \forall o \ldotp (T,o) \in F' \implies (\forall o',f' \ldotp h(o',f') = o \implies (T',o') \in F \land T' \subseteq T) \end{gather}
+
+From (\ref{l3wfa1}.\textsf{Unlinked II}), we know that 
+\begin{gather} \forall o \ldotp (T,o) \in F \implies (\forall o',f' \ldotp h(o',f') = o \implies (T',o') \in F and T' \subseteq T) \end{gather}
+As we know that  $O_{1}$  is updated with a node $o'$ such that 
+ \[o=\sigma'.s(y,tid) \land  o' = \sigma'.s(z,tid)   \]
+\[z:\mathsf{rcuNext}\,f \, y \land \mathsf{iterator} \, tid \in O'_{1}(o') \land o' \in dom(\sigma'.h) \]
+and 
+\[tid \notin R \]
+we can conclude that 
+\[ (\forall o',f' \ldotp \sigma'.h(o',f') = o \implies (T',o') \in F and T' \subseteq T) \]
+
+From assumption of (\ref{l3wfa1}.\textsf{UnlinkedIII}), we know that for some $o$ 
+\[ \mathsf{iterator} \; l \in O_{1}(o) \implies \mathsf{unlinked} \notin O_{1}(o)\]
+As 
+\[ T_{1} = T'_{1} \land tid = l \] and from our assumption from (\ref{l3wfp1}.\textsf{UnlinkedIII})
+\[\mathsf{itearator} \; l \in O'_{1}(o) \] and
+\[ O_{1}' = O_{1}[\sigma.s(z,tid) \mapsto O_{1} \setminus \mathsf{fresh}  \cup \mathsf{iterator} \, tid ] \] 
+we can conclude that 
+\[ \mathsf{unlinked} \notin O'_{1} \]  
+
+(\ref{l3wfp1}.\textsf{Fresh I-II}) is trivial.
+
+(\ref{l3wfp1}.\textsf{FreeingI-II, MustbeAllocated, WriterNotReader}) is trivial.
+For proof of \ref{l3wfp2}, we know 
+\[ tid' \in T_{2} \land T_{2} = T'_{2} \land tid' \subseteq R \land  O_{2} = O'_{2} \land U_{2}  = U'_{2} \]
+(\ref{l3wfp2}.\textsf{Ownership}) holds as we know that heap owns all locations that it owns before. 
+
+(\ref{l3wfp2}.\textsf{IteratorI}) holds as from (\ref{l3wfa2}.\textsf{IteratorI}), we assume
+\begin{gather*} \forall o \ldotp o \in \mathsf{RCU} \land \sigma.s(x,tid') = o \land (x,tid') \notin U \implies \\
+\mathsf{iterator} \, tid' \in O_{2}(o)\end{gather*}From (\ref{l3wfp2}.\textsf{IteratorI}), we can assume that 
+\[\forall o \ldotp o \in \mathsf{RCU} \land \sigma'.s(x,tid') = o \land (x,tid') \notin U\] and conclude that 
+\[\mathsf{iterator} \, tid' \in O'_{2}(o)\]
+
+(\ref{l3wfp2}.\textsf{IteratorII}) holds as from (\ref{l3wfa2}.\textsf{IteratorII}), we assume
+\begin{gather} \forall tid' \in R , o,o' \ldotp \mathsf{iterator} \, tid' \in O_{2}(o) \land \mathsf{iterator} \, tid' \in O_{2}(o') \implies \\
+ o=o' \end{gather}
+As we know that 
+\[O_{2} = O'_{2}\] which makes showing
+(\ref{l3wfp2}.\textsf{IteratorII}) trivial.
+
+(\ref{l3wfp2}.\textsf{IteratorIII}) holds as from (\ref{l3wfa2}.\textsf{IteratorIII}), we assume for some $o,tid'$
+ \[ \mathsf{iterator} \, tid' \in O_{2}(o) \land \exists T \ldotp (T,o) \in F \implies tid' \in T_{2}\] and we can assume
+\[\mathsf{iterator} \, tid' \in O'_{2} \land \exists T \ldotp (T,o) \in F'\] to prove
+\[tid' \in T'_{2}\]
+
+As \[ O_{2} = O'_{2} \land T_{2} = T'_{2} \] and using 
+\[ \mathsf{iterator} \, tid'  \in O'_{2} \land \exists T \ldotp (T,o) \in F' \] we can conclude that $(T,o)$ stays same because 
+\[T \subseteq R\land T \subseteq T'_{2}\] and 
+(\ref{l3wfp2}.\textsf{IteratorIII}) holds.
+
+(\ref{l3wfp2}.\textsf{Unlinked I-III-IV}) is trivial.
+
+Proving (\ref{l3wfp2}.\textsf{Unlinked II}) 
+
+Proving (\ref{l3wfp2}.\textsf{Fresh I}) is trivial.
+
+To prove (\ref{l3wfp2}.\textsf{Fresh II})  we can  assume for some $x,tid',o$
+\[\sigma'.s(x,tid') = o \land \mathsf{fresh} \in O'_{2}(o) \land tid' \in T'_{2}\]
+and must prove 
+\[tid' = \sigma'.l\]
+From assumption (\ref{l3wfa2}.\textsf{Fresh II}) we know 
+\[\forall x,tid',o \ldotp \sigma.s(x,tid') = o \land \mathsf{fresh} \in O_{2}(o) \land tid' \in T_{2} \implies tid' = \sigma.l\]
+As we know \[O_{2} = O'_{2} \land T_{2} = T'_{2}\] and \[\sigma'.s(x,tid') = o \land \mathsf{fresh} \in O'_{2}(o) \land tid' \in T'_{2}\] and because $\sigma$ and $\sigma'$ only differ on  variables related to $tid$ and 
+\[tid \notin T'_{2}\] (\ref{l3wfa2}.\textsf{Fresh II}) holds.
+
+Proving (\ref{l3wfp2}.\textsf{MustBeAllocated-FreeingI-II}) is  trivial.
+
+\end{proof}
+
+\begin{Lemma}[Safe MutatorBlock Allocate a Node]
+\[
+\llbracket y := new \rrbracket \lfloor \llbracket \Gamma,y:\_ \rrbracket_{\textsf{M},tid} * \{m\}\rfloor  \subseteq\lfloor \llbracket \Gamma,y:\mathsf{fresh} \rrbracket_{\textsf{M},tid}  * \mathcal{R}(\{m\})\rfloor 
+\]
+\end{Lemma}
+\begin{proof}
+We assume 
+\begin{gather} \label{l4e1}
+(\sigma,O,U,T) \, \in \, \llbracket \Gamma,y:\_ \rrbracket_{\textsf{M},tid} * \{m\}
+\\
+\label{l4ewfa}
+\textsf{WellFormed}(\sigma,O,U,T) 
+\end{gather}
+And must show that there exists $O',U',T'$ such that
+\begin{gather} 
+\begin{split}
+\label{l4e3} 
+(\sigma[ \sigma.s(y,tid) \mapsto \sigma.h(\sigma.s(y,tid),f) ], O',U',T')  \\
+\in \llbracket \Gamma, y:\_ \rrbracket_{\textsf{M},tid} * \mathcal{R}(\{m\})
+\end{split}
+\\
+\label{l4ewfa}
+\textsf{WellFormed}(\sigma[ \sigma.s(y,tid) \mapsto \sigma.h(\sigma.s(y,tid),f) ],O',U',T')
+\end{gather}
+
+From \ref{l4e1} we can assume 
+
+\begin{gather} \label{l4e4}
+(\sigma, O_{1}, U_{1}, T_{1}) \in \llbracket \Gamma, y:\_ \rrbracket_{M,tid}
+\\
+ \label{l4e5}
+(\sigma, O_{2}, U_{2}, T_{2}) = m 
+\\
+\label{l4e6}
+O_{1} \bullet O_{2} = O
+\\
+ \label{l4e7}
+U_{1} \cup U_{2} = U
+\\
+ \label{l4e8}
+T_{1} \uplus T_{2} = T
+\\
+\label{l4wfa1}
+\textsf{WellFormed}(\sigma,O_{1},U_{1},T_{1})
+\\
+\label{l4wfa2}
+\textsf{WellFormed}(\sigma,O_{2},U_{2},T_{2})
+\end{gather}
+
+To prove \ref{l4e3} choose
+
+\[
+\begin{array}{cl}
+&O' = O[\sigma.s(y,tid) \mapsto O  \cup \mathsf{fresh}]\\
+&U' = U\\
+&T' = T
+\end{array}
+\]
+
+We must prove there exists $O'_{1}, O'_{2}, U'_{1}, U'_{2}, T'_{1}, T'_{2}$ such that
+
+
+\begin{gather}\label{l4e9}
+(\sigma',O'_{1},U'_{1}, T'_{1}) \in \llbracket \Gamma,x:\mathsf{fresh}  \rrbracket_{M,tid}
+\\
+\label{l4e10}
+(\sigma',O'_{2},U'_{2}, T'_{2}) \in \mathcal{R}(\{m\})
+\\
+ \label{l4e11}
+O'_{1} \bullet O'_{2} = O'
+\\
+ \label{l4e12}
+U'_{1} \cup U'_{2} = U' 
+\\
+ \label{l4e13}
+T'_{1} \uplus T'_{2} = T
+\\
+\label{l4wfp1}
+\textsf{WellFormed}(\sigma',O'_{1},U'_{1},T'_{1})
+\\
+\label{l4wfp2}
+\textsf{WellFormed}(\sigma',O'_{2},U'_{2},T'_{2})
+\end{gather}
+
+We choose 
+
+\[O'_{2} = O_{2}, U'_{1} = U_{1}, U'_{2} = U_{2}, T'_{1} = T_{1}, T'_{2} = T_{2}  \] so \ref{l4e12} follows from \ref{l4e7} and \ref{l4e13} follows from \ref{l4e8}.
+
+In the rest of the proof , it is useful to knowthat
+\begin{equation} \label{l4e14}
+T_{1} = \{tid\}
+\end{equation}
+which follows directly from \ref{l4e4}.
+
+To show \ref{l4e11}, pick
+
+\[O_{1}' = O_{1}[\sigma.s(y,tid) \mapsto O_{1} \cup \mathsf{fresh} ]\]
+$O'_{1} \bullet O'_{2} = O'$, follows, as we know $O'_{2}$ does not include $tid$.
+
+
+From \ref{l4e4} we can assume
+
+\begin{gather} \label{l4e14}
+(\sigma,\hat{O}'_{1},U_{1},T_{1})  \in \llbracket \Gamma \rrbracket_{M,tid}
+\\
+ \label{l4e15}
+(\sigma,\hat{O}''_{1},U_{1},T_{1})  \in \llbracket y:\_ \rrbracket_{M,tid}
+\\
+ \label{l4e16}
+\hat{O}'_{1} \bullet \hat{O}''_{1} = O_{1}
+\end{gather}
+
+
+To show \ref{l4e9}, we need to show that there exists  $O''_{1}$, $O'''_{1}$ such that 
+
+\begin{gather} 	\label{l4e17}
+(\sigma', O''_{1},U ,T) \in \llbracket \Gamma \rrbracket_{M,tid}
+\\
+ \label{l4e18}
+(\sigma', O'''_{1},U ,T) \in \llbracket y:\mathsf{fresh} \rrbracket_{M,tid}
+\\
+\label{l4e19}
+O''_{1} \bullet O'''_{1} = O'_{1}
+\end{gather}
+
+Choosing $\hat{O}'_{1} = O''_{1}$, \ref{l4e17} follows from \ref{l4e14}.
+
+By choosing $O'''_{1}$ to contain the fresh node from ${O}'_{1}$, we show \ref{l4e19} where \ref{l4e9} follows from.
+
+To show \ref{l4e10} we need to show that 
+
+\[
+(\sigma, O_{2}, U_{2}, T_{2}) \mathcal{R} (\sigma', O_{2}, U_{2}, T_{2})
+\]
+%$\sigma$ agrees with $\sigma'$ on the heap and the stack for threads other than $tid$. By \ref{l1e8} and \ref{l1e14}, $tid \notin T_{2}$ so this is allowed.
+which by definition means we must show
+\begin{gather}
+\label{l4re1}
+\sigma.l \in T_{2} \rightarrow \sigma.h = \sigma'.h
+\\
+\label{l4re2}
+\textsf{iterator} \, tid \in O_{2}(o) \rightarrow  o \in dom(\sigma'.h)
+\\
+\label{l4re3}
+O_{2} = O_{2}
+\\
+\label{l4re4}
+U_{2} = U_{2}
+\\
+\label{l4re5}
+T_{2} = T_{2}
+\\
+\label{l4re6}
+t \in T_{2} \rightarrow \forall x \ldotp \sigma.s(x,t) = \sigma'.s(x,t)
+\end{gather}
+
+\ref{l4re3}-\ref{l4re5} holds trivially. We know that 
+\[T_{2} \subseteq R\]
+so \ref{l4re1} holds trivially. \ref{l4re2} holds trivially.
+
+To show \ref{l4re6} we know $T_{1} = \{tid\} \land tid \notin T_{2}$.  We can assume $t \in T_{2} \land t \ne tid$ and must prove that 
+\[
+\forall x \ldotp \sigma.s(x,t) = \sigma'.s(x,t) 
+\]
+which holds by the definition of $\sigma'$ as only $tid$s variables could be updated. 
+
+To prove \ref{l4wfp1} we know 
+\[O_{1}' = O_{1}[\sigma.s(y,tid) \mapsto O_{1} \cup \mathsf{fresh} ] \]
+in addition to
+\[T_{1}=\{tid\} \land tid= l\]
+
+To prove (\ref{l4wfp1}.\textsf{Fresh I}) , we know from \textsf{InDomain} that
+ \[\forall o,o',f' \ldotp \sigma.h(o',f') = o \implies o' \in dom(h) \] and
+as we know that allocating a new is done from free list or some new heap location which is not in domain of rcu data structure before.  This makes (\ref{l4wfp1}.\textsf{Fresh I}) holds.
+
+To prove (\ref{l4wfp1}.\textsf{Fresh II}) we know from (\ref{l4wfa1}.\textsf{Fresh II}) for some $x,o$ 
+\[ \sigma.s(x,tid) = o \land \mathsf{fresh} \in O_{1}(o) \implies tid = l \]
+and as we know that 
+\[ T_{1} = T'_{1} \land tid = l \]
+(\ref{l4wfp1}.\textsf{Fresh II} becomes trivial.
+
+Proving \ref{l4wfp2} is trivial
+\end{proof}
+
+\begin{Lemma}[Safe MutatorBlock Free an Unlinked Node]
+\begin{gather}
+\llbracket  \mathsf{delayedfree}(x) \rrbracket \lfloor \llbracket \Gamma,x:\mathsf{unlinked} \rrbracket_{\textsf{M},tid} * \{m\}\rfloor  \subseteq \\ 
+\lfloor \llbracket \Gamma,x:\mathsf{undef} \rrbracket_{\textsf{M},tid}  * \mathcal{R}(\{m\})\rfloor 
+\end{gather}
+\end{Lemma}
+\begin{proof}
+
+We assume 
+\begin{gather} \label{l5e1}
+(\sigma,O,U,T) \, \in \, \llbracket \Gamma,x:\mathsf{unlinked} \rrbracket_{\textsf{M},tid} * \{m\}
+\\
+\label{l5ewfa}
+\textsf{WellFormed}(\sigma,O,U,T) 
+\end{gather}
+And must show that there exists $O',U',T'$ such that
+\begin{gather} 
+\begin{split}
+\label{l5e3} 
+(\sigma[ \sigma.s(x,tid) \mapsto \_ ], O',U',T')  \\
+\in \llbracket \Gamma, x:\mathsf{unlinked} \rrbracket_{\textsf{M},tid} * \mathcal{R}(\{m\})
+\end{split}
+\\
+\label{l5ewfa}
+\textsf{WellFormed}(\sigma[ \sigma.s(x,tid) \mapsto \_) ],O',U',T')
+\end{gather}
+
+From \ref{l5e1} we can assume 
+
+\begin{gather} \label{l5e4}
+(\sigma, O_{1}, U_{1}, T_{1}) \in \llbracket \Gamma, y:\mathsf{unlinked} \rrbracket_{M,tid}
+\\
+ \label{l5e5}
+(\sigma, O_{2}, U_{2}, T_{2}) = m 
+\\
+\label{l5e6}
+O_{1} \bullet O_{2} = O
+\\
+ \label{l5e7}
+U_{1} \cup U_{2} = U
+\\
+ \label{l5e8}
+T_{1} \uplus T_{2} = T
+\\
+\label{l5wfa1}
+\textsf{WellFormed}(\sigma,O_{1},U_{1},T_{1})
+\\
+\label{l5wfa2}
+\textsf{WellFormed}(\sigma,O_{2},U_{2},T_{2})
+\end{gather}
+
+To prove \ref{l5e3} choose
+
+\[
+\begin{array}{cl}
+&O' = O[\sigma.s(x,tid) \mapsto O  \setminus \mathsf{unlinked} \cup \mathsf{undef}]\\
+&U' = U[x \mapsto U \cup \mathsf{undef}]\\
+&T' = T
+\end{array}
+\]
+
+We must prove there exists $O'_{1}, O'_{2}, U'_{1}, U'_{2}, T'_{1}, T'_{2}$ such that
+
+
+\begin{gather}\label{l5e9}
+(\sigma',O'_{1},U'_{1}, T'_{1}) \in \llbracket \Gamma,x:\mathsf{undef}  \rrbracket_{M,tid}
+\\
+\label{l5e10}
+(\sigma',O'_{2},U'_{2}, T'_{2}) \in \mathcal{R}(\{m\})
+\\
+ \label{l5e11}
+O'_{1} \bullet O'_{2} = O'
+\\
+ \label{l5e12}
+U'_{1} \cup U'_{2} = U' 
+\\
+ \label{l5e13}
+T'_{1} \uplus T'_{2} = T
+\\
+\label{l5wfp1}
+\textsf{WellFormed}(\sigma',O'_{1},U'_{1},T'_{1})
+\\
+\label{l5wfp2}
+\textsf{WellFormed}(\sigma',O'_{2},U'_{2},T'_{2})
+\end{gather}
+
+We choose 
+
+\[O'_{2} = O_{2}, U'_{2} = U_{2}, T'_{1} = T_{1}, T'_{2} = T_{2}  \] so \ref{l5e12} follows from \ref{l5e7} and \ref{l5e13} follows from \ref{l5e8}.
+
+In the rest of the proof , it is useful to knowthat
+\begin{equation} \label{l5e14}
+T_{1} = \{tid\}
+\end{equation}
+which follows directly from \ref{l5e4}.
+
+To show \ref{l5e11}, pick
+
+\[O_{1}' = O_{1}[\sigma.s(x,tid) \mapsto O_{1} \setminus \mathsf{unlinked} \cup \mathsf{undef} ]\]
+$O'_{1} \bullet O'_{2} = O'$, follows, as we know $O'_{2}$ does not include $tid$.
+
+And pick
+
+\[U_{1}' = U_{1}[x \mapsto U \cup \mathsf{undef}]\]
+$U'_{1} \cup U'_{2} = U'$, follows, as we know $U'_{2}$ does not include $tid$.
+
+From \ref{l5e4} we can assume
+
+\begin{gather} \label{l5e14}
+(\sigma,\hat{O}'_{1},U_{1},T_{1})  \in \llbracket \Gamma \rrbracket_{M,tid}
+\\
+ \label{l5e15}
+(\sigma,\hat{O}''_{1},U_{1},T_{1})  \in \llbracket x:\mathsf{unlinked} \rrbracket_{M,tid}
+\\
+ \label{l5e16}
+\hat{O}'_{1} \bullet \hat{O}''_{1} = O_{1}
+\end{gather}
+
+
+To show \ref{l5e9}, we need to show that there exists  $O''_{1}$, $O'''_{1}$ such that 
+
+\begin{gather} 	\label{l5e17}
+(\sigma', O''_{1},U ,T) \in \llbracket \Gamma \rrbracket_{M,tid}
+\\
+ \label{l5e18}
+(\sigma', O'''_{1},U ,T) \in \llbracket y:\mathsf{undef} \rrbracket_{M,tid}
+\\
+\label{l5e19}
+O''_{1} \bullet O'''_{1} = O'_{1}
+\end{gather}
+
+Choosing $\hat{O}'_{1} = O''_{1}$, \ref{l5e17} follows from \ref{l5e14}.
+
+By choosing $O'''_{1}$ to contain the undefined node from ${O}'_{1}$, we show \ref{l5e19} where \ref{l5e9} follows from.
+
+To show \ref{l5e10} we need to show that 
+
+\[
+(\sigma, O_{2}, U_{2}, T_{2}) \mathcal{R} (\sigma', O_{2}, U_{2}, T_{2})
+\]
+%$\sigma$ agrees with $\sigma'$ on the heap and the stack for threads other than $tid$. By \ref{l1e8} and \ref{l1e14}, $tid \notin T_{2}$ so this is allowed.
+which by definition means that we must show
+\begin{gather}
+\label{l5re1}
+\sigma.l \in T_{2} \rightarrow \sigma.h = \sigma'.h
+\\
+\label{l5re2}
+\textsf{iterator} \, tid \in O_{2}(o) \rightarrow  o \in dom(\sigma'.h)
+\\
+\label{l5re3}
+O_{2} = O_{2}
+\\
+\label{l5re4}
+U_{2} = U_{2}
+\\
+\label{l5re5}
+T_{2} = T_{2}
+\\
+\label{l5re6}
+t \in T_{2} \rightarrow \forall x \ldotp \sigma.s(x,t) = \sigma'.s(x,t)
+\end{gather}
+
+\ref{l5re3}-\ref{l5re5} holds trivially. We know that 
+\[T_{2} \subseteq R\]
+so \ref{l5re1} holds trivially. \ref{l5re2} holds trivially.
+
+To show \ref{l5re6} we know $T_{1} = \{tid\} \land tid \notin T_{2}$.  We can assume $t \in T_{2} \land t \ne tid$ and must prove that 
+\[
+\forall x \ldotp \sigma.s(x,t) = \sigma'.s(x,t) 
+\]
+which holds by the definition of $\sigma'$ as only $tid$s variables could be updated. 
+
+To prove \ref{l5wfp1} and we know \ref{l5wfp2}
+\[O_{1}' = O_{1}[\sigma.s(x,tid) \mapsto O_{1} \setminus \mathsf{unlinked} \cup \mathsf{undef} ] \]
+\[T_{1}=\{tid\} \land tid= l\]
+\[O_{2} = O'_{2}\]
+Proving \ref{l5wfp1} and \ref{l5wfp2} is trivial.
+\end{proof}
+

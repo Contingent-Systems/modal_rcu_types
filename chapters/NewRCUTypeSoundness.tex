@@ -1,0 +1,358 @@
+\section{Soundness}
+\label{sec:soundness}
+\subsection{Proof Outline}
+Here we outline our proof type soundness.  Our full proof appears in the appendices.
+
+We prove type soundness by embedding the type system into an abstract concurrent separation logic called the Views Framework~\cite{views}.  As with other work taking this approach~\cite{oopsla12,toplas17}, this consists of several key steps:
+\begin{enumerate}
+    \item Provide runtime states and semantics for the atomic actions we care about in the language.  These are exactly the semantics from Section \ref{sec:semantics}.
+    \item Define a denotational interpretation $\db{-}$ of the types in terms of an instrumented execution state --- a runtime state (Section \ref{sec:semantics}) with additional bookkeeping to simplify proofs.
+    The denotation encodes invariants specific to each type, like the fact that \textsf{unlinked} references are unreachable from the heap, or that \textsf{freeable} references are unreachable from the heap as well as other threads' local variables.
+    The instrumented execution states are also given additional global invariants the type system is intended to maintain, such as acyclicity of the structure.
+    \item Prove a lemma --- called \emph{Axiom Soundness} --- that the type rules in Section \ref{subsection:type-rules} are consistent.  Specifically, that given a state in the denotation of the pre-type-environment of a primitive type rule, the operational semantics produce a state in the denotation of the post-type-environment.  This includes preservation of global invariants.
+    \item Give a desugaring of non-trivial control constructs into the simpler non-deterministic versions provided by Views.
+\end{enumerate}
+The top-level soundness claim takes the form
+$
+    \forall \Gamma,C,\Gamma', \Gamma\vdash_M C \dashv \Gamma' \Rightarrow \{\db{\Gamma}\}\downarrow C\downarrow\{\db{\Gamma'}\}
+$.
+The judgment $\assert{-}~C~\assert{-}$ is a claim in the abstract separation logic provided by the Views Framework, which is sound as long as the earlier steps satisfy some natural consistency properties (this is a result of the Views Framework itself~\cite{views}).
+Because our denotation of types encodes the property that the post-environment of any type rule accurately characterizes which memory is linked vs. unlinked, etc., and the global invariants ensure all allocated heap memory is reachable from the root or from some thread's stack, this entails that our type system prevents memory leaks.
+\subsection{Informal Invariants of RCU Model and Denotations of Types}
+\label{sec:lemmas}
+We define \textit{well-formed}ness condition of RCU model through a conjuction of \textit{global invariants} that we define formally in Appendix \ref{sec:memaxioms}. Here we introduce the important aspects RCU invariants together with the type denotations -- formal denotations can be found in Figure \ref{fig:denotingtypeenviroment} Section \ref{sec:proof} -- to give the intuition that our system captures the requirements of RCU setting~\cite{abssem}.
+
+\mypar{Grace-Period Guarantee} A mutator thread has to synchronize with all of the reader threads currently running the read-side critical section to \textit{reclaim} the heap locations. The operational semantics in Figure \ref{fig:operationalsemrcu} Section \ref{sec:semantics} enforce a \textit{protocol} on the mutator thread's actions :1-first it updates a heap location(e.g. \textit{unlinking}) 2-then it \textit{synchronizes} with reader threads and then 3-\textit{reclaims} the heap location. The mutator thread's reference to the heap location in between \textit{unlinking} and \textit{synchronising} is represented with the type \textsf{unlinked}. The type of the reference in between the end of \textit{synchronisation} and \textit{reclamation} is represented with the type \textsf{freeable}. Synchronisation action \textit{bounds} the mutator thread from reclaiming the \textit{unlinked} heap location immediately by adding it to the \textit{free-list}. The denotation of \textsf{unlinked} in Figure \ref{fig:denotingtypeenviroment} Section \ref{sec:proof} asserts that if an \textsf{unlinked} heap location is in the \textit{free-list} then there exists a subset of reader threads running simultaneously -- which are called \textit{bounding} threads -- referencing to the heap location. Denotation of \textsf{freeable} asserts that all bounding threads left the RCU read-side critical section -- ready to perform reclamation. \textsf{Iterators-Free-List} invariant and \textsf{Readers-In-Free-List} invariant in Appendix \ref{sec:memaxioms} assert what being a \textit{bounding-thread} is, how a \textit{bounding-thread} observes the \textsf{unlinked} heap location and the \textit{bounding-thread}'s existence in \textit{free-list}.
+
+\mypar{Publish-Subscribe Guarantee} Concurrent reader threads must not be affected by a \textit{replacing-an-existing-node-with-a-fresh-one} or \textit{linking-a-single-node} action when inserting a new node into the linked data structure in such a way that they cannot access to the fresh nodes until they are published/linked. Unlike the case in \textit{Grace-Period-Guarantee} where the reader threads can observe an unlinked heap node as \textsf{iterator} during the \textit{grace-period}, they cannot observe the fresh heap nodes until they are published(can be observed as \textsf{iterator}). As we see in the operational semantics in Figure \ref{fig:operationalsemrcu} Section \ref{sec:semantics}, once a new heap location is allocated it is in type \textsf{fresh} -- observed as \textsf{fresh} by mutator. \textsf{Fresh-Writes} invariant in Appendix \ref{sec:memaxioms} asserts that a fresh heap location can only be allocated and referenced by the mutator thread. \textsf{Fresh-Reachable} invariant asserts the relation between a freshly allocated heap and the rest of the heap in such a way that there exists no heap node reaching to the freshly allocated one. Moreover, \textsf{Fresh-Not-Reader} invariant asserts that freshly allocated heap locatations are not published so they cannot be observed by a reader thread. Our system ensures \textit{locality} of the effects in linking a new heap node via replacing an existing one as discussed in Figure \ref{fig:freshframeout} Section \ref{subsection:type-rules}. To do so the fields of the fresh node has to point the nodes which are pointed by the replaced one -- \textsf{Fresh-Points-Iterator} invariant.
+
+\mypar{Memory-Barrier Guarantee} RCU write-side critical section has to guarantee that none of the updates to the memory cause no invalid memory access. If a heap location is observed as \textsf{iterator} by the mutator thread then it must be observed as \textsf{iterator} by other threads -- invariant \textsf{Writer-Unlink} and all of the heap locations reaching to the node starting from root can be observed as \textsf{iterator} as well -- denotation $\llbracket \mathsf{rcuItr}\,\rho \,\N \rrbracket_{tid}$ in Figure \ref{fig:denotingtypeenviroment} Section \ref{sec:proof}. Reader threads can only have one type of observation \textsf{iterator} -- invariant \textsf{Readers-Iterator-Only} in Appendix \ref{sec:memaxioms} -- for a heap location where this heap location can be updated by the mutator and reader threads referencing on this heap node become \textit{bounding-threads} for the reclamation of the heap location -- denotation $\llbracket \mathsf{rcuItr} \rrbracket_{tid}$ and invariant \textsf{Readers-In-Free-List}. However, \textit{bounding-threads} are the only ones which can observe the \textsf{unlinked} heap location as \textsf{iterator}: new coming reader threads cannot access to the \textsf{unlinked} heap. There exists links to mutated heap nodes -- e.g. either \textsf{unlinked} or \textsf{freeable} -- only from the heap nodes that are already mutated -- \textsf{Unlinked-Reachability} and \textsf{Free-List-Reachability} invariants. To sum up, every heap node accessible via traversal starting from the unique root must be valid and observed as \textsf{iterator} both by reader threads and the mutator thread.
+
+\mypar{RCU Primitives Guaranteed to Execute Unconditionally} Uncoditional execution of RCU Primitives are provided by definition of operational semantics of RCU primitives.
+
+\mypar{Guaranteed Read-to-Write Upgrade} Our system provides a clear separation of \textit{traverse-and-update} and \textit{traverse-only} intentions for \textsf{RCU} programming through the type system together with the programming primitives -- e.g. \lstinline|ReadBegin|-\lstinline|ReadEnd| and \lstinline|WriteBegin|-\lstinline|WriteEnd|.
+
+\mypar{Acyclicity of Linked Data Structures} Additionally, our system ensures that none of the heap updating actions introduce \textit{acyclicity}.  -- \textsf{Unique-Reachable} invariant,  \textsf{Unique-Root} invariant and denotation $\llbracket \mathsf{rcuItr}\,\rho \,\N \rrbracket_{tid}$.
+\subsection{Proof}
+\label{sec:proof}
+The Views Framework takes a set of parameters satisfying some properties, and produces a soundness proof for a static reasoning system for a larger programming language.  Among other parameters, the most notable are the choice of machine state, semantics for \emph{atomic} actions (e.g., field writes, or \lstinline|WriteBegin|), and proofs that the reasoning (in our case, type rules) for the atomic actions are sound (in a way chosen by the framework).
+The other critical pieces are a choice for a partial \emph{view} of machine states --- usually an extended machine state with meta-information --- and a relation constraining how other parts of the program can interfere with a view (e.g., modifying a value in the heap, but not changing its type).
+Our type system will be related to the views by giving a denotation of type environments in terms of views, and then proving that for each atomic action shown in \ref{fig:operationalsemrcu} in Section \ref{sec:semantics} and type rule in Figures \ref{fig:tss} Section \ref{subsection:type-action} and \ref{fig:tssr} Appendix \ref{appendix:readtypes}, given a view in the denotation of the initial type environment of the rule, running the semantics for that action yields a local view in the denotation of the output type environment of the rule.  The following works through this in more detail. We define logical states, $\textsf{LState}$ to be
+\begin{itemize}
+\item A machine state, $\sigma=(s,h,l,rt,R,B)$;
+\item An observation map, O, of type $ \textsf{Loc} \to \mathcal{P}(\textsf{obs})$
+\item Undefined variable map, $U$, of type $\mathcal{P}(\textsf{Var}\times \textsf{TID})$
+\item Set of threads, $T$, of type $\mathcal{P}(\textsf{TIDS})$
+\item A to-free map(or free list), $F$, of type $\textsf{Loc} \rightharpoonup \mathcal{P}(\textsf{TID})$
+\end{itemize}
+The free map $F$ tracks which reader threads may hold references to each location. It is not required for execution of code, and for validating an implementation could be ignored, but we use it later with our type system to help prove that memory deallocation is safe.
+
+Each memory region can be observed in one of the following type states within a snapshot taken at any time
+\[\textsf{obs} := \texttt{iterator} \; \mathrm{tid} \mid \texttt{unlinked} \mid \texttt{fresh} \mid \texttt{freeable} \mid \texttt{root}\]
+
+We are interested in \textsf{RCU} typed of heap domain which we define as:
+\[\textsf{RCU} = \{ o \mid \textsf{ftype}(f) = \textsf{RCU} \land \exists o' \ldotp h(o',f) = o \}\]
+
+A thread's (or scope's) \emph{view} of memory is a subset of the instrumented(logical states), which satisfy certain well-formedness criteria relating the physical state and the additional meta-data ($O$, $U$, $T$ and $F$)
+\[\mathcal{M} \stackrel{def}{=} \{ m \in (\textsf{MState} \times O \times U \times T \times F) \mid  \textsf{WellFormed}(m) \} \]
+
+We do our reasoning for soundness over instrumented states and define an erasure relation
+\[\lfloor - \rfloor :\mathsf{MState} \implies \textsf{LState}\]
+
+that projects instrumented states to the common components with \textsf{MState}.
+
+Well-formedness imposes restrictions over the representation of the \textsf{RCU} structure in memory and type of threads for actions defined in operational semantics. For instance, \emph{an unlinked heap location cannot be reached from a root of an \textsf{RCU} data structure}. We define well-formedness as conjuction of memory axioms defined in Appendix Section \ref{sec:memaxioms}.
+\begin{figure}\small
+\[
+\begin{array}{l@{\;\;=\;\;}l}
+ \llbracket \, x : \textsf{rcuItr}\,\rho\,\N \,  \rrbracket_{tid}
+&
+\left\{
+\begin{array}{l|l}
+\sigma,O,U,T,F
+&(\textsf{iterator} \, tid\in  O(s(x,tid)))  \land (x \notin U)  \\
+& \land (\forall_{f_i\in dom(\N)  x_i\in codom(\N) } \ldotp
+\left\{\begin{array}{l}  s(x_i,tid) = h(s(x,tid), f_i)  \\
+ \land \textsf{iterator}\in O(s(x_i,tid)))\end{array} \right.\\
+& \land  (\forall_{\rho', \rho''}\ldotp \rho'.\rho'' = \rho \implies  \textsf{iterator}\,tid \in O(h^{*}(rt,\rho'))) \\
+& \land  h^{*}(rt,\rho)= s(x,tid)  \land (l = tid \land s(x,\_) \notin dom(F))) 
+\end{array}
+\right\}
+\\
+ \llbracket \, x : \textsf{rcuItr}\,  \rrbracket_{tid}
+&
+\left\{
+\begin{array}{l|l}
+\sigma,O,U,T,F
+&(\textsf{iterator} \, tid\in  O(s(x,tid)))  \land (x \notin U) \land \\
+& (tid \in B) \implies \left\{\begin{array}{l}( \exists_{T'\subseteq B}\ldotp \{s(x,tid) \mapsto T'\} \cap F \neq \emptyset) \land \\ \land (tid \in T') \end{array}\right.
+\end{array}
+\right\}
+\\
+\llbracket \, x : \textsf{unlinked} \, \rrbracket_{tid}
+&
+\left\{
+\begin{array}{l|l}
+\sigma,O,U,T,F
+&(\textsf{unlinked}\in  O(.s(x,tid)) \land l = tid \land x \notin U) \land \\
+& (\exists_{T'\subseteq T}\ldotp \{s(x,tid) \mapsto T'\}\in F \implies T' \subseteq B \land tid \notin T' )
+\end{array}
+\right\}
+\\
+\llbracket \, x : \textsf{freeable} \, \rrbracket_{tid}
+&
+\left\{
+\begin{array}{l|l}
+\sigma,O,U,T,F
+&\begin{array}{l}\textsf{freeable}\in  O(s(x,tid)) \land l = tid \land x \notin U \land \\
+\{ s(x,tid) \mapsto \{\emptyset\}\} \in F \end{array}
+\end{array}
+\right\}
+\\
+\llbracket \, x : \textsf{rcuFresh} \, \N \, \,  \rrbracket_{tid}
+&
+\left\{
+\begin{array}{l|l}
+\sigma,O,U,T,F
+&(\textsf{fresh}\in  O(s(x,tid)) \land x \notin U  \land s(x,tid) \notin dom(F))\\
+&(\forall_{f_i\in dom(\N), x_i\in codom(\N) } \ldotp s(x_i,tid) = h(s(x,tid), f_i) \\
+&\land \textsf{iterator}\,tid \in O(s(x_i,tid)) \land s(x_i,tid) \notin dom(F)) 
+\end{array}
+\right\}
+\\
+\llbracket  x : \textsf{undef}\rrbracket_{tid} 
+&
+\left\{
+\begin{array}{l|l}
+\sigma,O,U,T,F
+&
+(x,tid) \in U \land s(x,tid) \notin dom(F)
+\end{array}
+\right\}
+\\
+\llbracket \, x : \textsf{rcuRoot}\rrbracket_{tid}
+&
+\left\{
+\begin{array}{l|l}
+\sigma,O,U,T,F
+& \begin{array}{l}((rt \notin U \land s(x,tid) = rt \land rt \in dom(h) \land \\ 
+O(rt) \in \textsf{root} \land s(x,tid) \notin dom(F) ) \end{array}
+\end{array}
+\right\}
+\end{array}
+\]
+$
+\textrm{provided}~h^{*}: (\textsf{Loc} \times \textsf{Path}) \rightharpoonup \textsf{Val}
+$
+\caption{Type Environments}
+\label{fig:denotingtypeenviroment}
+\vspace{-2mm}
+\end{figure}
+
+Every type environment represents a set of possible views (well-formed logical states) consistent with the types in the environment.  We make this precise with a denotation function
+\[\llbracket-\rrbracket\_ : \mathsf{TypeEnv}\rightarrow\mathsf{TID}\rightarrow\mathcal{P}(\mathcal{M})\]
+that yields the set of states corresponding to a given type environment. This is defined in terms of denotation of individual variable assertions
+\[\llbracket-:-\rrbracket_- : \mathsf{Var}\rightarrow\mathsf{Type}\rightarrow\mathsf{TID}\rightarrow\mathcal{P}(\mathcal{M})\]
+
+The latter is given in Figure \ref{fig:denotingtypeenviroment}.  To define the former, we first need to state what it means to combine logical machine states.
+
+Composition of instrumented states is an operation
+\[\bullet : \mathcal{M} \longrightarrow \mathcal{M} \longrightarrow \mathcal{M}\]
+that is commutative and associative, and defined component-wise in terms of composing physical states, observation maps, undefined sets, and thread sets as shown in Figure \ref{fig:comp}
+\begin{figure}
+$  \bullet  = (\bullet_{\sigma},\bullet_O,\cup,\cup)$ \quad
+  $O_{1} \bullet_O O_{2}(loc) \overset{\mathrm{def}}{=}  O_{1}(loc) \cup O_{2}(loc)$\quad
+  $ (s_1 \bullet_s s_2) \overset{\mathrm{def}}{=}  s_1 \cup s_2 \texttt{   when   } dom(s_1) \cap dom(s_2) = \emptyset$ \\
+  $(F_1 \bullet_F F_2) \overset{\mathrm{def}}{=}  F_1  \cup F_2 \texttt{   when   } dom(F_1) \cap dom(F_2) = \emptyset$ \\
+$(h_1\bullet_h h_2)(o,f)\overset{\mathrm{def}}{=}\left\{
+\begin{array}{ll}
+\mathrm{undef} & \textrm{if}~h_1(o,f)=v \land h_2(o,f)=v' \land v' \neq v\\
+v & \textrm{if}~h_1(o,f)=v \land h_2(o,f)=v\\
+v & \textrm{if}~h_1(o,f)=\mathrm{undef}\land h_2(o,f)=v\\
+v & \textrm{if}~h_1(o,f)=v\land h_2(o,f)=\mathrm{undef}\\
+\mathrm{undef} & \textrm{if}~h_1(o,f)=\mathrm{undef}\land h_2(o,f)=\mathrm{undef}
+\end{array}
+\right.
+$
+$
+\begin{array}{l}
+((s,h,l,rt,R,B), O, U, T,F) \mathcal{R}_{0}((s',h',l',rt',R',B'), O', U', T',F') \overset{\mathrm{def}}{=}
+\\ \bigwedge\left\{
+	\begin{array}{l}
+	  l  \in  T \rightarrow (h = h' \land l=l')\\
+	  l\in T\rightarrow F=F'\\
+	  \forall tid,o\ldotp\textsf{iterator} \, tid \in O(o) \rightarrow o \in dom(h) \\
+	  \forall tid,o\ldotp\textsf{iterator} \, tid \in O(o) \rightarrow o \in dom(h') \\
+          \forall tid,o\ldotp\textsf{root} \, tid \in O(o) \rightarrow o \in dom(h) \\
+	  \forall tid,o\ldotp\textsf{root} \, tid \in O(o) \rightarrow o \in dom(h') \\
+	  O = O' \land U = U' \land T = T'\land R =R'\land rt = rt' \\
+	  \forall x, t \in T \ldotp s(x,t) = s'(x,t)
+	\end{array}
+\right\}
+\end{array}
+$
+\caption{Composition($\bullet$) and Thread Interference Relation($\mathcal{R}_{0}$)}
+\label{fig:comp}
+\vspace{-2mm}
+\end{figure}
+%\emph{Separation algebra} is a model to define and axiomatize the \emph{join/composition} operation over a domain which is \emph{set of instrumented states} in our case.
+An important property of composition is that it preserves validity of logical states:
+\begin{lemma}[Well Formed Composition]
+\label{lem:wf-composition}
+Any successful composition of two well-formed logical states is well-formed:\[\forall_{x,y,z}\ldotp \mathsf{WellFormed}(x) \implies \mathsf{WellFormed}(y) \implies x\bullet y = z \implies \mathsf{WellFormed(z)}\]
+\end{lemma}
+\begin{proof}
+In Appendix \ref{sec:prooflemmas}.
+  \end{proof}
+We define separation on elements of type contexts
+\begin{itemize}
+\item For read-side as $\llbracket x_1 : T_1, \ldots x_n : T_n \rrbracket_{tid,\textsf{R}} = \llbracket x_1 : T_1 \rrbracket_{tid} \cap \ldots \cap \llbracket x_n : T_n \rrbracket_{tid} \cap \llbracket \textsf{R} \rrbracket_{tid}$ where
+$\llbracket \textsf{R} \rrbracket_{tid} = \{ (s,h,l,rt,R,B),O,U,T,F  \mid tid \in R \}$
+
+\item For write-side as $\llbracket x_1 : T_1, \ldots x_n : T_n \rrbracket_{tid,\textsf{M}} = \llbracket x_1 : T_1 \rrbracket_{tid} \cap \ldots \cap \llbracket x_n : T_n \rrbracket_{tid} \cap \llbracket \textsf{M} \rrbracket_{tid}$ where
+$\llbracket \textsf{M} \rrbracket_{tid} = \{ (s,h,l,rt,R,B),O,U,T,F  \mid tid = l \}$
+
+\item $\llbracket x_1 : T_1, \ldots x_n : T_n \rrbracket_{tid,\textsf{O}} = \llbracket x_1 : T_1 \rrbracket_{tid} \cap \ldots \cap \llbracket x_n : T_n \rrbracket_{tid} \cap \llbracket \textsf{O} \rrbracket_{tid}$ where
+$\llbracket \textsf{O} \rrbracket_{tid} = \{ (s,h,l,rt,R,B),O,U,T,F  \mid tid \neq l \land tid \notin R \}$.
+\end{itemize}
+
+Partial separating conjunction then simply requires the existence of two states that compose:
+\[ m \in P \ast Q   \stackrel{def}{=} \exists m' \ldotp \exists m'' \ldotp m' \in P \land m'' \in Q \land m \in m' \bullet m''\]
+Different threads' views of the state may overlap (e.g., on shared heap locations, or the reader thread set), but one thread may modify that shared state.  The Views Framework restricts its reasoning to subsets of the logical views that are \emph{stable} with respect to expected interference from other threads or contexts.  We define the interference as (the transitive reflexive closure of) a binary relation $\mathcal{R}$ on $\mathcal{M}$, and a \textsf{View} in the formal framework is then:
+\[\textsf{View}_{\mathcal{M}} \stackrel{def}{=} \{ M \in \mathcal{P}(\mathcal{M}) | \mathcal{R}(M) \subseteq M\}\]
+Thread interference relation
+\[\mathcal{R} \subseteq \mathcal{M} \times \mathcal{M}\]  defines permissible interference on an instrumented state. The relation must distribute over composition:
+\[ \forall m_{1}, m_{2}, m\ldotp (m_{1} \bullet  m_{2})\mathcal{R}m \Longrightarrow \begin{array}{ll}  \exists  m'_{1} m'_{2} \ldotp m_{1} \mathcal{R} m'_{1} \land m_{2} \mathcal{R} m'_{2} \land  m \in m'_{1} \bullet m'_{2} \end{array}\]
+where $\mathcal{R}$ is transitive-reflexive closure of $\mathcal{R}_{0}$ shown at Figure \ref{fig:comp}. $\mathcal{R}_0$ (and therefore $\mathcal{R}$) also ``preserves'' validity:
+\begin{lemma}[Valid $\mathcal{R}_0$ Interference]
+For any $m$ and $m'$, if $\mathsf{WellFormed}(m)$ and $m\mathcal{R}_0m'$, then $\mathsf{WellFormed}(m')$.
+\end{lemma}
+\begin{proof}
+In Appendix \ref{sec:prooflemmas}.
+\end{proof}
+\begin{lemma}[Stable Environment Denotation-M]\label{lemma:stblw}
+For any \emph{closed} environment $\Gamma$ (i.e., $\forall x\in\mathsf{dom}(\Gamma)\ldotp, \mathsf{FV}(\Gamma(x))\subseteq\mathsf{dom}(\Gamma)$):
+\[
+\mathcal{R}(\llbracket\Gamma\rrbracket_{\mathsf{M},tid})\subseteq\llbracket\Gamma\rrbracket_{\mathsf{M},tid}
+\]
+Alternatively, we say that environment denotation is \emph{stable} (closed under $\mathcal{R}$).
+\end{lemma}
+\begin{proof}
+In Appendix \ref{sec:prooflemmas}.
+\end{proof}
+\begin{lemma}[Stable Environment Denotation-R]
+For any \emph{closed} environment $\Gamma$ (i.e., $\forall x\in\mathsf{dom}(\Gamma)\ldotp, \mathsf{FV}(\Gamma(x))\subseteq\mathsf{dom}(\Gamma)$):
+\[
+\mathcal{R}(\llbracket\Gamma\rrbracket_{\mathsf{R},tid})\subseteq\llbracket\Gamma\rrbracket_{\mathsf{R},tid}
+\]
+Alternatively, we say that environment denotation is \emph{stable} (closed under $\mathcal{R}$).
+\end{lemma}
+\begin{proof}
+In Appendix \ref{sec:prooflemmas}.
+\end{proof}
+
+The Views Framework defines a program logic (Hoare logic) with judgments of the form $\{ p \} C \{ q \}$ for views p and q and commands $C$. Commands include atomic actions, and soundness of such judgments for atomic actions is a parameter to the framework. The framework itself provides for soundness of rules for sequencing, fork-join parallelism, and other general rules.
+To prove type soundness for our system, we define a denotation of \emph{type judgments} in terms of the Views logic, and show that every valid typing derivation translates to a valid derivation in the Views logic:
+\[\forall\Gamma,C,\Gamma',\mathit{tid}\ldotp\Gamma\vdash_{M,R} C\dashv \Gamma' \Rightarrow \{\llbracket\Gamma\rrbracket_\mathit{tid}\} \llbracket C\rrbracket_\mathit{tid}\{\llbracket\Gamma'\rrbracket_\mathit{tid}\}\]
+The antecedent of the implication is a type judgment shown in Figures \ref{fig:tss} Section \ref{subsection:type-rules}, \ref{fig:type-judgements-for-cf} Section \ref{subsection:typwrt} and \ref{fig:tssr} Appendix \ref{appendix:readtypes}, and the conclusion is a judgment in the Views logic. The environments are translated to views ($\mathsf{View}_\mathcal{M}$) as previously described. Commands $C$ also require translation, because the Views logic is defined for a language with non-deterministic branches and loops, so the standard versions from our core language must be encoded.  The approach to this is based on a standard idea in verification, which we show here for conditionals as shown in Figure \ref{fig:asm}. $\textsf{assume}(b)$ is a standard construct in verification semantics~\cite{Barnett:2005:BMR:2090458.2090481} ~\cite{Muller:2016:VVI:2963187.2963190}, which ``does nothing'' (freezes) if the condition $b$ is false, so its postcondition in the Views logic can reflect the truth of $b$.  This is also the approach used in previous applications of the Views Framework~\cite{oopsla12,toplas17}.
+\begin{figure}
+$
+\begin{array}{l}
+\llbracket{\mathsf{if}\;(x.f==y)\;C_1\;C_2}\rrbracket_\mathit{tid} =\\
+\quad z=x.f;((\mathsf{assume}(z=y);C_1)+(\mathsf{assume}(z\neq y);C_2))
+\end{array}
+$
+$
+\llbracket\texttt{assume}(\mathcal{S})\rrbracket (s)\overset{\mathrm{def}}{=}\left\{
+\begin{array}{ll}
+\{ s\} & \textrm{if}~s \in \mathcal{S}\\
+\emptyset & \textrm{Otherwise}
+\end{array}
+\right.
+$
+$
+\inferrule
+{
+\{P\} \cap \{\lceil\mathcal{S} \rceil \}  \sqsubseteq \{Q\}
+}
+{
+ \{P\} \texttt{assume}\left(b\right)\{Q\}
+}
+$
+\textsf{ where } $\lceil \mathcal{S} \rceil = \{m | \lfloor m \rfloor \cap \mathcal{S} \neq \emptyset \}$
+$
+\llbracket{\mathsf{while}\;(e)\;C}\rrbracket_\mathit{tid} = \left(\mathsf{assume}(e);C\right)^{*};(\mathsf{assume}(\lnot e ));
+$
+\caption{Encoding of \textsf{assume}(b)}
+\label{fig:asm}
+\end{figure}
+The framework also describes a useful concept called the view shift operator $\subseteq$, that describes a way to reinterpret a set of instrumented states as a new set of instrumented states. This operator enables us to define an abstract notion of executing a small step of the program. We express the step from $p$ to $q$ with action $\alpha$ ensuring that the operation interpretation of the action satisfies the specification:$ p \sqsubseteq q \stackrel{def}{\Leftrightarrow} \forall m\in\mathcal{M} \ldotp \lfloor p * \{ m \} \rfloor \subseteq \lfloor q* \mathcal{R}(\{m\})\rfloor$. Because the Views framework handles soundness for the structural rules (sequencing, parallel composition, etc.), there are really only three types of proof obligations for us to prove.  First, we must prove that the non-trivial command translations (i.e., for conditionals and while loops) embed correctly in the Views logic, which is straightforward.  Second, we must show that for our environment subtyping, if $\Gamma<:\Gamma'$, then $\llbracket{\Gamma}\rrbracket\sqsubseteq\llbracket\Gamma'\rrbracket$.  And finally, we must prove that each atomic action's type rule corresponds to a valid semantic judgment in the Views Framework:
+\[
+\forall m\ldotp   \llbracket \alpha \rrbracket ( \lfloor \llbracket \Gamma_{1} \rrbracket_{tid}  * \{m\} \rfloor) \subseteq
+  \lfloor \llbracket \Gamma_{2} \rrbracket_{tid} * \mathcal{R}(\{m\}) \rfloor
+  \]
+The use of $*$ validates the frame rule and makes this obligation akin to an interference-tolerant version of the small footprint property from traditional separation logics~\cite{Reynolds:2002:SLL:645683.664578,Calcagno:2007:LAA:1270399.1271718}.
+\begin{theorem}[Axiom Soundness]
+For each axiom, $\Gamma_{1} \vdash_{\textsf{RMO}} \alpha \dashv \Gamma_{2}$, we must show
+\[
+\forall m\ldotp   \llbracket \alpha \rrbracket  (\lfloor \llbracket \Gamma_{1} \rrbracket_{tid}  * \{m\} \rfloor )\subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{tid} * \mathcal{R}(\{m\}) \rfloor
+\]
+\end{theorem}
+\begin{proof}
+In Appendix \ref{sec:prooflemmas}.
+\end{proof}
+
+Type soundness proceeds according to the requirements of the Views Framework, primarily embedding each type judgment into the Views logic:
+\begin{lemma}\label{lemma:embedr}
+\[  \forall\Gamma,C,\Gamma',\mathit{t}\ldotp\Gamma\vdash_R C\dashv \Gamma' \Rightarrow
+\llbracket\Gamma\rrbracket_\mathit{t}\cap\llbracket{R}\rrbracket_t\vdash \llbracket C\rrbracket_\mathit{t}\dashv\llbracket\Gamma'\rrbracket_\mathit{t}\cap\llbracket{R}\rrbracket_t
+\]
+\end{lemma}
+\begin{proof}
+In Appendix \ref{sec:prooflemmas}.
+  \end{proof}
+\begin{lemma}\label{lemma:embedw}
+  \[
+\forall\Gamma,C,\Gamma',\mathit{t}\ldotp\Gamma\vdash_M C\dashv \Gamma' \Rightarrow
+\llbracket\Gamma\rrbracket_\mathit{t}\cap\llbracket{M}\rrbracket_t\vdash \llbracket C\rrbracket_\mathit{t}\dashv\llbracket\Gamma'\rrbracket_\mathit{t}\cap\llbracket{M}\rrbracket_t
+\]
+\end{lemma}
+\begin{proof}
+In Appendix \ref{sec:prooflemmas}.
+  \end{proof}
+Because the intersection of the environment denotation with the denotations for the different critical sections remains a valid view, the Views Framework provides most of this proof for free, given corresponding lemmas for the \emph{atomic actions} $\alpha$:
+\[\begin{array}{l}
+\forall \alpha,\Gamma_1,\Gamma_2\ldotp \Gamma_1\vdash_R\alpha\dashv\Gamma_2 \Rightarrow
+\\
+\quad\forall m\ldotp   \llbracket \alpha \rrbracket  (\lfloor \llbracket \Gamma_{1} \rrbracket_{\textsf{R},tid}  * \{m\} \rfloor )\subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{\textsf{R},tid} * \mathcal{R}(\{m\}) \rfloor
+\end{array}\]
+\[
+\begin{array}{l}
+\forall \alpha,\Gamma_1,\Gamma_2\ldotp \Gamma_1\vdash_M\alpha\dashv\Gamma_2 \Rightarrow
+\\
+\quad\forall m\ldotp   \llbracket \alpha \rrbracket  (\lfloor \llbracket \Gamma_{1} \rrbracket_{\textsf{M},tid}  * \{m\} \rfloor )\subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{\textsf{M},tid} * \mathcal{R}(\{m\}) \rfloor
+\end{array}
+\]
+% \[
+% \forall\Gamma,\alpha,\Gamma',\mathit{t}\ldotp\Gamma\vdash_R \alpha\dashv \Gamma' \Rightarrow
+%     \llbracket\Gamma\rrbracket_\mathit{t}\cap\llbracket{R}\rrbracket_t\vdash \llbracket \alpha\rrbracket_\mathit{t}\dashv\llbracket\Gamma'\rrbracket_\mathit{t}\cap\llbracket{R}\rrbracket_t
+% \]
+% \[
+% \forall\Gamma,\alpha,\Gamma',\mathit{t}\ldotp\Gamma\vdash_M \alpha\dashv \Gamma' \Rightarrow
+%     \llbracket\Gamma\rrbracket_\mathit{t}\cap\llbracket{M}\rrbracket_t\vdash \llbracket \alpha\rrbracket_\mathit{t}\dashv\llbracket\Gamma'\rrbracket_\mathit{t}\cap\llbracket{M}\rrbracket_t
+% \]
+$\alpha$ ranges over any atomic command, such as a field access or variable assignment.
+
+%%%A number of rules in the formal system (Section \todo{ref}) are present in \emph{both} systems, and we would like to reuse their proofs.  To support this, we prove the following lemma, which permits us to ignore which critical section such rules are considered in, and lift that ``ignorant'' proof to either critical section:
+Denoting a type environment $\llbracket\Gamma\rrbracket_{\mathsf{M},tid}$, unfolding the definition one step, is merely $\llbracket\Gamma\rrbracket_{tid}\cap\llbracket\mathsf{M}\rrbracket_{tid}$.  In the type system for write-side critical sections, this introduces extra boilerplate reasoning to prove that each action preserves lock ownership.  To simplify later cases of the proof, we first prove this convenient lemma.
+\begin{lemma}[Write-Side Critical Section Lifting]
+\label{lem:crit-lifting}
+For each $\alpha$ whose semantics does not affect the write lock, if
+\[\forall m\ldotp   \llbracket \alpha \rrbracket  (\lfloor \llbracket \Gamma_{1} \rrbracket_{tid}  * \{m\} \rfloor )\subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{tid} * \mathcal{R}(\{m\}) \rfloor\]
+then
+%\[\forall m\ldotp   \llbracket \alpha \rrbracket  (\lfloor \llbracket \Gamma_{1} \rrbracket_{\textsf{R},tid}  * \{m\} \rfloor )\subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{\textsf{R},tid} * \mathcal{R}(\{m\}) \rfloor\]
+\[\forall m\ldotp   \llbracket \alpha \rrbracket  (\lfloor \llbracket \Gamma_{1} \rrbracket_{\textsf{M},tid}  * \{m\} \rfloor )\subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{\textsf{M},tid} * \mathcal{R}(\{m\}) \rfloor\]
+\end{lemma}
+\begin{proof}
+In Appendix \ref{sec:prooflemmas}.
+\end{proof}

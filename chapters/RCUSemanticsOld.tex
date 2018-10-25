@@ -1,0 +1,280 @@
+\section{Semantics}
+\label{sec:semantics}
+In this section, we outline the details of a simple RCU implementation, and provide the semantics for it. Note that the implementation provided below is focused on illustrating how RCU works, rather than efficiency, and It captures the core semantics of RCU.  As the paper focuses on the correct usage of RCU, rather than the correctness of the implementation, we do not discuss how to efficiently realise the semantics~\cite{Mckenney01read-copyupdate}.
+\begin{figure}\scriptsize %\fontsize{4}{12}
+\grammar
+\meta
+% Well formed programs, declarations...
+\caption{\texttt{Programming Language} for \textsf{RCU} programming.}
+\label{fig:prog-lang}
+\end{figure}
+RCU allows a single mutator thread and  multiple  reader threads to traverse a data structure. When a writer mutates some state, it waits  until all concurrent reads are completed to free the mutated state. To represent this in our semantics, we augment the  machine state,$\textsf{MState}$, ranged over by $\sigma$, consists of:
+\begin{itemize}
+\item A stack $s$, of type $\textsf{Var} \times \textsf{TID} \rightharpoonup \textsf{Loc}$
+\item A heap, $h$, of type $\textsf{Loc} \times \textsf{FName} \rightharpoonup \textsf{Val}$
+\item A write lock, $l$, of type $\textsf{TID} \uplus \{\textsf{unlocked}\}$
+\item A root location $rt$ of type $\textsf{Loc}$
+\item A read set, $R$, of type $\mathcal{P}(\textsf{TID})$
+\item A bounding set, $B$, of type $\mathcal{P}(\textsf{TID})$ and
+\item A to-free map, $F$, of type $\textsf{Loc} \rightharpoonup \mathcal{P}(\textsf{TID})$
+\end{itemize}
+The write lock, $l$, enforces mutual exclusion between write-side critical sections.
+The root location, $rt$, is the root of  an \textsf{RCU} data structure. We model only a single global RCU data structure, as the generalization to multiple structures is straightforward but complicates formal development later in the paper.
+The read set, $R$, tracks the thread IDs of all threads currently executing a read block. 
+The bounding set , $B$, tracks which threads the writer is \emph{actively} waiting for during a grace period --- it is empty if the writer is not waiting.
+The final component of the machine state is the free map, $F$, which tracks for each location in memory the set of reader threads that may still hold stack references to it.  It is not required for execution of code, and for validating an implementation could be ignored, but we use it later with our type system to help prove that memory deallocation is safe.
+\begin{figure*}%%%%%%%%%%%%OPdERATIONAL SEMANTICS%%%%%%%%%%%%%%
+\tiny
+%\begin{mathpar}
+%\atomeval \and \heap \and \stack \and \wlock \and \rlock \and \fset \and \mstatedecl
+%\end{mathpar}
+\[\begin{array}{c@{\;}rl@{\Downarrow_{\mathit{tid}}}ll}
+(\textsc{HUpdate}) & \llbracket\texttt{x.f=y}\rrbracket   &(s,h,l,rt,R,B,F)& (s,h[s(x,tid),f \mapsto s(y,tid)],l,rt,R,B,F) &\textrm{where}~ rt \neq s(y,tid)\\
+(\textsc{HRead})   & \llbracket\texttt{y=x.f}\rrbracket   &(s,h,l,rt,R,B,F)& (s[(y,tid) \mapsto h(s(x,tid),f)],h,l,rt,R,B,F) & \\
+(\textsc{SUpdate}) & \llbracket\texttt{y=x}\rrbracket     &(s,h,l,rt,R,B,F)& (s[(y,tid) \mapsto (x,tid)],h,l,rt,R,B,F) &\\
+(\textsc{HAllocate}) & \llbracket\texttt{y=new}\rrbracket &(s,h,l,rt,R,B,F)& (s,h[\ell\mapsto\mathsf{nullmap}],l,rt,R,B,F) & \textrm{where}~ rt \neq s(y,tid) \\
+(\textsc{RCU-W-Begin}) & \llbracket\texttt{WriteBegin}\rrbracket & (s,h,\mathsf{unlocked},rt,R,B,F) &(s,h,\mathit{tid},rt,R,B,F) & \textrm{where}~\mathit{tid}\notin R\\
+(\textsc{RCU-W-End}) & \llbracket\texttt{WriteEnd}\rrbracket & (s,h,\mathrm{tid},rt,R,B,F) & (s,h,\mathsf{unlocked},rt,R,B,F) & \textrm{where}~\mathit{tid}\notin R\\
+(\textsc{RCU-R-Begin}) & \llbracket\texttt{ReadBegin}\rrbracket & (s,h,l,rt,R,B,F) & (s,h,l,rt,R\uplus tid,B,F) & \textrm{where}~\mathit{tid}\neq l\\
+(\textsc{RCU-R-End}) & \llbracket\texttt{ReadEnd}\rrbracket & (s,h,l,rt,R\uplus\{tid\},B,F) & (s,h,l,rt,R,B\setminus \{tid\},F / tid)  &
+\textrm{where}~\mathit{tid}\neq l\\
+(\textsc{RCU-Synch-Start}) & \llbracket\texttt{SyncStart}\rrbracket & (s,h,l,rt,R,\emptyset,F) & (s,h,l,rt,R,R,F\cup\{s(x,tid)\mapsto R \mid (x,tid)\in\mathsf{dom}(s)\} & \textrm{where}~\mathit{tid} \notin R \\ %\forall_{t\in R}\ldotp t \notin r
+(\textsc{RCU-Synch-Stop}) & \llbracket\texttt{SyncStop}\rrbracket & (s,h,l,rt,R,\emptyset,F) & (s,h,l,rt,R,\emptyset,F) & \textrm{where}~\mathit{tid} \notin R \\
+(\textsc{Free}) & {\llbracket\texttt{Free}(x)\rrbracket} & (s,h,l,rt,R,B,F\cup \{s(x,tid)\mapsto \{\emptyset\} \}) & (s,h,l,rt,R,B,F\setminus \{s(x,tid)\mapsto \{\emptyset\} \} ) & \textrm{where}~\mathit{tid} \notin R \\
+\end{array}
+\]
+\[\textrm{where}~ \textsf{F} / tid \textrm{ is provided as } \{o \mapsto T \setminus \{tid\} | \{o \mapsto T \} \in F \}\]
+\caption{Operational Semantics for RCU Programming Model }
+\label{fig:operationalsemrcu}
+\end{figure*}%%%%%%%%%%%%%%%%%%%%%OPERATIONAL SEMANTICS ENDS%%%%%%%%%%%%%%%%%%
+In the figure \ref{fig:operationalsemrcu}, we give operational semantics for \emph{atomic} actions; conditionals, loops, and sequencing all have standard semantics, and parallel composition  uses sequentially-consistent interleaving semantics.
+
+\paragraph{Basic Actions} The first few atomic actions, for writing and reading fields, assigning among local variables, and allocating new objects, are typical of formal semantics for heaps and mutable local variables.
+\paragraph{Writer Thread Actions}
+A writer thread's critical section is bounded by \lstinline|WriteBegin| and \lstinline|WriteEnd|, which acquire and release the lock that enforces mutual exclusion between writers.  \lstinline|WriteBegin| requires the lock to be unlocked in order to reduce, so a thread whose next action is \lstinline|WriteBegin| will block if another thread currently holds the lock.
+
+Standard RCU APIs include a primitive \texttt{synchronize\_rcu()} to wait for a grace period for the current readers.  We decompose this here into two actions, \lstinline|SyncStart| and \lstinline|SyncStop|, for reasons both pedagogical (to separate the start of the grace period from its completion), and technical (our proof framework makes this formulation most convenient).
+\lstinline|SyncStart| makes two changes.  First, it initializes the blocking set to the current set of readers --- the set of threads that may have already observed any nodes the writer has unlinked.
+\lstinline|SyncEnd| does not change state, but requires the blocking set to be empty to run, and thus blocks when it is non-empty.  Reader threads are responsible for shrinking the blocking set. Once the grace period ends, the unlinked/mutated node is reclaimed with \lstinline|Free|.
+\paragraph{Reader Thread Actions}
+A reader thread, like the writer thread, has a critical section, in this case bounded by \lstinline|ReadBegin| and \lstinline|ReadEnd|.  \lstinline|ReadBegin| simply records the current thread's presence as an active reader.
+\lstinline|ReadEnd| removes the current thread from the set of active readers, and also removes it (if present) from the blocking set --- if a writer was waiting for a certain reader to finish its critical section, this ensures the writer no longer waits once that reader has finished its active read-side critical section.
+\paragraph{Implementing Grace Periods}
+\lstinline|ReadBegin|, \lstinline|ReadEnd|, \lstinline|SyncStart|, and \lstinline|SyncStop| work together to implement grace periods.  \lstinline|ReadBegin| ensures the set of active readers is known.  When a writer thread needs to wait through a grace period \lstinline|SyncStart;SyncStop;| will initialize the set $B$ of threads the writer waits for to the set of active readers when \lstinline|SyncStart| is executed (recording the readers that may have observed any nodes unlinked by the writer), and \lstinline|SyncStop| waits for that set of threads to become empty.
+\lstinline|ReadEnd| ``informs'' the writer thread of its exit from the critical section by removing itself from $B$, and once every reader that overlapped the \lstinline|SyncStart| has completed its critical section, the blocking set will be empty and the writer will resume.
+
+These semantics do permit a reader in the blocking set to finish its read-side critical section and enter a \emph{new} read-side critical section before the writer wakes.  In this case, \emph{the writer waits only for the first critical section of that reader to complete}, since entering the new critical section adds the thread's ID back to $R$, but not $B$.
+\begin{comment}
+Next, we introduce the instantiation of concrete program states and transitions in between these states for our introductory example, bag example shown in the figure \ref{fig:rculist}. Figures \ref{fig:readlist}-\ref{fig:prereclaim} show the crucial program states in \textsf{RCU} setting.
+ \begin{figure}[H]
+\centering
+ \begin{tikzpicture}[>=stealth',node distance=1.5cm,semithick,auto]
+ \tikzstyle{hollow node}=[circle,draw,inner sep=1]
+ \tikzstyle{sub node}=[triangle,draw,inner sep=1]
+ \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+
+ \tikzset{
+ 	red node/.style={rectangle,draw=black,fill=black,inner sep=1.5},
+ 	blue node/.style={rectangle,draw=black,inner sep=1.5},
+ 	reader node/.style={circle,draw=black,inner sep=1},
+ 	writer node/.style={circle,draw=black,inner sep=1}
+ }
+
+     \node[solid node] (R) {$R$};
+     \node[hollow node] (5) [right of=R] {$5$};
+    \node[hollow node] (8) [right of=5] {$8$};
+     \node[hollow node] (2) [right of=8] {$2$};
+     \node[hollow node] (1) [right of=2] {$1$};
+    \node[hollow node] (11) [right of=1] {$11$};
+     %\node[hollow node] (4) [right of=11] {$4$};
+   \node[reader node] (r1) [above right of= 1]  {$cr$};
+     \node[reader node] (r2)  [above left of= 1] {$cr$};
+
+     \path[->]   (R) edge node {} (5)
+                 (5) edge node {} (8)
+ 		(8) edge node {} (2)
+ 		(2) edge node {} (1)
+ 		(1) edge node {} (11)
+ 	%	(11) edge node {} (4)
+ 		(r1) edge node {$\textsf{tid}_{r1}$} (1)
+ 		(r2) edge node {$\textsf{tid}_{r2}$} (1)
+ ;
+ \end{tikzpicture}
+ \caption{$R$ is unique root of the \textsf{RCU} singly linked list. Two concurrent reader threads with $\textsf{tid}_{r1}$ and $\textsf{tid}_{r2}$ ids are on the node with value 1. These threads have their own iterators $\textsf{cr}$ on linked list. }
+ \label{fig:readlist}
+ \end{figure}
+ In the figure \ref{fig:readlist}, there are two reader threads in read block, $R\uplus \{tid_{r1},tid_{r2}\}$.
+
+ \begin{figure}[H]
+ \centering
+ \begin{tikzpicture}[>=stealth',node distance=1.5cm,semithick,auto]
+ \tikzstyle{hollow node}=[circle,draw,inner sep=1]
+ \tikzstyle{sub node}=[triangle,draw,inner sep=1]
+ \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+
+ \tikzset{
+ 	red node/.style={rectangle,draw=black,fill=red,inner sep=1.5},
+ 	blue node/.style={rectangle,draw=black,inner sep=1.5},
+ 	reader node/.style={circle,draw=black,inner sep=1},
+ 	writer node/.style={circle,draw=black,inner sep=1}
+ }
+
+       \node[solid node] (R) {$R$};
+       \node[hollow node] (5) [right of=R] {$5$};
+
+       \node[hollow node] (8) [right of=5] {$8$};
+       \node[hollow node] (2) [right of=8] {$2$};
+       \node[hollow node] (1) [right of=2] {$1$};
+       \node[hollow node] (11) [right of=1] {$11$};
+      % \node[hollow node] (4) [right of=11] {$4$};
+       \node[reader node] (r1) [above right of= 1]  {$cr$};
+       \node[reader node] (r2)  [above left of= 1] {$cr$};
+       \node[writer node] (wp) [below of=2] {$pr$};
+       \node[writer node] (wc) [below of=1]{$cr$};
+
+     \path[->]   (R) edge node {} (5)
+     		(5) edge node {} (8)
+      		(8) edge node {} (2)
+      	%	(11) edge node {} (4)
+     		(1) edge node {} (11)
+ 		(2) edge node {} (1)
+ 		(r1) edge node {$\textsf{tid}_{r1}$} (1)
+ 		(r2) edge node {$\textsf{tid}_{r2}$} (1)
+ 	        (wp) edge node  {$\textsf{tid}_{mut}$}  (2)
+ 		(wc) edge  node  {$\textsf{tid}_{mut}$}   (1)
+ ;
+ \end{tikzpicture}
+ \caption{$\textsf{tid}_{mut}$ traverses the list to deletes the node with value 1.}
+ \label{fig:mutatelist}
+ \end{figure}
+
+ Writer thread in in the figure \ref{fig:mutatelist}, $tid_{mut}$, is shown in program state as $l=tid_{mut}$.
+ \begin{figure}[H]
+ \centering
+ \begin{tikzpicture}[>=stealth',node distance=1.5cm,semithick,auto]
+ \tikzstyle{hollow node}=[circle,draw,inner sep=1]
+ \tikzstyle{sub node}=[triangle,draw,inner sep=1]
+ \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+
+ \tikzset{
+ 	red node/.style={rectangle,draw=black,fill=red,inner sep=1.5},
+ 	blue node/.style={rectangle,draw=black,inner sep=1.5},
+ 	reader node/.style={circle,draw=black,inner sep=1},
+ 	writer node/.style={circle,draw=black,inner sep=1}
+ }
+
+       \node[solid node] (R) {$R$};
+       \node[hollow node] (5) [right of=R] {$5$};
+       \node[hollow node] (8) [right of=5] {$8$};
+       \node[hollow node] (2) [right of=8] {$2$};
+       \node[hollow node] (1) [right of=2] {$1$};
+       \node[hollow node] (11) [right of=1] {$11$};
+       %\node[hollow node] (4) [right of=11] {$4$};
+       \node[reader node] (r1) [above right of= 1]  {$cr$};
+       \node[reader node] (r2)  [above left of= 1] {$cr$};
+       \node[writer node] (wp) [below of=2] {$pr$};
+       \node[writer node] (wc) [below of=11]{$cr$};
+
+     \path[->]  (R) edge node {} (5);
+     \path[->]  (5) edge node {} (8);
+     \path[->]  (8) edge node {} (2);
+    % \path[->]  (11) edge node {} (4);
+     \path[->] (2) edge [bend right] node {} (11);
+     \path[dashed,->]  (1) edge node {} (11);
+
+     \path[->]  (r1) edge node {$\textsf{tid}_{r1}$} (1);
+     \path[->]  (r2) edge node {$\textsf{tid}_{r2}$} (1);
+     \path[->]  (wp) edge node  {$\textsf{tid}_{mut}$}  (2);
+     \path[->]  (wc) edge  node  {$\textsf{tid}_{mut}$}   (11);
+ ;
+ \end{tikzpicture}
+ \caption{$\textsf{tid}_{mut}$ unlinks the node with value 1.}
+ \label{fig:unlinkedlist}
+ \end{figure}
+\ref{fig:unlinkedlist} shows heap update. Writer thread updates the field of the node pointed by 2 to show the node pointed by 11, $h[s(2,tid_{mut}),f \mapsto s(11,tid_{mut})]$. At this point, read set, $R=\{tid_{r1},tid_{r2}\}$, shows the node 1 which is \emph{unlinked}.
+
+After heap update, \lstinline{SyncStart} exexutes to start the \emph{grace period} for the read set, $R=\{tid_{r1}, tid_{r2}\}$. $B$ is set to $R$, $B=\{tid_{r1}, tid_{r2}\}$. $B$ keeps the threads that need to be waited for, and it reclaims the mutated heap location, $S(1)$. In addition to bounding set, $B$, \lstinline{SyncStart} also updates the free map, $F$, with mapping read set to unlinked nodes which have a potential to be reclaimed, $F=\{(R,S(1))\}$.
+
+Grace period lasts until the \lstinline{SyncStop} returns. \emph{Pre-state} to call \lstinline{SycnStop} has bounding set empty, $B = \{\emptyset\}$. This means that all bounding threads exit read block with executing \textsf{ReadEnd}. Exiting read block removes exiting thread's identifier from bouding set which changes $B=\{tid_{r1},tid_{r2}\}$, to $B\setminus \{tid_{r1},tid_{r2}\}$.
+ \begin{figure}[H]
+ \centering
+ \begin{tikzpicture}[>=stealth',node distance=1.5cm,semithick,auto]
+ \tikzstyle{hollow node}=[circle,draw,inner sep=1]
+ \tikzstyle{sub node}=[triangle,draw,inner sep=1]
+ \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+
+ \tikzset{
+ 	red node/.style={rectangle,draw=black,fill=red,inner sep=1.5},
+ 	blue node/.style={rectangle,draw=black,inner sep=1.5},
+ 	reader node/.style={circle,draw=black,inner sep=1},
+ 	writer node/.style={circle,draw=green,inner sep=1}
+ }
+
+       \node[solid node] (R) {$R$};
+       \node[hollow node] (5) [right of=R] {$5$};
+       \node[hollow node] (8) [right of=5] {$8$};
+       \node[hollow node] (2) [right of=8] {$2$};
+       \node[hollow node] (1) [right of=2] {$1$};
+       \node[hollow node] (11) [right of=1] {$11$};
+       %\node[hollow node] (4) [right of=11] {$4$};
+
+     \path[->]  (R) edge node {} (5);
+     \path[->]  (5) edge node {} (8);
+     \path[->]  (8) edge node {} (2);
+     %\path[->]  (11) edge node {} (4);
+     \path[->] (2) edge [bend right] node {} (11);
+     \path[dotted,->]  (1) edge node {} (11);
+
+
+ ;
+ \end{tikzpicture}
+ \qquad
+ \qquad
+ \tikzset{
+     font=\sffamily,
+     BLOCK/.style={
+         draw,
+         align=center,
+         text height=0.4cm,
+         draw=red!50,
+         fill=red!20,
+         rectangle split,
+         rectangle split horizontal,
+         rectangle split parts=#1,
+     }
+ }
+ \qquad
+ \qquad
+ \begin{tikzpicture}
+     \node (h1) {to-free list};
+     \node[BLOCK=3, below=0 of h1]{
+       \nodepart{one}...\nodepart{two} F[s(1,\textsf{tid}) $\rightharpoonup$ $\emptyset$ )]
+         \nodepart{three}...};
+ \end{tikzpicture}
+ \caption{Bounding threads, $\textsf{tid}_{r1}$ and $\textsf{tid}_{r2}$ exit \textsf{ReadBlock}. }
+ \label{fig:prereclaim}
+ \end{figure}
+Once \emph{grace-period} finishes as shown in the figure \ref{fig:prereclaim}, the mutated node can be reclaimed. \lstinline{Free}(1) reclaims the memory via unmapping the mutated heap location, $F \setminus S(1)$. Write thread exists write block with executing \lstinline{WriteEnd} which basically sets the lock, $l$, in program state from $l=tid_{mut}$ to $l=\textsf{unlocked}$.
+\begin{figure}\scriptsize
+\[
+\begin{array}{c}
+  \desugarwrite \\
+  \desugarread \\
+  \desugarsync
+ \end{array}
+\]
+\caption{Desugaring \textsf{RCUWrite}, \textsf{RCURead} and \textsf{Synchronize\_rcu}}
+\label{fig:desugaringrcureadwrite}
+\end{figure}
+\end{comment}
+\subsection{Relationship to Real Implementations}
+Real implementations of RCU are far more sophisticated than our formal semantics above. Our simple global lock semantics for write critical sections has so many drawbacks in terms limiting the scalability and performance. The motivation of \textsf{RCU} is having very cheap reader critical sections but the number of reader theards can be a lot and this can be a problem. Although readers' performance are not effected badly, writer thread must show the grace period to all of these \emph{active/pre-existsting} readers in such a way that it must \emph{defer} the reclamation phase blocking (or in some implementations registering callback to be invoked after grace period) until all active readers are done with their jobs. Acquiring a global lock during each grace period severly affects scalibility and performance. To overcome this problem, a \emph{tree based} hieararchical mechanism is implemented to handle each thread's (CPU's) \emph{quiescent-state} information and \emph{grace-period}. In Tree RCU, the data strcuture is used in such a way that it records each CPU's quiescent states. The \textsf{rcu} node tree propagates these states up to the root, and then propagates grace-period information down to the leaves. Quiescent-state information does not propagate upwards from a given node until a quiescent state has been reported by each CPU covered by the subtree rooted at that node. This propagation scheme dramatically reduces the lock contention experienced by the upper levels of the tree ~\cite{LiangMKM16}
+  
+In addition, efficient implementations go to great lengths to minimize the cost of the read-side critical section operations while tracking the same information.  Direct implementation of our semantics would yield unacceptable performance, since both \lstinline|ReadBegin| and \lstinline|ReadEnd| modify shared data structures.  Typically, implementations are structured so each reader thread (or CPU) maintains its own \emph{fragment} of the global state, which is only updated by that thread, but is read by the write-side primitives.
+In the ideal case, the boundaries of the read-side critical section coincide with some other operation the reader must already do for other purposes, such as disabling interrupts~\tocite{}. As a result, some descriptions of RCU implementations do not explicitly discuss equivalents to \lstinline|ReadStart| and \lstinline|ReadEnd|, because the implementation piggybacks on existing state already present for non-RCU purposes.
+
+Conceptually, each reader thread maintains a count of how many times it has passed through the RCU data structure as a reader (a count of how many read-side critical sections it has executed).  The writer waits for a grace period by effectively taking an atomic snapshot of all readers' counts, and waiting until all have been incremented.  
+
+Real implementations, of course, must also tolerate the weak memory model of whatever processor they run on, leading them to use. For example, the primitive to dereference a memory location shown by a pointer and the primitive to update the memory location shown by a pointer contain architecture-specific memory barrier instructions and compiler directives to enforce correct ordering. Both primitives reduce to simple assignment statements on sequentially consistent systems. Dereferencing is volatile access except on DEC Alpha, which also requires a memory barrier \todo{CITE}.
+
+The Linux implementation of the communication in between reader thread and writer thread is based on waiting for context switches. The implementation uses calls \lstinline|SyncStart| and returns back from \lstinline|SyncStop| after all CPUs have passed through at least one context switch. The synchronous version of the primitive to wait reader threads is \textsf{synchronize\_rcu}. For performance reasons, the Linux implementation has also asynchronous version of this primitive named \textsf{call\_rcu}. Detecting context switches requires maintaining state shared between CPUs. A CPU must update state, which other CPUs read, that indicate it executed a context switch ~\cite{Mckenney_rcuusage}.

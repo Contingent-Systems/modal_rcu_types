@@ -1,0 +1,409 @@
+% Here we define commands for those generic rules that will appear both here *AND* in the appendix.
+% Those that appear only in the appendix are directly defined there.
+\newcommand{\spvar}{\infer[\textsc{S-PVar}]{
+  \Delta,P<:p\vdash P \prec p
+}{
+}
+}
+\newcommand{\scvar}{
+\quad
+\infer[\textsc{S-CVar}]{
+  \Delta,X<:T\vdash X \prec T
+}{
+}
+}
+\newcommand{\subclassing}{
+\[
+\fbox{$\Delta\vdash p \prec p' $}
+\quad
+\spvar
+\quad
+\infer[\textsc{S-PRefl}]{ \Delta\vdash p \prec p }{\;}
+\quad\infer{ \Delta\vdash p\prec\readable}{ }
+\quad\infer{ \Delta\vdash \isolated\prec p}{ }
+\]
+\[
+\fbox{$\Delta\vdash T \prec T'$}
+\scvar
+\quad
+\infer[\textsc{S-CRefl}]{ \Delta\vdash T \prec T }{\;}
+\quad
+\infer[\textsc{S-CDecl}]{
+  \Delta\vdash c\langle\overline{T}\rangle\langle\overline{p}\rangle \prec d\langle\overline{U}\rangle\langle\overline{q}\rangle[\overline{X}/\overline{T}][\overline{P}/\overline{p}]
+}{
+\begin{array}{c}
+P\vdash \class\ c\langle\overline{X}\rangle\langle\overline{P}\rangle<: d\langle\overline{U}\rangle\langle\overline{q}\rangle\ldots
+\\
+\Delta\vdash c\langle\overline{T}\rangle\langle\overline{p}\rangle
+\quad
+  \Delta\vdash d\langle\overline{U}\rangle\langle\overline{q}\rangle[\overline{X}/\overline{T}][\overline{P}/\overline{p}]
+\end{array}
+}
+\]
+}
+\newcommand{\scparam}[1][S-CParam]{
+\infer[\textsc{#1}]
+{
+  \Delta\vdash p\,c\langle\overline{T}^{i-1},T_i,\overline{T}^{m-i}\rangle\langle\overline{p}\rangle
+    \prec
+        p\,c\langle\overline{T}^{i-1},T_i',\overline{T}^{m-i}\rangle\langle\overline{p}\rangle
+}{
+\begin{array}{c}
+  \Delta\vdash p\,c\langle\overline{T}^{i-1},T_i,\overline{T}^{m-i}\rangle\langle\overline{p}\rangle
+\quad
+  \Delta\vdash p\,c\langle\overline{T}^{i-1},T_i',\overline{T}^{m-i}\rangle\langle\overline{p}\rangle
+\\
+  p=\readable\lor p=\immutable
+\quad
+  \Delta\vdash T_i \prec T_i'
+\end{array}
+}
+}
+\newcommand{\subtyping}{
+\[
+\fbox{$\Delta\vdash t \prec t' $}
+\quad
+\infer[\textsc{S-Perm}]{
+  \Delta\vdash p\,T \prec p'\,T
+}{
+  \Delta\vdash p \prec p'
+}
+\quad
+\infer[\textsc{S-Class}]{
+  \Delta\vdash p\,T\prec p\,T'
+}{
+  \Delta\vdash T\prec T'
+}
+\quad
+\infer[\textsc{S-Refl}]{
+  \Delta\vdash t \prec t
+}{
+}
+\quad
+\infer[\textsc{S-Trans}]{
+  \Delta\vdash t\prec t''
+}{
+  \Delta\vdash t\prec t'
+\quad
+  \Delta\vdash t'\prec t''
+}
+\]
+\[
+\scparam
+\quad
+\infer[\textsc{S-PParam}]
+{
+  \Delta\vdash p\,c\langle\overline{T}\rangle\langle\overline{p}^{i-1},p_i,\overline{p}^{m-i}\rangle
+    \prec
+        p\,c\langle\overline{T}\rangle\langle\overline{p},p_i,\overline{p}^{m-i}\rangle
+}{
+\begin{array}{c}
+  \Delta\vdash p\,c\langle\overline{T}\rangle\langle\overline{p}^{i-1},p_i,\overline{p}^{m-i}\rangle
+\quad
+  \Delta\vdash p\,c\langle\overline{T}\rangle\langle\overline{p}^{i-1},p_i',\overline{p}^{m-i}\rangle
+\\
+  p=\readable\lor p=\immutable
+\quad
+  \Delta\vdash p_i \prec p_i'
+\end{array}
+}
+\]
+}
+
+\newcommand{\tuigread}[1][T-UniqueGlobalRead]{
+\infer[\textsc{#1}]{
+  \Gamma\, G:\textsf{UniqueRoot}, y:\textsf{undef}  \vdash_{M,R}  y = G.f \dashv y:\textsf{rcuIterator} \underset{0}{\mid}, G : \textsf{UniqueRoot} \, \Gamma
+}{
+\begin{array}{c}
+  \ftype
+\qquad
+  G \isolated \lor t'=\immutable\;\_
+\\
+  t' \neq \isolated\;\_\lor p=\immutable
+\end{array}
+}
+}
+
+\newcommand{\tcall}{
+\infer[\textsc{T-Call}]{
+  \Delta\mid y : p\;T,\overline{z:u} \vdash x = y.m\langle \overline{U}\rangle\langle\overline{r}\rangle(\overline{z}) \dashv y : p\;T,\consumeiso{\overline{z:t}},x : t'
+}{
+\begin{array}{c}
+  {t'\ m\langle\overline{Y}\rangle\langle\overline{Q}\rangle(\overline{u'\ z'})\ p' \ \where\ \overline{Y<:V},\overline{Q<:q}\ldots\in T}
+\quad
+  {\forall i\in 1..|\overline{r}|\ldotp \Delta\vdash r_i\prec q_i[\overline{Q/r}^{i-1}]}
+\quad
+  { \forall i\in 1..|\overline{U}|\ldotp \Delta\vdash U_i\prec V_i[\overline{Q/r},\overline{Y/U}^{i-1}] }
+\\
+  {\Delta\vdash p \prec p'}
+\qquad
+  \overline{\Delta\vdash u\prec u'[\overline{Q/r},\overline{Y/U}]}
+\qquad
+  |\overline{r}|=|\overline{Q}|
+\qquad
+  |\overline{U}|=|\overline{Y}|
+\qquad
+  \isolated\not\in\overline{r}
+\\
+  p=\isolated \implies \mathsf{ConcretePermission}(p')\land t\neq\readable\;\_ \land t\neq\writable\;\_ \land
+  \IsoOrImm(\overline{z:t})\land p'\neq\immutable
+\end{array}
+}
+}
+
+\newcommand{\genericProgTyping}{
+\[
+\begin{array}{c}
+\fbox{$\vdash P$}
+\quad
+\infer[\textsc{T-Program}]{
+  \vdash P
+}{
+  \forall c \in \textsf{Classes}(P). \; P \vdash c
+\quad
+  \epsilon\vdash\Gamma
+\quad
+  \epsilon\mid\Gamma \vdash \textsf{Expression}(P) \dashv \Gamma'
+\quad
+  \textsf{ClassesOnce}(P)
+}
+\\[0.5em]
+\begin{array}{l}
+\fbox{$P \vdash TD$}
+\\
+\infer[\textsc{T-Class}]{
+  P \vdash TD
+}{
+\begin{array}{c}
+  {TD = \class\ cn\langle\overline{X}\rangle\langle\overline{P}\rangle\ [ <: T2 ]\ \where\ \overline{X<:T}, \overline{P<:p}\ \{ \overline{fld}\ \overline{meth}\ \}}
+\quad
+  {|\overline{X}|=|\overline{X<:T}|}
+\quad
+  {|\overline{P}|=|\overline{P<:p}|}
+\\
+  {\Delta=\epsilon,\overline{P<:p},\overline{X<:T}}
+\quad
+  {\vdash \Delta}
+\quad
+  {\Delta\vdash T2}
+\quad
+  \textsf{FldsOnce}(\overline{field})
+\quad
+  \textsf{MethsOnce}(\overline{meth})
+\quad
+  {\overline{P;TD\vdash field}}
+\quad
+  {\overline{P;TD\vdash meth}}
+\end{array}
+}
+\end{array}
+\\[0.5em]
+\fbox{$P ; TD \vdash field$}
+\quad
+\infer[\textsc{T-Field}]{
+  P;TD\vdash p\;T\ f
+}{
+  {TD = \class\ cn\langle\overline{X}\rangle\langle\overline{P}\rangle\ [ <: T2 ]\ \where\ \overline{X<:T}, \overline{P<:p}\ \{ \overline{field}\ \overline{meth}\ \}}
+\\
+  {t\ f\in\overline{field}}
+\quad
+  {f\not\in\textsf{Fields}(\textsf{ParentClasses}(T2))}
+\quad
+  {\epsilon,\overline{P<:p},\overline{X<:T}\vdash t}
+}
+\\[0.5em]
+\begin{array}{l}
+\fbox{$P ; TD \vdash meth$}
+\\
+\infer[\textsc{T-Method1}]{ %fresh method, not an override
+  P;TD\vdash meth
+}{
+  \begin{array}{c}
+  {TD = \class\ cn\langle\overline{X}\rangle\langle\overline{P}\rangle\ [ <: T2 ]\ \where\ \overline{X<:T}, \overline{P<:p}\ \{ \overline{field}\ \overline{meth}\ \}}
+\\
+  {meth = t\ m\langle\overline{Y}\rangle\langle\overline{Q}\rangle(t_1\ x_1,...,t_n\ x_n)\ p\ \where\ \overline{Y<:U}, \overline{Q<:q}\ \{\ C;\return{x};\ \}}
+\quad
+  {meth\in\overline{meth}}
+\quad
+  {p \neq \isolated}
+\\
+% These two assumptions seem to be subsumed by defining Delta and checking it's well-formed
+%  {\forall i\in 1..|\overline{Q}\ldotp \epsilon,\overline{P<:p},\overline{X<:T},\overline{Q<:q}^{i-1}\vdash q_i}
+%\quad
+%  {\forall i\in 1..|\overline{Q}\ldotp \epsilon,\overline{P<:p},\overline{X<:T},\overline{Q<:q},\overline{Y<:U}^{i-1}\vdash U_i}
+%\\
+  { |\overline{Y}|=|\overline{Y<:U}| }
+\quad
+  { |\overline{Q}|=|\overline{Q<:q}| }
+%\quad
+%  {\immutdecl{TD} \implies p \neq \writable}
+\quad
+  {\Delta=\epsilon,\overline{P<:p},\overline{X<:T},[p<:\readable],\overline{Q<:q},\overline{Y<:U}}
+\quad
+  {\vdash \Delta}
+\quad
+  {\forall i\in 1\ldots n \ldotp \Delta\vdash t_i}
+\quad
+  {\Delta \vdash t}
+\\
+  {\Delta\mid\this:p\;cn,x_1:t_1,\ldots,x_n:t_n \vdash C;\return{x} \dashv \RESULT:t}
+\quad
+  {\forall t', \overline{t},\overline{x},p'\ldotp  t'\ m(t_1'\ x_1',...,t_n'\ x_n')\ p' \not\in T2}
+\end{array}
+}
+\\[0.5em]
+\infer[\textsc{T-Method2}]{ % overriding a parent class method
+  P;TD\vdash meth
+}{
+  \begin{array}{c}
+  {TD = \class\ cn\langle\overline{X}\rangle\langle\overline{P}\rangle\ [ <: T2 ]\ \where\ \overline{X<:T}, \overline{P<:p}\ \{ \overline{field}\ \overline{meth}\ \}}
+\\
+  {meth = t\ m\langle\overline{Y}\rangle\langle\overline{Q}\rangle(t_1\ x_1,...,t_n\ x_n)\ p\ \where\ \overline{Y<:U}, \overline{Q<:q}\ \{\ C;\return{x};\ \}}
+\quad
+  {meth\in\overline{meth}}
+\quad
+  {p \neq \isolated}
+\\
+% These two assumptions seem to be subsumed by defining Delta and checking it's well-formed
+%  {\forall i\in 1..|\overline{Q}\ldotp \epsilon,\overline{P<:p},\overline{X<:T},\overline{Q<:q}^{i-1}\vdash q_i}
+%\quad
+%  {\forall i\in 1..|\overline{Q}\ldotp \epsilon,\overline{P<:p},\overline{X<:T},\overline{Q<:q},\overline{Y<:U}^{i-1}\vdash U_i}
+%\\
+  { |\overline{Y}|=|\overline{Y<:U}| }
+\quad
+  { |\overline{Q}|=|\overline{Q<:q}| }
+%\quad
+%  {\immutdecl{TD} \implies p \neq \writable}
+\quad
+  {\Delta=\epsilon,\overline{P<:p},\overline{X<:T},[p<:\readable],\overline{Q<:q},\overline{Y<:U}}
+\quad
+  {\vdash \Delta}
+\quad
+  {\forall i\in 1\ldots n \ldotp \Delta\vdash t_i}
+\quad
+  {\Delta \vdash t}
+\\
+  {\Delta\mid\this:p\;cn,x_1:t_1,\ldots,x_n:t_n \vdash C;\return{x} \dashv \RESULT:t}
+\qquad
+  {t'\ m(t_1'\ x_1',...,t_n'\ x_n')\ p'\ \textsf{where}\ \overline{W<:V},\overline{R<:q'}\in T2}
+\\
+  {\Delta\vdash t \prec t'}
+\quad
+  {\Delta\vdash p' \prec p \lor \exists R\ldotp p=R}
+\quad
+  {\forall i\in[1...n]. \Delta\vdash t_i' \prec t_i}
+\quad
+  {\overline{Y<:U}\subseteq\overline{W<:V}}
+\quad
+  {\overline{Q<:q}\subseteq\overline{R<:q'}}
+\end{array}
+}
+\end{array}
+\end{array}
+\]
+}
+\newcommand{\wfTypes}{
+\[
+\begin{array}{c}
+\fbox{$\Delta\vdash T$}
+\quad
+\infer[\textsc{WF-T}]
+{
+  \Delta\vdash c\langle\overline{U}\rangle\langle\overline{q}\rangle
+}{
+  {P\vdash \class\ c\langle\overline{X}^m\rangle\langle\overline{P}^n\rangle:
+  d\langle\ldots\rangle\langle\ldots\rangle\ \where\ \overline{X<:T}^m, \overline{P<:p}^n\ldots}
+\quad
+  {\forall i\in1..n. \Delta\vdash q_i}
+\quad
+  {\forall i\in1..m. \Delta\vdash U_i}
+\\
+  {\forall i\in1..n. q_i\neq \isolated}
+\quad
+  {\forall i\in1..m. \Delta\vdash U_i \prec T_i[\overline{p/q},\overline{X/U}^{i-1}]}
+\quad
+  {\forall i\in1..n. \Delta\vdash q_i \prec p_i[\overline{P/q}^{i-1}]}
+}
+\end{array}
+\]
+\[
+\begin{array}{c}
+\fbox{$\Delta\vdash p$}
+\quad
+\infer[\textsc{WF-BasicPerm}]{\Delta\vdash p}{p\in\{\isolated,\writable,\immutable,\readable\}}
+\quad
+\infer[\textsc{WF-BoundPerm}]{\Delta\vdash P}{P<:p\in\Delta}
+\\[0.5em]
+\fbox{$\Delta\vdash t$}
+\quad
+\infer[\textsc{WF-QualTy}]{\Delta\vdash p\;T}{\Delta\vdash p \quad \Delta\vdash T}
+\quad
+\infer[\textsc{WF-PrimTy}]{\Delta\vdash t}{t\in\{\INT,\bool\}}
+\quad
+\fbox{$\Delta\vdash \Gamma$}
+\quad
+\infer[\textsc{WF-Empty}]{\Delta\vdash \epsilon}{}
+\quad
+\infer[\textsc{WF-Type}]{\Delta\vdash \Gamma,x:t}{\Delta\vdash\Gamma \quad \Delta\vdash t \quad x\not\in\Gamma}
+\\[0.5em]
+\fbox{$\vdash\Delta$}
+\quad
+\infer[\textsc{WF-PBound}]{\vdash \Delta,P<:p}{\vdash\Delta \quad \Delta\vdash p \quad P\not\in\Delta}
+\quad
+\infer[\textsc{WF-CBound}]{\vdash \Delta,X<:T}{\vdash\Delta \quad \Delta\vdash T \quad X\not\in\Delta}
+\end{array}
+\]
+}
+\newcommand{\genericGrammar}{
+\[
+\begin{tabular}{LL}
+W,X,Y,Z & \textrm{type variables}
+\\
+P,Q,R & \textrm{permission variables}
+\\
+T,U,V &::= cn\langle\overline{T}\rangle\langle\overline{p}\rangle \mid X
+\end{tabular}
+\left|
+\begin{tabular}{LL}
+TD &::= \class\ cn\langle\overline{X}\rangle\langle\overline{P}\rangle\ [ <: T2 ]\ \where\
+\overline{X<:T}, \overline{P<:p}\ \{ \overline{field}\ \overline{meth}\ \}
+\\
+meth &::= t\ m\langle\overline{X}\rangle\langle\overline{P}\rangle(t_1\ x_1,...,t_n\ x_n)\ p\ \where\ \overline{X<:T}, \overline{P<:p}\ \{\ C;\return{x};\ \}
+\\
+p,q &::= \ldots \mid P \mid p\leadsto p
+\\
+\Delta &::= \epsilon \mid \Delta,X <: T \mid \Delta,P <: p
+\end{tabular}
+\right.\]
+}
+
+\infer[\textsc{T-AssignVar}]{
+  \Delta\mid x:\_, y : t  \vdash  x = y \dashv y : t, x : t  
+}{
+  t \neq \isolated\;\_
+}
+%\qquad
+\\[0.5em]
+\infer[\textsc{T-FieldWrite}]{
+  \Delta\mid y : p\;T , x : t \vdash y.f = x \dashv y : p\;T , \consumeiso{x:t}
+}{
+  \Delta\vdash p \prec \writable 
+\quad
+  p\neq\isolated
+\quad
+  t\ f \in T
+}
+\\[0.5em]
+\infer[\textsc{T-FieldConsume}]{
+  y : \writable\;T \vdash x = \consume{y.f} \dashv y : \writable\;T,x : \isolated\;T_f
+}{
+  \isolated\ T_f\ f \in T
+}
+\qquad
+\infer[\textsc{T-New}]{
+  \Delta\mid x:\_\vdash x = \NEW\; T() \dashv x : \isolated\ T
+}{
+  \Delta\vdash T
+}
+\\[0.5em]
+\tcall 

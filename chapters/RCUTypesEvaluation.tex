@@ -1,0 +1,9 @@
+\section{Type Checking on RCU Data Structures}
+We run the type-rules of our system on a RCU linked list and RCU Binary Search Tree (BST) in which types of variables are annotated with our type qualifiers. Type checker basically checks whether state of types before and after each command execution is admissible with respect to semantics of correct RCU usage we define in \ref{fig:operationalsematoms}, \ref{fig:operationalsemmemrecl}, \ref{fig:operationalsemrcuenterexit}.
+
+We structure our type checking around judgements in $p\{C\}q$ structure where $p$ and $q$ are predicates over state of type of RCU variables and $C$ is command.
+\label{sec:lleval}
+\subsection{Type Checking RCU Linked List}
+\input{staticCheckLL.tex}
+%\subsection{Binary Search Tree with RCU Types}
+\input{BST.tex}

@@ -1,0 +1,90 @@
+\spec{prev:rcuItr root p_{0}^{k} {right|left -> cur}}
+\spec{cur: rcuItr root p_{0}^{k+1} {}}
+
+
+node* minright = cur->right
+node* nw = new
+nw->right = cur->right
+nw->left = cur->left
+
+
+\spec{prev:rcuItr root p_{0}^{k} {right|left -> cur}}
+\spec{cur: rcuItr root p_{0}^{k+1} {right->minright}}
+\spec{nw: rcuFreshNext root p_{0}^{k+1} {right->minright}}
+\spec{minright :rcuItr root  p_{0}^{k+2} {}}
+
+
+while(minright->left){
+
+  cur->left = minright->left
+  minright->left = cur->left
+
+}
+
+node* curAfterLoop = cur
+
+\spec{curAfterLoop: rcuItr loop p_{0}^{k+1} p_{1}^{l} {right|left->minright}}
+
+if(prev->left == cur)
+{
+  //Point1: If we 
+  prev->left = nw
+  asynchFree(cur);
+}
+else
+{
+  prev->right = nw
+  asynchFree(cur);
+}
+
+\spec{prev:rcuItr root p_{0}^{k} {right|left -> nw}}
+\spec{cur: undef}
+\spec{nw: rcuItr root p_{0}^{k+1} {right->minright}}
+
+//I have lost cur here :(
+\spec{minright :rcuItr root  p_{0}^{k+2} p_{1}^{l+1} {}}
+
+node* minrightr = minright->right
+\spec{minrightr: rcuItr root p_{0}^{k+2} p_{1}^{l+2} {}}
+//Note : minright's Next field was empty and we are reading it to a stack variable.
+// Does this makes sense? Oh! yes makes sense because every node in the heap has its
+// next field allocated.
+\spec{minright : rcuItr root  p_{0}^{k+2} p_{1}^{l+1} {right->minrightr}}
+
+
+//Seems we have enough information for removing the old successor, minright.
+//However, we should be careful about the branching expression.
+
+----------------
+//Branching-Option-1
+if(nw->right == minright){
+  nw->right = minright->right
+  asycnDelayedFree(minright)
+}
+else
+{
+  //Note-1: Do I need anything else?
+  //Note-2: Due to typing rules of if-statement
+  //        nw gets type : rcuItr root p_{0}^{k+1} {left -> minright} which is not true
+  //        We can get help from indices over path [also chaning typing rules] 
+  //        
+  curAfterLoop->left = minright->right
+  asycnDelayedFree(minright)
+}
+-----------------
+
+----------------
+//Branching-Option-2: With similar reasons 
+if(curAfterLoop->right == minright){
+  
+  curAfterLoop->left = minright->right
+  asycnDelayedFree(minright)  
+}
+else
+{
+
+  nw->right = minright->right
+  asycnDelayedFree(minright)
+}
+
+-----------------

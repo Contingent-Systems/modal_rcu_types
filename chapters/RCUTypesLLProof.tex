@@ -1,0 +1,64 @@
+\begin{figure*}\tiny
+  \[
+  \proofoutstep{\rcuitr{itr}{sui}{k}{k+1}{\_}}{
+    \proofoutstep{\rcuitr{sui}{head}{k}{k+1}{\_}\;,itr:\_}{
+      \proofoutstep{head:\uiglobal,sui:\udef}{
+        sui\texttt{=}head\texttt{;}\\
+	}{\textsc{T-UniqueGlobalRead}}
+                   {\rcuitr{sui}{head}{k}{k+1}{\_}}\\
+        itr\texttt{=}sui\texttt{.next;}\\
+    }{\textsc{T-UniqueStackRead}}
+                 {\rcuitr{sui}{head}{k}{k+1}{itr}\;,\rcuitr{itr}{sui}{k+1}{k+2}{\_}}\\
+         //\texttt{\textcolor{red}{loop for finding the node to read starts}}\\
+        \;\;\;\;itr\texttt{=}itr\texttt{.next}\texttt{;}\\
+        //\texttt{\textcolor{red}{loop for finding the node to read ends}}\\
+  }{\textsc{T-OverWriteCurrent}}
+   {\rcuitr{itr}{sui}{k+1}{k+2}{\_}}
+\]
+\caption{Typing derivation for traversing list.}
+\label{fig:traverse-ll}
+\end{figure*}
+\begin{figure*}\small
+     \[
+     \proofoutstep{\rcuitr{itr}{sui}{k+1}{k+2}{r}\;\rcuitr{prev}{sui}{k}{k+1}{itr}}{
+      \proofoutstep{\rcuitr{itr}{sui}{k}{k+1}{\_}}{
+        \proofoutstep{\rcuitr{itr}{sui}{k}{k+1}{\_}\;,prev:\_}{
+          \proofoutstep{\rcuitr{itr}{sui}{k}{k+1}{\_}\;,prev:\_}{
+           \texttt{...}\\
+           prev\texttt{=}itr\texttt{;}\\
+           }{\textsc{T-ReadStack}}
+           {\rcuitr{itr}{sui}{k}{k+1}{\_}\;,\rcuitr{prev}{sui}{k}{k+1}{\_}}\\
+            //\texttt{\textcolor{red}{loop for finding the node to delete starts}}\\
+            prev\texttt{=}itr\texttt{;}\\
+            }{\textsc{T-ReadStack}}
+            {\rcuitr{itr}{sui}{k}{k+1}{\_}\;,\rcuitr{prev}{sui}{k}{k+1}{\_}}\\
+            \;\;\;\;\;\;\;\;itr\texttt{=}itr\texttt{.next}\texttt{;}\\
+            }{\textsc{T-OverWriteCurrent}}
+            {\rcuitr{itr}{sui}{k+1}{k+2}{\_}}\\
+            \;\;\;\;\;\;\;  //\texttt{\textcolor{red}{loop for finding the node to delete ends}}\\
+            \;\;\;\;\;\;\;r\texttt{=}itr\texttt{.next}\texttt{;}\\
+            \;\;\;\;\;\;\;prev\texttt{.next}\texttt{=}r\texttt{;}\\
+     }{\textsc{T-UnlinkANode}}
+                  {\rcuitr{prev}{sui}{k}{k+1}{r}\;,itr:\unlinked}
+                  \]   
+\caption{Typing derivation for updating list- Phase-1: Traversing and unlinking the node.}
+\label{fig:update-ll-unlink}
+\end{figure*}
+
+\begin{figure*}\small
+  \[
+  \proofoutstep{itr:\unlinked}{
+    \texttt{asyncDelayedFree}(itr)\texttt{;}\\
+  }{\textsc{T-AsyncFree}}
+               {itr:\udef}
+               \]
+\caption{Typing derivation for updating list-Phase-2: Reclaiming the memory location where the $\unlinked$ node resides.}
+\label{fig:update-ll}
+\end{figure*}
+\begin{comment}
+  In \ref{lst:typcheckread}, there exists only one command which touches to a RCU variable, \textsf{itr}, which has RCU qualified type, \textsf{rcuIterator}. Informally, while iterating  over linked list with one iterator, we set it to show next heap location and invalidate the pointer showing the next previous location on heap. To achieve this as type safe, type of \textsf{itr} needs to be preserved as \textsf{rcuIterator} which is checked against \texttt{Overwrite-Curr} typing rule in figure \ref{fig:typingrulesRCURead}.
+  
+In listing ~\ref{lst:typcheckwrite}, we use two iterators to delete a node. We want these two iterators, \textsf{itr} and \textsf{prev} , to be showing the consecutive heap locations. This property is checked with first assertion in the loop against  \texttt{Write-Traverse} typing rule in figure ~\ref{fig:typingrulesRCUWrite}. Once the node, representing a heap location in linked list, to be deleted is found then it is unlinked. We check the change in state of types due to unlinking a node againsts \texttt{Unlink-Node} typing rule. Once all reader threads are done with the unlinked node, RCU runtime call asynchronous memory reclamation call, \textsf{asyncFree}, and adds the node to the free list. To add a node to a free list, it must be in \textsf{unlinked} type. After the node gets added to free list, its type becomes \textsf{undef}. The last assertion which checks this type property against \texttt{Free-Unlinked-Node} typing rule.
+\end{comment}
+Some explanations for lltype checking ...
+\newpage
