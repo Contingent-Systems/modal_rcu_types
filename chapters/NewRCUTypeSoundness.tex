@@ -62,7 +62,7 @@ We do our reasoning for soundness over instrumented states and define an erasure
 that projects instrumented states to the common components with \textsf{MState}.
 
 Well-formedness imposes restrictions over the representation of the \textsf{RCU} structure in memory and type of threads for actions defined in operational semantics. For instance, \emph{an unlinked heap location cannot be reached from a root of an \textsf{RCU} data structure}. We define well-formedness as conjuction of memory axioms defined in Appendix Section \ref{sec:memaxioms}.
-\begin{figure}\small
+\begin{figure}\scriptsize
 \[
 \begin{array}{l@{\;\;=\;\;}l}
  \llbracket \, x : \textsf{rcuItr}\,\rho\,\N \,  \rrbracket_{tid}
@@ -159,7 +159,7 @@ The latter is given in Figure \ref{fig:denotingtypeenviroment}.  To define the f
 Composition of instrumented states is an operation
 \[\bullet : \mathcal{M} \longrightarrow \mathcal{M} \longrightarrow \mathcal{M}\]
 that is commutative and associative, and defined component-wise in terms of composing physical states, observation maps, undefined sets, and thread sets as shown in Figure \ref{fig:comp}
-\begin{figure}
+\begin{figure}\scriptsize
 $  \bullet  = (\bullet_{\sigma},\bullet_O,\cup,\cup)$ \quad
   $O_{1} \bullet_O O_{2}(loc) \overset{\mathrm{def}}{=}  O_{1}(loc) \cup O_{2}(loc)$\quad
   $ (s_1 \bullet_s s_2) \overset{\mathrm{def}}{=}  s_1 \cup s_2 \texttt{   when   } dom(s_1) \cap dom(s_2) = \emptyset$ \\
@@ -255,7 +255,7 @@ The Views Framework defines a program logic (Hoare logic) with judgments of the 
 To prove type soundness for our system, we define a denotation of \emph{type judgments} in terms of the Views logic, and show that every valid typing derivation translates to a valid derivation in the Views logic:
 \[\forall\Gamma,C,\Gamma',\mathit{tid}\ldotp\Gamma\vdash_{M,R} C\dashv \Gamma' \Rightarrow \{\llbracket\Gamma\rrbracket_\mathit{tid}\} \llbracket C\rrbracket_\mathit{tid}\{\llbracket\Gamma'\rrbracket_\mathit{tid}\}\]
 The antecedent of the implication is a type judgment shown in Figures \ref{fig:tss} Section \ref{subsection:type-rules}, \ref{fig:type-judgements-for-cf} Section \ref{subsection:typwrt} and \ref{fig:tssr} Appendix \ref{appendix:readtypes}, and the conclusion is a judgment in the Views logic. The environments are translated to views ($\mathsf{View}_\mathcal{M}$) as previously described. Commands $C$ also require translation, because the Views logic is defined for a language with non-deterministic branches and loops, so the standard versions from our core language must be encoded.  The approach to this is based on a standard idea in verification, which we show here for conditionals as shown in Figure \ref{fig:asm}. $\textsf{assume}(b)$ is a standard construct in verification semantics~\cite{Barnett:2005:BMR:2090458.2090481} ~\cite{Muller:2016:VVI:2963187.2963190}, which ``does nothing'' (freezes) if the condition $b$ is false, so its postcondition in the Views logic can reflect the truth of $b$.  This is also the approach used in previous applications of the Views Framework~\cite{oopsla12,toplas17}.
-\begin{figure}
+\begin{figure}\scriptsize
 $
 \begin{array}{l}
 \llbracket{\mathsf{if}\;(x.f==y)\;C_1\;C_2}\rrbracket_\mathit{tid} =\\
