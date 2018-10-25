@@ -180,11 +180,6 @@ Mckenney, P.E., Appavoo, J., Kleen, A., Krieger, O., Krieger, O., Russell, R.,
   Sarma, D., Soni, M.: Read-copy update. In: In Ottawa Linux Symposium. pp.
   338--367 (2001)
 
-\bibitem{Mckenney_rcuusage}
-Mckenney, P.E., Boyd-wickizer, S.: Rcu usage in the linux kernel: One decade
-  later (Sep 2012),
-  \url{http://rdrop.com/users/paulmck/techreports/survey.2012.09.17a.pdf}
-
 \bibitem{Michael:2004:HPS:987524.987595}
 Michael, M.M.: Hazard pointers: Safe memory reclamation for lock-free objects.
   IEEE Trans. Parallel Distrib. Syst.  \textbf{15}(6),  491--504 (Jun 2004).
