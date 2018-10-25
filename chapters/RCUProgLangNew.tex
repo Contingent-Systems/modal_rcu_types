@@ -52,7 +52,7 @@ Unlinked references become freeable after a writer has waited for a full grace p
 
 \subsubsection{Subtyping}
 %%%%%%%%%%%%%%%%%%%%%%%%SUB TYPING JUDGEMENTS%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\begin{figure}[t]\scriptsize
+\begin{figure}[H]\scriptsize
 \begin{mathpar}
  \fmapname \quad \fmapfieldemp \\ \fmapempty \quad \fmapextendn \quad \fmapdiff \\ \fmapwithf \quad \fmapextend %\and \typelocalmap %\and  \ftypedecl \and \rpth 
 \\
@@ -165,7 +165,7 @@ The third judgment $\vdash T\prec:T'$ uses path and field map subtyping to give 
 The final judgment $\vdash\Gamma\prec:\Gamma'$ extends subtyping to all assumptions in a type context, allowing any or all types in the context to be relaxed to a supertype.
 
 
-\begin{figure}\scriptsize
+\begin{figure}[H]\scriptsize
 \begin{mathpar}
 \fbox{$\Gamma \vdash_{M} \bar{s} \dashv \Gamma'$} \;\;
 \inferrule*[left=\scriptsize(T-Branch1)]
@@ -302,7 +302,7 @@ The type system gives it a \textsf{fresh} type while tracking its field contents
 
 \subsection{Type Rules}
 \label{subsection:type-rules}
-\begin{figure}[t!]\scriptsize
+\begin{figure}[H]\scriptsize
 \begin{mathpar}
 \fbox{$\Gamma \vdash_{M} \alpha \dashv \Gamma'$} \;\;
 \inferrule*[left=\scriptsize(T-Root)]
@@ -456,7 +456,7 @@ checks that for every \textsf{rcuItr} reference $n$ in $\Gamma$, it is not a pat
 %
 %Effects of the unlinking, path aliases, field aliases and assertions of the type rule can be found pictorially at Figures \ref{fig:bframeout} and \ref{fig:bunlinkframeout} in Appendix \ref{appendix:rcuunlink}.
 
-\begin{figure}\scriptsize
+\begin{figure}[H]\scriptsize
  \centering
 \begin{subfigure}[b]{.4\linewidth}
  \centering
