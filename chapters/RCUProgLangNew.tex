@@ -52,7 +52,7 @@ Unlinked references become freeable after a writer has waited for a full grace p
 
 \subsubsection{Subtyping}
 %%%%%%%%%%%%%%%%%%%%%%%%SUB TYPING JUDGEMENTS%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\begin{figure}[H]\scriptsize
+\begin{figure*}\scriptsize
 \begin{mathpar}
  \fmapname \quad \fmapfieldemp \\ \fmapempty \quad \fmapextendn \quad \fmapdiff \\ \fmapwithf \quad \fmapextend %\and \typelocalmap %\and  \ftypedecl \and \rpth 
 \\
@@ -156,7 +156,7 @@ Unlinked references become freeable after a writer has waited for a full grace p
 \vspace{-2em}
 \caption{Sub-Typing Judgements}
 \label{fig:sub-typing}
-\end{figure}
+\end{figure*}
 
 It is sometimes necessary to use imprecise types --- mostly for control flow joins.  Our type system performs these abstractions via subtyping on individual types and full contexts, as in Figure \ref{fig:sub-typing}.  We discuss subtyping before the full type rules to give a sense of what kinds of imprecision exist in our type system.
 
@@ -165,7 +165,7 @@ The third judgment $\vdash T\prec:T'$ uses path and field map subtyping to give 
 The final judgment $\vdash\Gamma\prec:\Gamma'$ extends subtyping to all assumptions in a type context, allowing any or all types in the context to be relaxed to a supertype.
 
 
-\begin{figure}[H]\scriptsize
+\begin{figure*}\scriptsize
 \begin{mathpar}
 \fbox{$\Gamma \vdash_{M} \bar{s} \dashv \Gamma'$} \;\;
 \inferrule*[left=\scriptsize(T-Branch1)]
@@ -203,7 +203,7 @@ The final judgment $\vdash\Gamma\prec:\Gamma'$ extends subtyping to all assumpti
 \vspace{-2em}
 \caption{Type Judgements for Control-Flow.}
 \label{fig:type-judgements-for-cf}
-\end{figure}
+\end{figure*}
 %%%%%%%%%%%%%%%COND TYPE JUDGEMENTS ENDS%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %(\textit{\textbf{Approximation on Fields}}) - 
@@ -302,7 +302,7 @@ The type system gives it a \textsf{fresh} type while tracking its field contents
 
 \subsection{Type Rules}
 \label{subsection:type-rules}
-\begin{figure}[H]\scriptsize
+\begin{figure*}\scriptsize
 \begin{mathpar}
 \fbox{$\Gamma \vdash_{M} \alpha \dashv \Gamma'$} \;\;
 \inferrule*[left=\scriptsize(T-Root)]
@@ -416,7 +416,7 @@ r:\textsf{rcuItr} \, \rho' \, \N'',\, \Gamma
 \end{mathpar}
 \caption{Type Rules for \textsf{Write} side critical section}
 \label{fig:tss}
-\end{figure}
+\end{figure*}
 
 Figure \ref{fig:tss} gives the primary type rules used in checking write-side critical section code as in Figure \ref{fig:rculist}.
 %Our aim in this section is to investigate potential memory safety issues, discuss what memory inconsistencies they can cause and how type rules prevent it and justify why the flow of change in types serves to the correct \textsf{RCU} programming.
@@ -456,7 +456,7 @@ checks that for every \textsf{rcuItr} reference $n$ in $\Gamma$, it is not a pat
 %
 %Effects of the unlinking, path aliases, field aliases and assertions of the type rule can be found pictorially at Figures \ref{fig:bframeout} and \ref{fig:bunlinkframeout} in Appendix \ref{appendix:rcuunlink}.
 
-\begin{figure}[H]\scriptsize
+\begin{figure*}\scriptsize
  \centering
 \begin{subfigure}[b]{.4\linewidth}
  \centering
@@ -616,7 +616,7 @@ checks that for every \textsf{rcuItr} reference $n$ in $\Gamma$, it is not a pat
  \end{subfigure}
  \caption{Linking and replacing nodes}
  \label{fig:alloc}\vspace{-2mm}
- \end{figure}
+ \end{figure*}
 %\textit{\textbf{Creating a Fresh Node}} - We deffered answering the question: "Why do we need a separate type \textsf{rcuFresh} instead of using \textsf{rcuItr} for typing a freshly allocated heap node in \textsf{Write} critical section ?". To understand and answer the question easily, we illustrate the setting for creating a fresh \textsf{BST} heap node and linking it in Figures \ref{fig:frframeout} and \ref{fig:freshframeout}.
 \mypar{Linking a Fresh Node}
 Linking a \textsf{rcuFresh} reference faces the same aliasing complications as direct unlinking.

@@ -37,7 +37,7 @@ The bounding set $B$ tracks which threads the writer is \emph{actively} waiting 
 \vspace{-2mm}
   \end{figure*}%%%%%%%%%%%%%%%%%%%%%OPERATIONAL SEMANTICS ENDS%%%%%%%%%%%%%%%%%%
 \end{comment}
-\begin{figure}[H]\scriptsize%%%%%%%%%%%%OPdERATIONAL SEMANTICS%%%%%%%%%%%%%%
+\begin{figure*}\scriptsize%%%%%%%%%%%%OPdERATIONAL SEMANTICS%%%%%%%%%%%%%%
   \grammar \and 
   $\desugarwrite$ \and 
   $\desugarread$ \and 
@@ -63,7 +63,7 @@ $\textrm{where}~ rt \neq s(y,tid) \textrm{ and } s[(y,tid) \mapsto \ell], \textr
 \caption{Operational Semantics for \textsf{RCU}}
 \label{fig:operationalsemrcu}
 \vspace{-2mm}
-\end{figure}%%%%%%%%%%%%%%%%%%%%%OPERATIONAL SEMANTICS ENDS%%%%%%%%%%%%%%%%%%
+\end{figure*}%%%%%%%%%%%%%%%%%%%%%OPERATIONAL SEMANTICS ENDS%%%%%%%%%%%%%%%%%%
 
 Figure \ref{fig:operationalsemrcu} gives operational semantics for \emph{atomic} actions; conditionals, loops, and sequencing all have standard semantics, and parallel composition uses sequentially-consistent interleaving semantics.
 
