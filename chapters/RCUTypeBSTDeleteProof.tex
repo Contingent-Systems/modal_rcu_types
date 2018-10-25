@@ -63,24 +63,22 @@ void\;delete(\;\INT\;data)\;\{\\
         \;\;\;\;\specline{currentL:rcuItr\; (Left|Right)^{k}.(Left|Right).Left \; \{\} }\\
         
             \;\;\;\;if\; (parent.Left == current)\\
-                \;\;\;\;\;\;\text{// parent.Value > current.Value, so make current's left child a left child of parent}\\
+                \;\;\;\;\;\;\text{// parent.Value is greater than current.Value, so make current's left child a left child of parent}\\
                 \;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Left \mapsto current\} }\\
                 \;\;\;\;\;\;\specline{current:rcuItr\; (Left|Right)^{k}.Left \; \{Left\mapsto currentL, Right\mapsto null\} }\\
                 \;\;\;\;\;\;\specline{currentL:rcuItr\; (Left|Right)^{k}.Left.Left \; \{\} }\\
                 \;\;\;\;\;\;parent.Left = currentL;\\
-                \;\;\;\;\;\;\text{// parent.Value > current.Value, so make current's left child a left child of parent}\\
                 \;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Left \mapsto current\} }\\
                 \;\;\;\;\;\;\specline{current:unlinked}\\
                 \;\;\;\;\;\;\specline{currentL:rcuItr\; (Left|Right)^{k}.Left \; \{\} }\\
                 
             \;\;\;\;else \\
 
-                \;\;\;\;\;\;\text{// parent.Value < current.Value, so make current's left child a right child of parent}\\
+                \;\;\;\;\;\;\text{// parent.Value is less than current.Value, so make current's left child a right child of parent}\\
                 \;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Right \mapsto current\} }\\
                 \;\;\;\;\;\;\specline{current:rcuItr\; (Left|Right)^{k}.Right \; \{Left\mapsto currentL, Right \mapsto null\} }\\
                 \;\;\;\;\;\;\specline{currentL:rcuItr\; (Left|Right)^{k}.Right.Left \; \{\} }\\
                 \;\;\;\;\;\;parent.Right = currentL;\\
-                \;\;\;\;\;\;\text{// parent.Value > current.Value, so make current's left child a left child of parent}\\
                 \;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Right \mapsto current\} }\\
                 \;\;\;\;\;\;\specline{currentL:rcuItr\; (Left|Right)^{k}.Right \; \{\} }\\
                 \;\;\;\;\;\;\specline{current:unlinked }\\
@@ -108,7 +106,7 @@ void\;delete(\;\INT\;data)\;\{\\
                 \;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Left \mapsto current\} }\\
                 \;\;\;\;\;\;\specline{current:rcuItr\; (Left|Right)^{k}.Left \; \{Left\mapsto null, Right\mapsto lmParent\} }\\
                 \;\;\;\;\;\;\specline{lmParent:rcuItr\; (Left|Right)^{k}.Left.Right \; \{\} }\\
-                \;\;\;\;\;\;\text{// parent.Value > current.Value, so make current's right child a left child of parent}\\
+                \;\;\;\;\;\;\text{// parent.Value is greater than current.Value, so make current's right child a left child of parent}\\
                 \;\;\;\;\;\;parent.Left = lmParent;\\
                 \;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Left \mapsto lmParent\} }\\
                 \;\;\;\;\;\;\specline{current:unlinked }\\
@@ -117,7 +115,7 @@ void\;delete(\;\INT\;data)\;\{\\
                 \;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Right \mapsto current\} }\\
                 \;\;\;\;\;\;\specline{current:rcuItr\; (Left|Right)^{k}.Right \; \{Left\mapsto null, Right\mapsto lmParent\} }\\
                 \;\;\;\;\;\;\specline{lmParent:rcuItr\; (Left|Right)^{k}.Right.Right \; \{\} }\\
-                \;\;\;\;\;\;\text{// parent.Value < current.Value, so make current's right child a right child of parent}\\
+                \;\;\;\;\;\;\text{// parent.Value is less than current.Value, so make current's right child a right child of parent}\\
                 \;\;\;\;\;\;parent.Right = lmParent;\\
                 \;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Right \mapsto lmParent\} }\\
                 \;\;\;\;\;\;\specline{lmParent:rcuItr\; (Left|Right)^{k}.Right \; \{\} }\\
