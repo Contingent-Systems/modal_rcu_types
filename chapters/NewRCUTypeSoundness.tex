@@ -62,7 +62,7 @@ We do our reasoning for soundness over instrumented states and define an erasure
 that projects instrumented states to the common components with \textsf{MState}.
 
 Well-formedness imposes restrictions over the representation of the \textsf{RCU} structure in memory and type of threads for actions defined in operational semantics. For instance, \emph{an unlinked heap location cannot be reached from a root of an \textsf{RCU} data structure}. We define well-formedness as conjuction of memory axioms defined in Appendix Section \ref{sec:memaxioms}.
-\begin{figure}\scriptsize
+\begin{figure}[!t]\scriptsize
 \[
 \begin{array}{l@{\;\;=\;\;}l}
  \llbracket \, x : \textsf{rcuItr}\,\rho\,\N \,  \rrbracket_{tid}
@@ -159,7 +159,7 @@ The latter is given in Figure \ref{fig:denotingtypeenviroment}.  To define the f
 Composition of instrumented states is an operation
 \[\bullet : \mathcal{M} \longrightarrow \mathcal{M} \longrightarrow \mathcal{M}\]
 that is commutative and associative, and defined component-wise in terms of composing physical states, observation maps, undefined sets, and thread sets as shown in Figure \ref{fig:comp}
-\begin{figure}\scriptsize
+\begin{figure}[!t]\scriptsize
 $  \bullet  = (\bullet_{\sigma},\bullet_O,\cup,\cup)$ \quad
   $O_{1} \bullet_O O_{2}(loc) \overset{\mathrm{def}}{=}  O_{1}(loc) \cup O_{2}(loc)$\quad
   $ (s_1 \bullet_s s_2) \overset{\mathrm{def}}{=}  s_1 \cup s_2 \texttt{   when   } dom(s_1) \cap dom(s_2) = \emptyset$ \\
