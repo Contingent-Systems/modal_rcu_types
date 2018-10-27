@@ -653,6 +653,6 @@ Appendix \ref{appendix:bag_paul} contains the code for membership checking.
 
 We have also type checked the most challenging part of an RCU binary search tree, the deletion (which also contains the code for a lookup).
 Our implementation is a slightly simplified version of the Citrus BST~\cite{Arbel:2014:CUR:2611462.2611471} (their code supports multiple writers, while ours uses only one).
-For lack of space the annotated code is only in Appendix \ref{appendix:bst_del}, but it motivates some of the conditional-related flexibility discussed in Section \ref{subsection:type-action}.
+For lack of space the annotated code is only in Appendix \ref{appendix:bst_del}, but it motivates some of the conditional-related flexibility discussed in Section \ref{subsection:type-action} \iso{Colin, it would be great if you could articulate the importance of BST delete proof here}.
 
 To the best of our knowledge, we are the first to check such code for memory-safe use of RCU primitives modularly, without appeal to the specific implementation of RCU primitives.
