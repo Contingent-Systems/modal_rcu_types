@@ -130,10 +130,10 @@
 \newcommand{\rlock}{R \in \superset(\tid)}
 \newcommand{\fset}{F : \loc \mapsto \superset(\tid) }
 \newcommand{\atomeval}{\db{-}:\atom}
-\newcommand{\rcuwrite}{\textsf{RCUWrite} \text{ x.f as y in }\, \{ \bar{s} \}}
-\newcommand{\rcuread}{\textsf{RCURead} \text{ x.f as y in }\, \{ \bar{s} \}}
-  \newcommand{\desugarread}{ \db{\rcuread}_{\;\;\Downarrow_{\mathrm{tid}}\;\;} \overset{\Delta}{=} \texttt{\textsf{ReadBegin};\, y:= x.f\, ;\textsf{ReadEnd}}}
-  \newcommand{\desugarwrite}{\db{\rcuwrite}_{\;\;\Downarrow_{\mathrm{tid}}\;\;} \overset{\Delta}{=} \texttt{\textsf{WriteBegin} ;\, x.f := y\, ;\textsf{WriteEnd}}}
+\newcommand{\rcuwrite}{\textsf{RCUWrite} \text{ x.f as y in }\, \{ C \}}
+\newcommand{\rcuread}{\textsf{RCURead} \text{ x.f as y in }\, \{ C \}}
+  \newcommand{\desugarread}{ \db{\rcuread}_{\;\;\Downarrow_{\mathrm{tid}}\;\;} \overset{\Delta}{=} \texttt{\textsf{ReadBegin}}; \{C\}  ;\textsf{ReadEnd} }
+  \newcommand{\desugarwrite}{\db{\rcuwrite}_{\;\;\Downarrow_{\mathrm{tid}}\;\;} \overset{\Delta}{=} \texttt{\textsf{WriteBegin}} ; \{C\}  ;\textsf{WriteEnd}}
     \newcommand{\desugarsync}{\db{\textsf{Sync}}_{\;\;\Downarrow_{\mathrm{tid}}\;\;} \overset{\Delta}{=} \texttt{\textsf{SyncStart};\textsf{SyncStop}}}
   %\newcommand{\boundpath}{\bar f_{i}^{k} = \forall_{k \in \mathbb{N},i \in \fnameenum} \ldotp  \underbrace{f_{i}^{0} \ldots f_{i}^{k}}_\text{$\mid$ $f_{i}^{0}$ \ldots $f_{i}^{k}$ $\mid$ = k} }
 \newcommand{\subt}{\prec:}
@@ -1143,8 +1143,7 @@ sn & \textsf{struct name}   & &  i,j & \mathsf{nat (indices)}  \\
 \]\\
 \[
 \begin{array}{rclcl}
-a &::= & \mathsf{skip} \mid \mathsf{x.f = y} \mid \mathsf{y=x} \mid \mathsf{y =x.f}  \mid \mathsf{y =new}\mathsf{Free}\mathsf{(\textsf{x})} \mid \mathsf{Sync} \\
-                  & & \mathsf{RCURead} \; \mathsf{x.f} \; \mathsf{as} \; \mathsf{y} \; \in \; \{ \bar{s} \} \mid \mathsf{RCUWrite} \; \mathsf{x.f} \; \mathsf{as} \; \mathsf{y} \; \in \; \{ \bar{s} \} 
+\alpha &::= & \mathsf{skip} \mid \mathsf{x.f = y} \mid \mathsf{y=x} \mid \mathsf{y =x.f}  \mid \mathsf{y =new}\mathsf{Free}\mathsf{(\textsf{x})} \mid \mathsf{Sync}
  \end{array}
 \]
 }
@@ -1152,8 +1151,7 @@ a &::= & \mathsf{skip} \mid \mathsf{x.f = y} \mid \mathsf{y=x} \mid \mathsf{y =x
 \newcommand{\grammar}{
 \[
 \begin{array}{rclcl}
-a &::= & \mathsf{skip} \mid \mathsf{x.f = y} \mid \mathsf{y=x} \mid \mathsf{y =x.f}  \mid \mathsf{y =new} \mid  \mathsf{Free}\mathsf{(\textsf{x})} \mid \mathsf{Sync} \\
-                  & & \mathsf{RCURead} \; \mathsf{x.f} \; \mathsf{as} \; \mathsf{y} \; \in \; \{ \bar{s} \} \mid \mathsf{RCUWrite} \; \mathsf{x.f} \; \mathsf{as} \; \mathsf{y} \; \in \; \{ \bar{s} \} 
+\alpha &::= & \mathsf{skip} \mid \mathsf{x.f = y} \mid \mathsf{y=x} \mid \mathsf{y =x.f}  \mid \mathsf{y =new} \mid  \mathsf{Free}\mathsf{(\textsf{x})} \mid \mathsf{Sync}                   
  \end{array}
 \]
 }

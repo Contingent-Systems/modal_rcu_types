@@ -35,55 +35,55 @@ z \notin  \textsf{FV}(\Gamma)
 \Gamma \vdash \textsf{RCURead}\, x.f \textsf{ as }y\textsf{ in } \{ \bar{s} \}
 }
 \and
-\fbox{$\Gamma \vdash_{M,R} \bar{s} \dashv \Gamma'$} \and
+\fbox{$\Gamma \vdash_{M,R} C \dashv \Gamma'$} \and
 \inferrule[\scriptsize(T-Loop1)]
 {
 \Gamma(x) = \textsf{bool} \and
-\Gamma \vdash \bar{s} \dashv \Gamma 
+\Gamma \vdash C \dashv \Gamma 
 }
 {
-\Gamma \vdash \textsf{while}(x)\{\bar{s}\} \dashv  \Gamma
+\Gamma \vdash \textsf{while}(x)\{C\} \dashv  \Gamma
 }
 \and
 \inferrule[\scriptsize(T-Branch2)]
 {
 \Gamma(x)= \textsf{bool} \\
- \Gamma \vdash \bar{s}_1 \dashv\Gamma' \and \Gamma \vdash \bar{s}_2 \dashv \Gamma'
+ \Gamma \vdash C_1 \dashv\Gamma' \and \Gamma \vdash C_2 \dashv \Gamma'
 }
 {
-\Gamma \vdash \textsf{if}(x) \textsf{ then } \bar{s}_1  \textsf{ else } \bar{s}_2 \dashv \Gamma'
+\Gamma \vdash \textsf{if}(x) \textsf{ then } C_1  \textsf{ else } C_2 \dashv \Gamma'
 }
 \and
 \inferrule[\scriptsize(T-Seq)]
 {
-\Gamma_1 \vdash \bar{s_1} \dashv   \Gamma_2  \qquad   \Gamma_2 \vdash_{M,R} \bar{s_2} \dashv   \Gamma_3
+\Gamma_1 \vdash C_1 \dashv   \Gamma_2  \qquad   \Gamma_2 \vdash_{M,R} C_2 \dashv   \Gamma_3
 }
 {
-\Gamma_1  \vdash_{M,R} \bar{s_1} \; ; \; \bar{s_2} \dashv  \Gamma_3
+\Gamma_1  \vdash_{M,R} C_1 \; ; \; C_2 \dashv  \Gamma_3
 }
 \and
 \inferrule[\scriptsize(T-Par)]
 {
- \Gamma_1 \vdash_{R} \bar{s_1} \dashv   \Gamma'_1  \qquad   \Gamma_2 \vdash_{M,R} \bar{s_2} \dashv   \Gamma'_2
+ \Gamma_1 \vdash_{R} C_1 \dashv   \Gamma'_1  \qquad   \Gamma_2 \vdash_{M,R} C_2 \dashv   \Gamma'_2
 }
 {
- \Gamma_1, \; \Gamma_2  \vdash \bar{s_1} || \bar{s_2} \dashv  \Gamma'_1 \; , \Gamma'_2
+ \Gamma_1, \; \Gamma_2  \vdash C_1 || C_2 \dashv  \Gamma'_1 \; , \Gamma'_2
 }
 \and
 \inferrule[\scriptsize(T-Exchange)]
 {
- \Gamma, \, y:T' , \, x:T, \, \Gamma' \vdash \bar{s} \dashv   \Gamma''
+ \Gamma, \, y:T' , \, x:T, \, \Gamma' \vdash C \dashv   \Gamma''
 }
 {
-\Gamma, \, x:T , \, y:T' , \, \Gamma' \vdash \bar{s} \dashv   \Gamma''
+\Gamma, \, x:T , \, y:T' , \, \Gamma' \vdash C \dashv   \Gamma''
 }
 \and
 \inferrule[\scriptsize(T-Conseq)]
 {
- \Gamma \subt \Gamma'  \and \Gamma' \vdash \bar{s} \dashv \Gamma'' \and \Gamma'' \subt \Gamma'''
+ \Gamma \subt \Gamma'  \and \Gamma' \vdash C \dashv \Gamma'' \and \Gamma'' \subt \Gamma'''
 }
 {
- \Gamma \vdash \bar{s} \dashv \Gamma'''
+ \Gamma \vdash C \dashv \Gamma'''
 }
 \and
 \inferrule[\scriptsize(T-Skip)]

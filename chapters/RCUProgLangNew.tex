@@ -20,7 +20,7 @@ In our system, we presume all objects contain all fields, but the number of fiel
 \label{subsection:rcu-typing}
 Section \ref{subsection:rcu-typing} introduces \textsf{RCU} types and the need for subtyping. Section \ref{subsection:type-action}, shows how types describe program states, through code for Figure \ref{fig:rculist}'s list-based bag example. Section \ref{subsection:type-rules} introduces the type system itself.
 
-\subsubsection{\textsf{RCU} Types}
+\mypar{\textsf{RCU} Types}
 \label{subsection:typwrt}
 There are six types used in \textsf{Write} critical sections
 
@@ -28,7 +28,7 @@ There are six types used in \textsf{Write} critical sections
 \tau ::=  \textsf{rcuItr}\;\rho\;\N \mid \textsf{rcuFresh}\;\N  \mid \textsf{unlinked} \mid \textsf{undef} \mid \textsf{freeable}
 \mid \textsf{rcuRoot}\]
 
-\textit{\textbf{rcuItr}} is the type given to references pointing into a shared RCU data structure. A \textsf{rcuItr} type can be used in either a write region or a read region (without the additional components). It indicates both that the reference points into the shared \textsf{RCU} data structure and that the heap location referenced by \textsf{rcuItr} reference is reachable by following the path $\rho$ from the root. A component $\N$ is a set of field mappings taking the field name to local variable names. Field maps are extended when the referent's fields are read.
+\paragraph{rcuItr} is the type given to references pointing into a shared RCU data structure. A \textsf{rcuItr} type can be used in either a write region or a read region (without the additional components). It indicates both that the reference points into the shared \textsf{RCU} data structure and that the heap location referenced by \textsf{rcuItr} reference is reachable by following the path $\rho$ from the root. A component $\N$ is a set of field mappings taking the field name to local variable names. Field maps are extended when the referent's fields are read.
 The field map and path components track reachability from the root, and local reachability between nodes.  These are used to ensure the structure remains acyclic, and for the type system to recognize exactly when unlinking can occur.
  %The field map and path components are important for keeping track of heap locations through \textit{reached-by} and \textit{points-to} relations so that effects of mutations using references in \textsf{rcuItr} type are \textit{localized}.
 %In general, we utilize path information to ensure that we preserve well shaped heap for the data structures, e.g. acyclicity. In conjuction with the path component, we employ the field mappings to assist in checking whether proper linking/mapping exists between the related nodes shown by references when unlinking occurs.
@@ -38,19 +38,19 @@ Read-side critical sections use \textsf{rcuItr} without path or field map compon
 The read-side rules essentially only ensure the reader performs no writes, so
 we show all type rules related to \textsf{Read} critical section in \ref{fig:tssr} Appendix \ref{appendix:readtypes} together with the other standard rules (\textsc{T-Exchange}, \textsc{T-Par}, \textsc{T-Seq}, \textsc{T-Conseq} and \textsc{T-Skip}).
 
-\textit{\textbf{unlinked}} is the type given to references to unlinked heap locations --- objects previously part of the structure, but now unreachable via the heap. A heap location referenced by an unlinked reference may still be accessed by reader threads, which may have aquired their own references before the node became unreachable.  Newly-arrived readers, however, will be unable to gain access to these referents.
+\paragraph{unlinked} is the type given to references to unlinked heap locations --- objects previously part of the structure, but now unreachable via the heap. A heap location referenced by an unlinked reference may still be accessed by reader threads, which may have aquired their own references before the node became unreachable.  Newly-arrived readers, however, will be unable to gain access to these referents.
 
-\textit{\textbf{freeable}} is the type given to references pointing at unlinked heap location which is safe to reclaim because it is known that no concurrent readers hold references to it.
+\paragraph{freeable} is the type given to references pointing at unlinked heap location which is safe to reclaim because it is known that no concurrent readers hold references to it.
 Unlinked references become freeable after a writer has waited for a full grace period.
 
-\textit{\textbf{undef}} is the type given to references where the content of the referenced location is inaccessible. A freeable object becomes undefined after it is reclaimed.
+\paragraph{undef} is the type given to references where the content of the referenced location is inaccessible. A freeable object becomes undefined after it is reclaimed.
 
-\textit{\textbf{rcuFresh}} is the type given to references to freshly allocated heap locations. Similar to \textsf{rcuItr} type, it has field mappings set $\N$. We set the field mappings in the set of an existsing \textsf{rcuFresh} reference to be the same as field mappings in the set of \textsf{rcuItr} reference when we replace the heap referenced by \textsf{rcuItr} with the heap referenced by \textsf{rcuFresh} for memory safe replacement.
+\paragraph{rcuFresh} is the type given to references to freshly allocated heap locations. Similar to \textsf{rcuItr} type, it has field mappings set $\N$. We set the field mappings in the set of an existsing \textsf{rcuFresh} reference to be the same as field mappings in the set of \textsf{rcuItr} reference when we replace the heap referenced by \textsf{rcuItr} with the heap referenced by \textsf{rcuFresh} for memory safe replacement.
 
-\textit{\textbf{rcuRoot}} is the type given to the fixed reference to the root of the RCU data structure.  It may not be overwritten.
+\paragraph{rcuRoot} is the type given to the fixed reference to the root of the RCU data structure.  It may not be overwritten.
 %An undefined reference can be loaded with a value -- it becomes \textsf{rcuItr} -- once we read the global unique root to it.
 
-\subsubsection{Subtyping}
+\mypar{Subtyping}
 %%%%%%%%%%%%%%%%%%%%%%%%SUB TYPING JUDGEMENTS%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \begin{figure}[!t]\scriptsize
 \begin{mathpar}
@@ -167,37 +167,37 @@ The final judgment $\vdash\Gamma\prec:\Gamma'$ extends subtyping to all assumpti
 
 \begin{figure}[!t]\scriptsize
 \begin{mathpar}
-\fbox{$\Gamma \vdash_{M} \bar{s} \dashv \Gamma'$} \;\;
+\fbox{$\Gamma \vdash_{M} C \dashv \Gamma'$} \;\;
 \inferrule*[left=\scriptsize(T-Branch1)]
 {
- \Gamma\, ,x:\textsf{rcuItr}\,\rho \, \N([f_1 \rightharpoonup  z]) \vdash \bar{s}_1 \dashv\Gamma_4 \and
-  \Gamma\, ,x:\textsf{rcuItr}\, \rho \, \N([f_2 \rightharpoonup z]) \vdash \bar{s}_2 \dashv \Gamma_4
+ \Gamma\, ,x:\textsf{rcuItr}\,\rho \, \N([f_1 \rightharpoonup  z]) \vdash C_1 \dashv\Gamma_4 \and
+  \Gamma\, ,x:\textsf{rcuItr}\, \rho \, \N([f_2 \rightharpoonup z]) \vdash C_2 \dashv \Gamma_4
 }
 {
-\Gamma\, ,x:\textsf{rcuItr}\, \rho \, \N([f_1\mid f_2 \rightharpoonup z]) \vdash \textsf{if}(x.f_1==z)  \textsf{ then } \bar{s}_1 \textsf{ else } \bar{s}_2 \dashv \Gamma_4
+\Gamma\, ,x:\textsf{rcuItr}\, \rho \, \N([f_1\mid f_2 \rightharpoonup z]) \vdash \textsf{if}(x.f_1==z)  \textsf{ then } C_1 \textsf{ else } C_2 \dashv \Gamma_4
 }
 \and
 \inferrule*[left=\scriptsize(T-Branch3)]
 {
- \Gamma,\,x:\textsf{rcuItr} \, \rho \, \N([f\rightharpoonup y \setminus \textsf{null}]) \vdash \bar{s}_1 \dashv \Gamma' \and \Gamma,\,x:\textsf{rcuItr} \, \rho \, \N([f\rightharpoonup y]) \vdash \bar{s}_2 \dashv \Gamma'
+ \Gamma,\,x:\textsf{rcuItr} \, \rho \, \N([f\rightharpoonup y \setminus \textsf{null}]) \vdash C_1 \dashv \Gamma' \and \Gamma,\,x:\textsf{rcuItr} \, \rho \, \N([f\rightharpoonup y]) \vdash C_2 \dashv \Gamma'
 }
 {
-\Gamma,\,x:\textsf{rcuItr} \, \rho \, \N([f\rightharpoonup y]) \vdash \textsf{if}(x.f == \textsf{null}) \textsf{ then } \bar{s}_1  \textsf{ else } \bar{s}_2 \dashv \Gamma'
+\Gamma,\,x:\textsf{rcuItr} \, \rho \, \N([f\rightharpoonup y]) \vdash \textsf{if}(x.f == \textsf{null}) \textsf{ then } C_1  \textsf{ else } C_2 \dashv \Gamma'
 }
 \and
 \inferrule[\scriptsize(T-Loop2)]
 {
-\Gamma,\, x:\textsf{rcuItr}\;\rho \; \N([f\rightharpoonup \_]) \vdash \bar{s} \dashv \Gamma, x:\textsf{rcuItr}\;\rho' \; \N([f\rightharpoonup \_])
+\Gamma,\, x:\textsf{rcuItr}\;\rho \; \N([f\rightharpoonup \_]) \vdash C \dashv \Gamma, x:\textsf{rcuItr}\;\rho' \; \N([f\rightharpoonup \_])
 }
 {
-\Gamma,\, x:\textsf{rcuItr}\;\rho \; \N([f\rightharpoonup \_]) \vdash \textsf{while}(x.f \neq \textsf{null})\{\bar{s}\} \dashv   x:\textsf{rcuItr}\;\rho' \; \N([f\rightharpoonup \textsf{null}]) ,\,  \Gamma
+\Gamma,\, x:\textsf{rcuItr}\;\rho \; \N([f\rightharpoonup \_]) \vdash \textsf{while}(x.f \neq \textsf{null})\{C\} \dashv   x:\textsf{rcuItr}\;\rho' \; \N([f\rightharpoonup \textsf{null}]) ,\,  \Gamma
 }
 \and
 \inferrule[\scriptsize(T-ReIndex)]
 {
 }
 {
-\Gamma \vdash \bar{s}_{k} \dashv  \Gamma[\rho.f^{k}/\rho.f^{k}.f]
+\Gamma \vdash C_{k} \dashv  \Gamma[\rho.f^{k}/\rho.f^{k}.f]
 }
 \end{mathpar}
 \vspace{-2em}
@@ -365,53 +365,53 @@ z:\textsf{rcuItr} \; \rho.f \; \_ \quad \N(f)=z \quad f \notin dom (\N')
 \inferrule[\scriptsize(T-UnlinkH)]
 {
 %\textsf{FV}(\Gamma) \cap \{x,z,r\} = \emptyset  \\ 
-\rho.f_1=\rho' \\
-\rho'.f_2=\rho'' \\
-\forall_{f\in dom(\N')} \ldotp f\neq f_2 \implies (\N'(f) = \textsf{null})
+\rho.f_1=\rho_1 \\
+\rho_1.f_2=\rho_2 \\
+\forall_{f\in dom(\N_1)} \ldotp f\neq f_2 \implies (\N_1(f) = \textsf{null})
 \\
 \N(f_1)=z\\
-\N'(f_2)=r\\
+\N_1(f_2)=r\\
 \begin{array}{l}
-\forall_{n\in \Gamma,m,\N''', p''',f}\ldotp n:\textsf{rcuItr}\,\rho'''\,\N'''([f\rightharpoonup m]) \implies %\arcr
+\forall_{n\in \Gamma,m,\N_3, p_3,f}\ldotp n:\textsf{rcuItr}\,\rho_3\,\N_3([f\rightharpoonup m]) \implies %\arcr
 \left\{\begin{array}{l}
-((\neg\mathsf{MayAlias}(\rho''',\{\rho,\rho',\rho''\})  ) \land (m\not\in\{z,r\} ) ) \arcr
-\land (\forall_{\rho''''\neq \epsilon} \ldotp \neg\mathsf{MayAlias}(\rho''', \rho''.\rho'''') )
+((\neg\mathsf{MayAlias}(\rho_3,\{\rho,\rho_1,\rho_2\})  ) \land (m\not\in\{z,r\} ) ) \arcr
+\land (\forall_{\rho_4\neq \epsilon} \ldotp \neg\mathsf{MayAlias}(\rho_3, \rho_2.\rho_4) )
 \end{array}\right.
 \end{array}
 }
 {
 \Gamma,\,x:\textsf{rcuItr}\, \rho \, \N \, ,
-z:\textsf{rcuItr}\, \rho' \, \N' \, ,  r:\textsf{rcuItr} \, \rho'' \, \N''\, 
+z:\textsf{rcuItr}\, \rho_1 \, \N_1 \, ,  r:\textsf{rcuItr} \, \rho_2 \, \N_2\, 
 \vdash x.f_1=r \dashv
 z:\unlinked\, ,
 x:\textsf{rcuItr} \, \rho \, \N([f_1\rightharpoonup  r])\, ,
-r:\textsf{rcuItr} \, \rho' \, \N'',\, \Gamma
+r:\textsf{rcuItr} \, \rho_1 \, \N_2,\, \Gamma
 }
 \and
 \inferrule[\scriptsize(T-LinkF)]
 {
-\rho.f  = \rho'  \\ 
-\N' = \N'' \\
+\rho.f  = \rho_1  \\ 
+\N_1 = \N_2 \\
 \textsf{FV}(\Gamma) \cap \{p,o,n\}  =\emptyset \\
 \N(f)=o\\
-\forall_{x \in \Gamma, \N''', \rho'',f',y} \ldotp (x:\textsf{rcuItr}\,\rho''\,\N'''([f'\rightharpoonup y])) \implies (\neg\mathsf{MayAlias}(\rho'',\{\rho,\rho'\}) \land (y\neq o  ))
+\forall_{x \in \Gamma, \N_3, \rho_2,f_1,y} \ldotp (x:\textsf{rcuItr}\,\rho_2\,\N_3([f_1 \rightharpoonup y])) \implies (\neg\mathsf{MayAlias}(\rho_2,\{\rho,\rho_1\}) \land (y\neq o  ))
 }
 {
 \Gamma,\,
  p:\textsf{rcuItr}\, \rho \, \N \, ,
-  o:\textsf{rcuItr}\, \rho' \, \N' \, , n:\textsf{rcuFresh} \, \N''
+  o:\textsf{rcuItr}\, \rho_1 \, \N_1 \, , n:\textsf{rcuFresh} \, \N_2
   \vdash p.f = n \dashv
   p:\textsf{rcuItr}\, \rho \, \N([f \rightharpoonup  n]) \, ,
-  n:\textsf{rcuItr}\, \rho' \, \N'' \,
+  n:\textsf{rcuItr}\, \rho_1 \, \N_2 \,
   o:\unlinked\, ,  \Gamma
 }
 \and
 \inferrule*[left=\scriptsize(ToRCUWrite)]
 {
- \Gamma\, , y : \textsf{rcuItr}\, \_ \vdash_M \bar{s} \dashv \Gamma' \;\; \textsf{FType}(f)=\textsf{RCU} \;\;  \textsf{NoFresh}(\Gamma') \;\; \textsf{NoUnlinked}(\Gamma')
+ \Gamma\, , y : \textsf{rcuItr}\, \_ \vdash_M C \dashv \Gamma' \;\; \textsf{FType}(f)=\textsf{RCU} \;\;  \textsf{NoFresh}(\Gamma') \;\; \textsf{NoUnlinked}(\Gamma')  \;\; \textsf{Freeable}(\Gamma')
 }
 {
-\Gamma \vdash \textsf{RCUWrite}\, x.f \textsf{ as }y\textsf{ in } \{ \bar{s} \}
+\Gamma \vdash \textsf{RCUWrite}\, x.f \textsf{ as }y\textsf{ in } \{ C \}
 }
 \end{mathpar}
 \caption{Type Rules for \textsf{Write} side critical section}
