@@ -2321,32 +2321,34 @@ Showing \ref{sl7p1} requires showing
 
 By using \ref{sl7a5} and \ref{sl7a6}(trivial to show as "," and "*" for denotation of type contexts are both semantically equivalent to $\cap$) as antecedents to Views Logic's consequence rule, we can conclude \ref{sl7p1}.
 \end{case}
-\begin{case}-\textbf{M} where C has form $\textsf{RCUWrite}\, x.f \text{ as } y \text{ in } \bar{s}$
+\begin{case}-\textbf{M} where C has form $\textsf{RCUWrite}\, x.f \text{ as } y \text{ in } C$
   which desugars into
-  \[\textsf{WriteBegin}; x.f:= y ; \bar{s} ;\textsf{WriteEnd}\]
+  \[\textsf{WriteBegin}; x.f:= y ; C ;\textsf{WriteEnd}\]
 
   We assume from the rule \textsc{ToRCUWrite}
  \begin{gather}\label{dsuga1}
-       \Gamma, y:\textsf{rcuItr}\;\_ \vdash_{M} \bar{s} \dashv \Gamma' \\
+       \Gamma, y:\textsf{rcuItr}\;\_ \vdash_{M} C \dashv \Gamma' \\
        \label{dsuga2}
        \textsf{FType}(f) = \textsf{RCU} \\
        \label{dsuga3}
        \textsf{NoFresh}(\Gamma') \\
+       \label{dsugaes}
+       \textsf{NoFreeable}(\Gamma')\\
        \label{dsuga4}
        \textsf{NoUnlinked}(\Gamma')\\
         \label{dsuga5}
-       \{\llbracket \Gamma\,, y:\textsf{rcuItr}\;\_ \rrbracket_{M,tid} \}  \bar{s}  \{\llbracket \Gamma' \rrbracket_{M,tid}\}
+       \{\llbracket \Gamma\,, y:\textsf{rcuItr}\;\_ \rrbracket_{M,tid} \}  C \{\llbracket \Gamma' \rrbracket_{M,tid}\}
       \end{gather}
       
     Our goal is to prove
     \begin{gather}\label{dsugp1}
       \begin{array}{l}
       \{\llbracket \Gamma \rrbracket_{M,tid} \} 
-      \textsf{WriteBegin}; x.f:= y  ;\textsf{WriteEnd}
+      \textsf{WriteBegin}; C ;\textsf{WriteEnd}
       \{\llbracket \Gamma' \rrbracket_{M,tid} \}
       \end{array}
     \end{gather}
-   Proof starts with application of the sequence rule. Assumptions \ref{dsuga3}-\ref{dsuga4} guarantee that there exists no change in the state(no heap update) due to any action in the body $\bar{s}$ which includes $x.f:=y$. \ref{dsugp1} follows from assumptions \ref{dsuga1}-\ref{dsuga5} trivially.
+Any case of $C$ does not change the state(no heap update) by assumptions \ref{dsuga3}-\ref{dsuga4} therefore \ref{dsugp1} follows from assumptions \ref{dsuga1}-\ref{dsuga5} trivially.
 \end{case}
 \end{proof}
 %  \end{itemize}

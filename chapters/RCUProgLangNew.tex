@@ -406,9 +406,10 @@ r:\textsf{rcuItr} \, \rho_1 \, \N_2,\, \Gamma
   o:\unlinked\, ,  \Gamma
 }
 \and
+\fbox{$\Gamma \vdash_{M} C \dashv \Gamma'$} \;\;
 \inferrule*[left=\scriptsize(ToRCUWrite)]
 {
- \Gamma\, , y : \textsf{rcuItr}\, \_ \vdash_M C \dashv \Gamma' \;\; \textsf{FType}(f)=\textsf{RCU} \;\;  \textsf{NoFresh}(\Gamma') \;\; \textsf{NoUnlinked}(\Gamma')  \;\; \textsf{Freeable}(\Gamma')
+ \Gamma\, , y : \textsf{rcuItr}\, \_ \vdash_M C \dashv \Gamma' \;\; \textsf{FType}(f)=\textsf{RCU} \;\;  \textsf{NoFresh}(\Gamma') \;\; \textsf{NoUnlinked}(\Gamma')  \;\; \textsf{NoFreeable}(\Gamma')
 }
 {
 \Gamma \vdash \textsf{RCUWrite}\, x.f \textsf{ as }y\textsf{ in } \{ C \}
