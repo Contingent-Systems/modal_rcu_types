@@ -15,7 +15,6 @@ We also demonstrate that the type system is not only sound, but useful:
 we show how it types Figure \ref{fig:rculist}'s list-based bag implementation~\cite{McKenney2015SomeEO}.
 We also give type checked fragments of a binary search tree to motivate advanced features of the type system; the full typing derivation can be found in Appendix \ref{appendix:bst_del}. The BST requires type narrowing operations that refine a type based on dynamic checks (e.g., determining which of several fields links to a node).
 In our system, we presume all objects contain all fields, but the number of fields is finite (and in our examples, small). This avoids additional overhead from tracking well-established aspects of the type system --- class and field types and presence, for example --- and focus on checking correct use of RCU primitives.  Essentially, we assume the code our type system applies to is already type-correct for a system like C or Java's type system.
-
 \subsection{\textsf{RCU} Type System for \textsf{Write} Critical Section}
 \label{subsection:rcu-typing}
 Section \ref{subsection:rcu-typing} introduces \textsf{RCU} types and the need for subtyping. Section \ref{subsection:type-action}, shows how types describe program states, through code for Figure \ref{fig:rculist}'s list-based bag example. Section \ref{subsection:type-rules} introduces the type system itself.
@@ -26,7 +25,6 @@ There are six types used in \textsf{Write} critical sections
 \[
 \tau ::=  \textsf{rcuItr}\;\rho\;\N \mid \textsf{rcuFresh}\;\N  \mid \textsf{unlinked} \mid \textsf{undef} \mid \textsf{freeable}
 \mid \textsf{rcuRoot}\]
-
 \paragraph{rcuItr} is the type given to references pointing into a shared RCU data structure. A \textsf{rcuItr} type can be used in either a write region or a read region (without the additional components). It indicates both that the reference points into the shared \textsf{RCU} data structure and that the heap location referenced by \textsf{rcuItr} reference is reachable by following the path $\rho$ from the root. A component $\N$ is a set of field mappings taking the field name to local variable names. Field maps are extended when the referent's fields are read.
 The field map and path components track reachability from the root, and local reachability between nodes.  These are used to ensure the structure remains acyclic, and for the type system to recognize exactly when unlinking can occur.
  %The field map and path components are important for keeping track of heap locations through \textit{reached-by} and \textit{points-to} relations so that effects of mutations using references in \textsf{rcuItr} type are \textit{localized}.
@@ -36,16 +34,11 @@ Read-side critical sections use \textsf{rcuItr} without path or field map compon
 %Similar to the ones in \textsf{Write} critical section, they  point into a shared RCU data structure. 
 The read-side rules essentially only ensure the reader performs no writes, so
 we show all type rules related to \textsf{Read} critical section in \ref{fig:tssr} Appendix \ref{appendix:readtypes} together with the other standard rules (\textsc{T-Exchange}, \textsc{T-Par}, \textsc{T-Seq}, \textsc{T-Conseq} and \textsc{T-Skip}).
-
 \paragraph{unlinked} is the type given to references to unlinked heap locations --- objects previously part of the structure, but now unreachable via the heap. A heap location referenced by an unlinked reference may still be accessed by reader threads, which may have aquired their own references before the node became unreachable.  Newly-arrived readers, however, will be unable to gain access to these referents.
-
 \paragraph{freeable} is the type given to references pointing at unlinked heap location which is safe to reclaim because it is known that no concurrent readers hold references to it.
 Unlinked references become freeable after a writer has waited for a full grace period.
-
 \paragraph{undef} is the type given to references where the content of the referenced location is inaccessible. A freeable object becomes undefined after it is reclaimed.
-
 \paragraph{rcuFresh} is the type given to references to freshly allocated heap locations. Similar to \textsf{rcuItr} type, it has field mappings set $\N$. We set the field mappings in the set of an existsing \textsf{rcuFresh} reference to be the same as field mappings in the set of \textsf{rcuItr} reference when we replace the heap referenced by \textsf{rcuItr} with the heap referenced by \textsf{rcuFresh} for memory safe replacement.
-
 \paragraph{rcuRoot} is the type given to the fixed reference to the root of the RCU data structure.  It may not be overwritten.
 %An undefined reference can be loaded with a value -- it becomes \textsf{rcuItr} -- once we read the global unique root to it.
 
@@ -225,7 +218,6 @@ if(parent.Left == current){
   $\assert{current:\mathsf{rcuItr}\; Right.Right \;\{\}, \;\; parent:\mathsf{rcuItr}\;  Right \;\{Right\mapsto current\}}$
 }$\assert{current:\mathsf{rcuItr}\; Left|Right.Left|Right \;\{\}, \;\; parent:\mathsf{rcuItr}\;  Left|Right \;\{Left|Right\mapsto current\}}$
 \end{lstlisting}
-
 Another type of control flow join is handling loop invariants --- where paths entering the loop meet the back-edge from the end of a loop back to the start for repetition.
 Because our types include paths describing how they are reachable from the root, some abstraction is required to give loop invariants that work for any number of iterations --- in a loop traversing a linked list, the iterator pointer would na\"ively have different paths from the root on each iteration, so the exact path is not loop invariant.  However, the paths explored by a loop are regular, so we can abstract the paths by permitting (implicitly) existentially quantified indexes on path fragments, which express the existence of \emph{some} path, without saying \emph{which} path.  The use of an explicit abstract repetition allows the type system to preserve the fact that different references have common path prefixes, even after a loop.
 
