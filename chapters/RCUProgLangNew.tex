@@ -628,7 +628,7 @@ Our type rule for ensuring safe linking (\textsc{T-LinkF}) prevents path aliasin
 There is also another rule, \textsc{T-LinkF-Null}, not shown in Figure \ref{fig:tss}, which handles the case where the fields of the fresh node are not object references, but instead all contain null (e.g., for appending to the end of a linked list or inserting a leaf node in a tree).
 
 \mypar{Entering a Critical Section}
-(\textit{\textbf{Referencing inside \textsf{RCU} Blocks} }) - 
+(\textit{\textbf{Referencing inside \textsf{RCU} Blocks} })
 There are two rules(\textsc{ToRCURead} in Figure \ref{fig:tssr} Appendix \ref{appendix:readtypes} and \textsc{ToRCUWrite} in Figure \ref{fig:tss}) for moving to \textsf{RCU} typing: one for entering a write region, and one for a read region.
 \section{Evaluation}
 \label{sec:eval}

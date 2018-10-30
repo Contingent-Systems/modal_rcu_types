@@ -8,7 +8,7 @@ We prove type soundness by embedding the type system into an abstract concurrent
     \item Provide runtime states and semantics for the atomic actions we care about in the language.  These are exactly the semantics from Figure \ref{fig:operationalsemrcu} in Section \ref{sec:semantics}
     \item Define a denotational interpretation $\db{-}$ of the types(Figure \ref{fig:denotingtypeenviroment} Section \ref{sec:proof}) in terms of an instrumented execution state --- a runtime state (Section \ref{sec:semantics}) with additional bookkeeping to simplify proofs.  
     The denotation encodes invariants specific to each type, like the fact that \textsf{unlinked} references are unreachable from the heap, or that \textsf{freeable} references are unreachable from the heap as well as other threads' local variables.
-    The instrumented execution states are also given additional global invariants(Appendix \ref{sec:memaxioms}) the type system is intended to maintain, such as acyclicity of the structure.
+    The instrumented execution states are also given additional \textit{global invariants}(Appendix \ref{sec:memaxioms}) the type system is intended to maintain, such as acyclicity of the structure.
     \item Prove a lemma --- called \emph{Axiom Soundness} --- that the type rules in Section \ref{subsection:type-rules} are consistent.  Specifically, that given a state in the denotation of the pre-type-environment of a primitive type rule, the operational semantics produce a state in the denotation of the post-type-environment.  This includes preservation of global invariants.
     \item Give a desugaring of non-trivial control constructs into the simpler non-deterministic versions provided by Views.
 \end{enumerate}
@@ -55,12 +55,9 @@ We are interested in \textsf{RCU} typed of heap domain which we define as:
 
 A thread's (or scope's) \emph{view} of memory is a subset of the instrumented(logical states), which satisfy certain \textsf{WellFormed}ness criteria relating the physical state and the additional meta-data ($O$, $U$, $T$ and $F$)
 \[\mathcal{M} \stackrel{def}{=} \{ m \in (\textsf{MState} \times O \times U \times T \times F) \mid  \textsf{WellFormed}(m) \} \]
-
 We do our reasoning for soundness over instrumented states and define an erasure relation
 \[\lfloor - \rfloor :\mathsf{MState} \implies \textsf{LState}\]
 that projects instrumented states to the common components with \textsf{MState}.
-
-\textsf{WellFormed}ness imposes restrictions over the representation of the \textsf{RCU} structure in memory and type of threads for actions defined in operational semantics. For instance, \emph{an unlinked heap location cannot be reached from a root of an \textsf{RCU} data structure}. We define well-formedness as conjuction of memory axioms defined in Appendix Section \ref{sec:memaxioms}.
 \begin{figure}[!t]\scriptsize
 \[
 \begin{array}{l@{\;\;=\;\;}l}
@@ -341,17 +338,17 @@ Because the intersection of the environment denotation with the denotations for 
 %     \llbracket\Gamma\rrbracket_\mathit{t}\cap\llbracket{M}\rrbracket_t\vdash \llbracket \alpha\rrbracket_\mathit{t}\dashv\llbracket\Gamma'\rrbracket_\mathit{t}\cap\llbracket{M}\rrbracket_t
 % \]
 $\alpha$ ranges over any atomic command, such as a field access or variable assignment.
-
 %%%A number of rules in the formal system (Section \todo{ref}) are present in \emph{both} systems, and we would like to reuse their proofs.  To support this, we prove the following lemma, which permits us to ignore which critical section such rules are considered in, and lift that ``ignorant'' proof to either critical section:
-Denoting a type environment $\llbracket\Gamma\rrbracket_{\mathsf{M},tid}$, unfolding the definition one step, is merely $\llbracket\Gamma\rrbracket_{tid}\cap\llbracket\mathsf{M}\rrbracket_{tid}$.  In the type system for write-side critical sections, this introduces extra boilerplate reasoning to prove that each action preserves lock ownership.  To simplify later cases of the proof, we first prove this convenient lemma.
-\begin{lemma}[Write-Side Critical Section Lifting]
-\label{lem:crit-lifting}
-For each $\alpha$ whose semantics does not affect the write lock, if
-\[\forall m\ldotp   \llbracket \alpha \rrbracket  (\lfloor \llbracket \Gamma_{1} \rrbracket_{tid}  * \{m\} \rfloor )\subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{tid} * \mathcal{R}(\{m\}) \rfloor\]
-then
-%\[\forall m\ldotp   \llbracket \alpha \rrbracket  (\lfloor \llbracket \Gamma_{1} \rrbracket_{\textsf{R},tid}  * \{m\} \rfloor )\subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{\textsf{R},tid} * \mathcal{R}(\{m\}) \rfloor\]
-\[\forall m\ldotp   \llbracket \alpha \rrbracket  (\lfloor \llbracket \Gamma_{1} \rrbracket_{\textsf{M},tid}  * \{m\} \rfloor )\subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{\textsf{M},tid} * \mathcal{R}(\{m\}) \rfloor\]
-\end{lemma}
-\begin{proof}
-In Appendix \ref{sec:prooflemmas}.
-\end{proof}
+Denoting a type environment $\llbracket\Gamma\rrbracket_{\mathsf{M},tid}$, unfolding the definition one step, is merely $\llbracket\Gamma\rrbracket_{tid}\cap\llbracket\mathsf{M}\rrbracket_{tid}$.
+%n the type system for write-side critical sections, this introduces extra boilerplate reasoning to prove that each action preserves lock ownership.  To simplify later cases of the proof, we first prove this convenient lemma.
+%begin{lemma}[Write-Side Critical Section Lifting]
+%label{lem:crit-lifting}
+%or each $\alpha$ whose semantics does not affect the write lock, if
+%[\forall m\ldotp   \llbracket \alpha \rrbracket  (\lfloor \llbracket \Gamma_{1} \rrbracket_{tid}  * \{m\} \rfloor )\subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{tid} * \mathcal{R}(\{m\}) \rfloor\]
+%hen
+%%%\forall m\ldotp   \llbracket \alpha \rrbracket  (\lfloor \llbracket \Gamma_{1} \rrbracket_{\textsf{R},tid}  * \{m\} \rfloor )\subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{\textsf{R},tid} * \mathcal{R}(\{m\}) \rfloor\]
+%[\forall m\ldotp   \llbracket \alpha \rrbracket  (\lfloor \llbracket \Gamma_{1} \rrbracket_{\textsf{M},tid}  * \{m\} \rfloor )\subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{\textsf{M},tid} * \mathcal{R}(\{m\}) \rfloor\]
+%end{lemma}
+%begin{proof}
+%n Appendix \ref{sec:prooflemmas}.
+%end{proof}
