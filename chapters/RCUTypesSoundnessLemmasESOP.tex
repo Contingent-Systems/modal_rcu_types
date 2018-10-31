@@ -5,7 +5,7 @@
 To prove soundness we use the Views Framework~\cite{views}.
 The Views Framework takes a set of parameters satisfying some properties, and produces a soundness proof for a static reasoning system for a larger programming language.  Among other parameters, the most notable are the choice of machine state, semantics for \emph{atomic} actions (e.g., field writes, or \lstinline|WriteBegin|), and proofs that the reasoning (in our case, type rules) for the atomic actions are sound (in a way chosen by the framework).
 The other critical pieces are a choice for a partial \emph{view} of machine states --- usually an extended machine state with meta-information --- and a relation constraining how other parts of the program can interfere with a view (e.g., modifying a value in the heap, but not changing its type).
-Our type system will be related to the views by giving a denotation of type environments in terms of views, and then proving that for each atomic action shown in \ref{fig:operationalsemrcu} in Section \ref{sec:semantics} and type rule in Figures \ref{fig:tss} Section \ref{subsection:type-action} and \ref{fig:tssr} Appendix \ref{appendix:readtypes}, given a view in the denotation of the initial type environment of the rule, running the semantics for that action yields a local view in the denotation of the output type environment of the rule.  The following works through this in more detail. We define logical states, $\textsf{LState}$ to be
+Our type system will be related to the views by giving a denotation of type environments in terms of views, and then proving that for each atomic action shown in \ref{fig:operationalsemrcu} in Section \ref{sec:semantics} and type rule in Figures \ref{fig:tss} Section \ref{subsection:type-action} and \ref{fig:tssr} Appendix \ref{appendix:readtypes}, given a view in the denotation of the initial type environment of the rule, running the semantics for that action yields a local view in the denotation of the output type environment of the rule. The following works through this in more detail. We define logical states, $\textsf{LState}$ to be
 \begin{itemize}
 \item A machine state, $\sigma=(s,h,l,rt,R,B)$;
 \item An observation map, O, of type $ \textsf{Loc} \to \mathcal{P}(\textsf{obs})$
@@ -28,8 +28,6 @@ We do our reasoning for soundness over instrumented states and define an erasure
 \[\lfloor - \rfloor :\mathsf{MState} \implies \textsf{LState}\]
 
 that projects instrumented states to the common components with \textsf{MState}.
-
-Well-formedness imposes restrictions over the representation of the \textsf{RCU} structure in memory and type of threads for actions defined in operational semantics. For instance, \emph{an unlinked heap location cannot be reached from a root of an \textsf{RCU} data structure}. We define well-formedness as conjuction of memory axioms define in Section \ref{sec:memaxioms} Appendix \ref{sec:lemmas}.
 \begin{figure}\small
 \[
 \begin{array}{l@{\;\;=\;\;}l}
