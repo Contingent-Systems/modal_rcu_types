@@ -28,7 +28,7 @@ Here we summarize the important aspects of \textsf{WellFormed}ness conditions of
 
 \mypar{Memory-Barrier Guarantee} RCU write-side critical section has to guarantee that none of the updates to the memory cause invalid memory accesses. If a heap location is observed as \textsf{iterator} by the mutator thread then it must be observed as \textsf{iterator} by other threads(\textsf{Writer-Unlink} in Appendix \ref{sec:memaxioms}) and all of the heap locations reaching to the node starting from root can be observed as \textsf{iterator} as well(denotation $\llbracket \mathsf{rcuItr}\,\rho \,\N \rrbracket_{tid}$). Reader threads can only have one type of observation \textsf{iterator}(invariant \textsf{Readers-Iterator-Only} in Appendix \ref{sec:memaxioms}) for a heap location where this heap location can be updated by the mutator and reader threads referencing on this heap node become \textit{bounding-threads} for the reclamation of the heap location(denotation $\llbracket \mathsf{rcuItr} \rrbracket_{tid}$ and invariant \textsf{Readers-In-Free-List} in Appendix \ref{sec:memaxioms}). However, \textit{bounding-threads} are the only ones which can observe the \textsf{unlinked} heap location as \textsf{iterator}: new coming reader threads cannot access to the \textsf{unlinked} heap. There exists links to mutated heap nodes -- e.g. either \textsf{unlinked} or \textsf{freeable} -- only from the heap nodes that are already mutated(\textsf{Unlinked-Reachability} and \textsf{Free-List-Reachability} invariants). To sum up, every heap node accessible via traversal starting from the unique root must be valid and observed as \textsf{iterator} both by reader threads and the mutator thread.
 
-\mypar{RCU Primitives Guaranteed to Execute Unconditionally} Uncoditional execution of RCU Primitives are provided by definition of operational semantics of RCU primitives.
+\mypar{RCU Primitives Guaranteed to Execute Unconditionally} Uncoditional execution of RCU Primitives are provided by the definitions in operational semantics of RCU primitives.
 
 \mypar{Guaranteed Read-to-Write Upgrade} Our system provides a clear separation of \textit{traverse-and-update} and \textit{traverse-only} intentions for \textsf{RCU} programming through the type system together with the programming primitives -- e.g. \lstinline|ReadBegin|-\lstinline|ReadEnd| and \lstinline|WriteBegin|-\lstinline|WriteEnd|.
 
@@ -198,7 +198,7 @@ An important property of composition is that it preserves validity of logical st
 Any successful composition of two \textsf{WellFormed} logical states is \textsf{WellFormed}:\[\forall_{x,y,z}\ldotp \mathsf{WellFormed}(x) \implies \mathsf{WellFormed}(y) \implies x\bullet y = z \implies \mathsf{WellFormed(z)}\]
 \end{lemma}
 \begin{proof}
-In Appendix \ref{sec:prooflemmas}.
+In Appendix \ref{sec:prooflemmas} Lemma \ref{lem:wf-compositionap}.
   \end{proof}
 We define separation on elements of type contexts
 \begin{itemize}
@@ -220,11 +220,11 @@ Thread interference relation
 \[\mathcal{R} \subseteq \mathcal{M} \times \mathcal{M}\]  defines permissible interference on an instrumented state. The relation must distribute over composition:
 \[ \forall m_{1}, m_{2}, m\ldotp (m_{1} \bullet  m_{2})\mathcal{R}m \Longrightarrow \begin{array}{ll}  \exists  m'_{1} m'_{2} \ldotp m_{1} \mathcal{R} m'_{1} \land m_{2} \mathcal{R} m'_{2} \land  m \in m'_{1} \bullet m'_{2} \end{array}\]
 where $\mathcal{R}$ is transitive-reflexive closure of $\mathcal{R}_{0}$ shown at Figure \ref{fig:comp}. $\mathcal{R}_0$ (and therefore $\mathcal{R}$) also ``preserves'' validity:
-\begin{lemma}[Valid $\mathcal{R}_0$ Interference]
+\begin{lemma}[Valid $\mathcal{R}_0$ Interference]\label{lem:inter}
 For any $m$ and $m'$, if $\mathsf{WellFormed}(m)$ and $m\mathcal{R}_0m'$, then $\mathsf{WellFormed}(m')$.
 \end{lemma}
 \begin{proof}
-In Appendix \ref{sec:prooflemmas}.
+In Appendix \ref{sec:prooflemmas} Lemma \ref{lem:interap}.
 \end{proof}
 \begin{lemma}[Stable Environment Denotation-M]\label{lemma:stblw}
 For any \emph{closed} environment $\Gamma$ (i.e., $\forall x\in\mathsf{dom}(\Gamma)\ldotp, \mathsf{FV}(\Gamma(x))\subseteq\mathsf{dom}(\Gamma)$):
@@ -234,7 +234,7 @@ For any \emph{closed} environment $\Gamma$ (i.e., $\forall x\in\mathsf{dom}(\Gam
 Alternatively, we say that environment denotation is \emph{stable} (closed under $\mathcal{R}$).
 \end{lemma}
 \begin{proof}
-In Appendix \ref{sec:prooflemmas}.
+In Appendix \ref{sec:prooflemmas} Lemma \ref{lemma:stblwap}.
 \end{proof}
 \begin{lemma}[Stable Environment Denotation-R]
 For any \emph{closed} environment $\Gamma$ (i.e., $\forall x\in\mathsf{dom}(\Gamma)\ldotp, \mathsf{FV}(\Gamma(x))\subseteq\mathsf{dom}(\Gamma)$):
@@ -244,7 +244,7 @@ For any \emph{closed} environment $\Gamma$ (i.e., $\forall x\in\mathsf{dom}(\Gam
 Alternatively, we say that environment denotation is \emph{stable} (closed under $\mathcal{R}$).
 \end{lemma}
 \begin{proof}
-In Appendix \ref{sec:prooflemmas}.
+In Appendix \ref{sec:prooflemmas} Lemma \ref{lem:stblRap}.
 \end{proof}
 
 The Views Framework defines a program logic (Hoare logic) with judgments of the form $\{ p \} C \{ q \}$ for views p and q and commands $C$. Commands include atomic actions, and soundness of such judgments for atomic actions is a parameter to the framework. The framework itself provides for soundness of rules for sequencing, fork-join parallelism, and other general rules.
@@ -288,34 +288,36 @@ The framework also describes a useful concept called the view shift operator $\s
   \lfloor \llbracket \Gamma_{2} \rrbracket_{tid} * \mathcal{R}(\{m\}) \rfloor
   \]
 The use of $*$ validates the frame rule and makes this obligation akin to an interference-tolerant version of the small footprint property from traditional separation logics~\cite{Reynolds:2002:SLL:645683.664578,Calcagno:2007:LAA:1270399.1271718}.
-\begin{theorem}[Axiom Soundness]
+\begin{lemma}[Axiom of Soundness for Atoms]
   \label{lem:axmsoundness}
 For each axiom, $\Gamma_{1} \vdash_{\textsf{RMO}} \alpha \dashv \Gamma_{2}$, we must show
 \[
 \forall m\ldotp   \llbracket \alpha \rrbracket  (\lfloor \llbracket \Gamma_{1} \rrbracket_{tid}  * \{m\} \rfloor )\subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{tid} * \mathcal{R}(\{m\}) \rfloor
 \]
-\end{theorem}
+\end{lemma}
 \begin{proof}
-In Appendix \ref{sec:prooflemmas}.
+In Appendix \ref{sec:prooflemmas} Lemma \ref{lem:axmsoundnessap}
 \end{proof}
 
 Type soundness proceeds according to the requirements of the Views Framework, primarily embedding each type judgment into the Views logic:
-\begin{lemma}\label{lemma:embedr}
+\begin{lemma}[Views Embedding for Read-Side]
+  \label{lemma:embedr}
 \[  \forall\Gamma,C,\Gamma',\mathit{t}\ldotp\Gamma\vdash_R C\dashv \Gamma' \Rightarrow
 \llbracket\Gamma\rrbracket_\mathit{t}\cap\llbracket{R}\rrbracket_t\vdash \llbracket C\rrbracket_\mathit{t}\dashv\llbracket\Gamma'\rrbracket_\mathit{t}\cap\llbracket{R}\rrbracket_t
 \]
 \end{lemma}
 \begin{proof}
-In Appendix \ref{sec:prooflemmas}.
+In Appendix \ref{sec:prooflemmas} Lemma \ref{lemma:embedrap}.
   \end{proof}
-\begin{lemma}\label{lemma:embedw}
+\begin{lemma}[Views Embedding for Write-Side]
+  \label{lemma:embedw}
   \[
 \forall\Gamma,C,\Gamma',\mathit{t}\ldotp\Gamma\vdash_M C\dashv \Gamma' \Rightarrow
 \llbracket\Gamma\rrbracket_\mathit{t}\cap\llbracket{M}\rrbracket_t\vdash \llbracket C\rrbracket_\mathit{t}\dashv\llbracket\Gamma'\rrbracket_\mathit{t}\cap\llbracket{M}\rrbracket_t
 \]
 \end{lemma}
 \begin{proof}
-In Appendix \ref{sec:prooflemmas}.
+In Appendix \ref{sec:prooflemmas} Lemma \ref{lemma:embedwap}.
   \end{proof}
 Because the intersection of the environment denotation with the denotations for the different critical sections remains a valid view, the Views Framework provides most of this proof for free, given corresponding lemmas for the \emph{atomic actions} $\alpha$:
 \[\begin{array}{l}

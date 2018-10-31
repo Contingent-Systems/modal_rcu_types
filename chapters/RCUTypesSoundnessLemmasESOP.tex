@@ -193,7 +193,7 @@ Thread interference relation
 \[\mathcal{R} \subseteq \mathcal{M} \times \mathcal{M}\]  defines permissible interference on an instrumented state. The relation must distribute over composition:
 \[ \forall m_{1}, m_{2}, m\ldotp (m_{1} \bullet  m_{2})\mathcal{R}m \Longrightarrow \begin{array}{ll}  \exists  m'_{1} m'_{2} \ldotp m_{1} \mathcal{R} m'_{1} \land m_{2} \mathcal{R} m'_{2} \land  m \in m'_{1} \bullet m'_{2} \end{array}\]
 where $\mathcal{R}$ is transitive-reflexive closure of $\mathcal{R}_{0}$ shown at Figure \ref{fig:compap}. $\mathcal{R}_0$ (and therefore $\mathcal{R}$) also ``preserves'' validity:
-\begin{lemma}[Valid $\mathcal{R}_0$ Interference]
+\begin{lemma}[Valid $\mathcal{R}_0$ Interference]\label{lem:interap}
 For any $m$ and $m'$, if $\mathsf{WellFormed}(m)$ and $m\mathcal{R}_0m'$, then $\mathsf{WellFormed}(m')$.
 \end{lemma}
 \begin{proof}
@@ -234,6 +234,7 @@ Cases in which denotations, $\llbracket x:T \rrbracket$, touching these \emph{R$
     \end{case}
 \end{proof}
 \begin{lemma}[Stable Environment Denotation-R]
+  \label{lem:stblRap}
 For any \emph{closed} environment $\Gamma$ (i.e., $\forall x\in\mathsf{dom}(\Gamma)\ldotp, \mathsf{FV}(\Gamma(x))\subseteq\mathsf{dom}(\Gamma)$):
 \[
 \mathcal{R}(\llbracket\Gamma\rrbracket_{\mathsf{R},tid})\subseteq\llbracket\Gamma\rrbracket_{\mathsf{R},tid}
@@ -285,18 +286,20 @@ The framework also describes a useful concept called the view shift operator $\s
   \lfloor \llbracket \Gamma_{2} \rrbracket_{tid} * \mathcal{R}(\{m\}) \rfloor
   \]
 The use of $*$ validates the frame rule and makes this obligation akin to an interference-tolerant version of the small footprint property from traditional separation logics~\cite{Reynolds:2002:SLL:645683.664578,Calcagno:2007:LAA:1270399.1271718}.
-\begin{theorem}[Axiom Soundness]
+\begin{lemma}[Axiom of Soundness for Atoms]
+  \label{lem:axmsoundnessap}
 For each axiom, $\Gamma_{1} \vdash_{\textsf{RMO}} \alpha \dashv \Gamma_{2}$, we must show
 \[
 \forall m\ldotp   \llbracket \alpha \rrbracket  (\lfloor \llbracket \Gamma_{1} \rrbracket_{tid}  * \{m\} \rfloor )\subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{tid} * \mathcal{R}(\{m\}) \rfloor
 \]
-\end{theorem}
+\end{lemma}
 \begin{proof}
-By case analysis on the atomic action $\alpha$ followed by inversion on typing derivation.
+By case analysis on the atomic action $\alpha$ followed by inversion on typing derivation. All the cases proved as different lemmas in Section \ref{lem:lematom}.
 \end{proof}
 
 Type soundness proceeds according to the requirements of the Views Framework, primarily embedding each type judgment into the Views logic:
-\begin{lemma}\label{lemma:embedrap}
+\begin{lemma}[Views Embedding for Read-Side]
+  \label{lemma:embedrap}
 \[  \forall\Gamma,C,\Gamma',\mathit{t}\ldotp\Gamma\vdash_R C\dashv \Gamma' \Rightarrow
 \llbracket\Gamma\rrbracket_\mathit{t}\cap\llbracket{R}\rrbracket_t\vdash \llbracket C\rrbracket_\mathit{t}\dashv\llbracket\Gamma'\rrbracket_\mathit{t}\cap\llbracket{R}\rrbracket_t
 \]
@@ -304,7 +307,8 @@ Type soundness proceeds according to the requirements of the Views Framework, pr
 \begin{proof}
   Proof is similar to the one for Lemma \ref{lemma:embedwap} except the denotation for type system definition is $\llbracket R \rrbracket_t = \{\{((s,h,l,rt,R,B),O,U,T,F)| t \in R \}$ which shrinks down the set of all logical states to the one that can only be defined by types($\textsf{rcuItr}$) in read type system. 
   \end{proof}
-\begin{lemma}\label{lemma:embedwap}
+\begin{lemma}[Views Embedding for Write-Side]
+  \label{lemma:embedwap}
   \[
 \forall\Gamma,C,\Gamma',\mathit{t}\ldotp\Gamma\vdash_M C\dashv \Gamma' \Rightarrow
 \llbracket\Gamma\rrbracket_\mathit{t}\cap\llbracket{M}\rrbracket_t\vdash \llbracket C\rrbracket_\mathit{t}\dashv\llbracket\Gamma'\rrbracket_\mathit{t}\cap\llbracket{M}\rrbracket_t
