@@ -38,28 +38,25 @@ The bounding set $B$ tracks which threads the writer is \emph{actively} waiting 
   \end{figure*}%%%%%%%%%%%%%%%%%%%%%OPERATIONAL SEMANTICS ENDS%%%%%%%%%%%%%%%%%%
 \end{comment}
 \begin{figure*}\scriptsize%%%%%%%%%%%%OPdERATIONAL SEMANTICS%%%%%%%%%%%%%%
-  \grammar \and 
-  $\desugarwrite$ \and 
-  $\desugarread$ \and 
-  $\desugarsync$ \and 
-% \end{array}
-%\]
+  \grammar
+   $\desugarsync$ \\
+  $\desugarwrite$\\
+  $\desugarread$
 \[\begin{array}{c@{\;}rl@{\Downarrow_{\mathit{tid}}}ll} 
-(\textsc{HUpdate}) & \llbracket\texttt{x.f=y}\rrbracket   &(s,h,l,rt,R,B)& (s,h[s(x,tid),f \mapsto s(y,tid)],l,rt,R,B) &\\
+(\textsc{RCU-WBegin}) & \llbracket\texttt{WriteBegin}\rrbracket & (s,h,\mathsf{unlocked},rt,R,B) &(s,h,l,rt,R,B) & \\
+(\textsc{RCU-WEnd}) & \llbracket\texttt{WriteEnd}\rrbracket & (s,h,l,rt,R,B) & (s,h,\mathsf{unlocked},rt,R,B) & \\
+(\textsc{RCU-RBegin}) & \llbracket\texttt{ReadBegin}\rrbracket & (s,h,tid,rt,R,B) & (s,h,tid,rt,R\uplus \{tid\},B) \qquad \mathit{tid} \neq l &  \\
+(\textsc{RCU-REnd}) & \llbracket\texttt{ReadEnd}\rrbracket & (s,h,tid,rt,R\uplus\{tid\},B) & (s,h,l,rt,R,B\setminus \{tid\}) \qquad  \mathit{tid} \neq l& \\
+(\textsc{RCU-SStart}) & \llbracket\texttt{SyncStart}\rrbracket & (s,h,l,rt,R,\emptyset) & (s,h,l,rt,R,R) &\\  %\forall_{t\in R}\ldotp t \notin r \\
+(\textsc{RCU-SStop}) & \llbracket\texttt{SyncStop}\rrbracket & (s,h,l,rt,R,\emptyset) & (s,h,l,rt,R,\emptyset) &  \\
+(\textsc{Free}) & {\llbracket\texttt{Free}(x)\rrbracket} & (s,h,l,rt,R,B) & (s,h,l,rt,R,B ) & \\
+(\textsc{HUpdt}) & \llbracket\texttt{x.f=y}\rrbracket   &(s,h,l,rt,R,B)& (s,h[s(x,tid),f \mapsto s(y,tid)],l,rt,R,B) &\\
 (\textsc{HRead})   & \llbracket\texttt{y=x.f}\rrbracket   &(s,h,l,rt,R,B)& (s[(y,tid) \mapsto h(s(x,tid),f)],h,l,rt,R,B) & \\
-(\textsc{SUpdate}) & \llbracket\texttt{y=x}\rrbracket     &(s,h,l,rt,R,B)& (s[(y,tid) \mapsto (x,tid)],h,l,rt,R,B) &\\
-(\textsc{HAllocate}) & \llbracket\texttt{y=new}\rrbracket &(s,h,l,rt,R,B)& (s,h[\ell\mapsto\mathsf{nullmap}],l,rt,R,B) & \\%%%%%h[\ell\mapsto\mathsf{nullmap}
+(\textsc{SUpdt}) & \llbracket\texttt{y=x}\rrbracket     &(s,h,l,rt,R,B)& (s[(y,tid) \mapsto (x,tid)],h,l,rt,R,B) &\\
+(\textsc{HAlloc}) & \llbracket\texttt{y=new}\rrbracket &(s,h,l,rt,R,B)& (s,h[\ell\mapsto\mathsf{nullmap}],l,rt,R,B) & 
 \end{array}\]
-$\textrm{where}~ rt \neq s(y,tid) \textrm{ and } s[(y,tid) \mapsto \ell], \textrm{ and } h[\ell \mapsto \mathsf{nullmap}] \overset{\mathrm{def}}{=} \lambda (o',f) . \textrm{ if } o=o' \textrm{ then } skip \textrm{ else } h(o',f) $
-\[\begin{array}{c@{\;}rl@{\Downarrow_{\mathit{tid}}}ll} 
-(\textsc{RCU-W-Begin}) & \llbracket\texttt{WriteBegin}\rrbracket & (s,h,\mathsf{unlocked},rt,R,B) &(s,h,l,rt,R,B) & \\
-(\textsc{RCU-W-End}) & \llbracket\texttt{WriteEnd}\rrbracket & (s,h,l,rt,R,B) & (s,h,\mathsf{unlocked},rt,R,B) & \\
-(\textsc{RCU-R-Begin}) & \llbracket\texttt{ReadBegin}\rrbracket & (s,h,tid,rt,R,B) & (s,h,tid,rt,R\uplus \{tid\},B) & \mathit{tid} \neq l \\
-(\textsc{RCU-R-End}) & \llbracket\texttt{ReadEnd}\rrbracket & (s,h,tid,rt,R\uplus\{tid\},B) & (s,h,l,rt,R,B\setminus \{tid\})  & \mathit{tid} \neq l\\
-(\textsc{RCU-Synch-Start}) & \llbracket\texttt{SyncStart}\rrbracket & (s,h,l,rt,R,\emptyset) & (s,h,l,rt,R,R) &\\  %\forall_{t\in R}\ldotp t \notin r \\
-(\textsc{RCU-Synch-Stop}) & \llbracket\texttt{SyncStop}\rrbracket & (s,h,l,rt,R,\emptyset) & (s,h,l,rt,R,\emptyset) &  \\
-(\textsc{Free}) & {\llbracket\texttt{Free}(x)\rrbracket} & (s,h,l,rt,R,B) & (s,h,l,rt,R,B ) & 
-\end{array}\]
+$\textrm{where}~ rt \neq s(y,tid) \textrm{ and } s[(y,tid) \mapsto \ell], \textrm{ and }$
+$h[\ell \mapsto \mathsf{nullmap}] \overset{\mathrm{def}}{=} \lambda (o',f) . \textrm{ if } o=o' \textrm{ then } skip \textrm{ else } h(o',f) $
 \caption{Operational Semantics for \textsf{RCU}}
 \label{fig:operationalsemrcu}
 \vspace{-2mm}
