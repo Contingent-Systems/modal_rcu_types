@@ -198,42 +198,42 @@ The final judgment $\vdash\Gamma\prec:\Gamma'$ extends subtyping to all assumpti
 %(\textit{\textbf{Approximation on Fields}}) - 
 It is often necessary to abstract the contents of field maps or paths, without simply forgetting the contents entirely.  In a binary search tree, for example, it may be the case that one node is a child of another, but \emph{which} parent field points to the child depends on which branch was followed in an earlier conditional (consider the lookup in a BST, which alternates between following left and right children).
 %Since our list based bag example's objects have single field($Next$), we take small code snippet from our \textsf{BST} type checking effort in Appendix \ref{appendix:bst_del} in which objects have two fields $Left$ and $Right$. Field mappings take field names to local variable names. They are added to the field map, $\N$, when the object's fields are read. 
-In Listing \ref{lst:altfield}, we see that \texttt{current} aliases different fields of \texttt{parent} --- either $Left$ or $Right$ --- in different branches of the conditional.
+In Listing \ref{lst:altfield}, we see that \texttt{cur} aliases different fields of \texttt{par} --- either $Left$ or $Right$ --- in different branches of the conditional.
 %We see the join of the type assertions in lines 6 and 11 to the one in the line 12. 
-The types after the conditional must overapproximate this, here as $Left|Right\mapsto current$ in \texttt{parent}'s field map, and a similar path disjunction in \texttt{current}'s path.
+The types after the conditional must overapproximate this, here as $Left|Right\mapsto cur$ in \texttt{par}'s field map, and a similar path disjunction in \texttt{cur}'s path.
 This is reflected in Figure \ref{fig:sub-typing}'s \textsc{T-NSub1-5} and \textsc{T-PSub1-2} --- within each branch, each type is coerced to a supertype to validate the control flow join.
 
 \begin{lstlisting}[caption={Choosing fields to read},label={lst:altfield}, numbers=left, numberstyle=\tiny\color{red}, numbersep=5pt,basicstyle=\scriptsize\ttfamily]%, ]
 
-$\assert{current:\mathsf{rcuItr}\; Left|Right \;\{\},\;\;parent:\mathsf{rcuItr}\;  \epsilon \;\{Left|Right\mapsto current\}}$
-if(parent.Left == current){
-  $\assert{current:\mathsf{rcuItr}\; Left \;\{\} ,\;\; parent:\mathsf{rcuItr}\;  \epsilon \;\{Left\mapsto current\}}$
-  parent = current;
-  current = parent.Left;
-  $\assert{current:\mathsf{rcuItr}\; Left.Left \;\{\}, \;\; parent:\mathsf{rcuItr}\;  Left \;\{Left\mapsto current\}}$
+$\assert{cur:\mathsf{rcuItr}\; Left|Right \;\{\},\;\;par:\mathsf{rcuItr}\;  \epsilon \;\{Left|Right\mapsto cur\}}$
+if(par.Left == cur){
+  $\assert{cur:\mathsf{rcuItr}\; Left \;\{\} ,\;\; par:\mathsf{rcuItr}\;  \epsilon \;\{Left\mapsto cur\}}$
+  par = cur;
+  cur = par.Left;
+  $\assert{cur:\mathsf{rcuItr}\; Left.Left \;\{\}, \;\; par:\mathsf{rcuItr}\;  Left \;\{Left\mapsto cur\}}$
 }else{
-  $\assert{current:\mathsf{rcuItr}\; Right \;\{\}, \;\; parent:\mathsf{rcuItr}\;  \epsilon \;\{Right\mapsto current\}}$
-  parent = current;
-  current = parent.Right;
-  $\assert{current:\mathsf{rcuItr}\; Right.Right \;\{\}, \;\; parent:\mathsf{rcuItr}\;  Right \;\{Right\mapsto current\}}$
-}$\assert{current:\mathsf{rcuItr}\; Left|Right.Left|Right \;\{\}, \;\; parent:\mathsf{rcuItr}\;  Left|Right \;\{Left|Right\mapsto current\}}$
+  $\assert{cur:\mathsf{rcuItr}\; Right \;\{\}, \;\; par:\mathsf{rcuItr}\;  \epsilon \;\{Right\mapsto cur\}}$
+  par = cur;
+  cur = par.Right;
+  $\assert{cur:\mathsf{rcuItr}\; Right.Right \;\{\}, \;\; par:\mathsf{rcuItr}\;  Right \;\{Right\mapsto cur\}}$
+}$\assert{cur:\mathsf{rcuItr}\; Left|Right.Left|Right \;\{\}, \;\; par:\mathsf{rcuItr}\;  Left|Right \;\{Left|Right\mapsto cur\}}$
 \end{lstlisting}
 Another type of control flow join is handling loop invariants --- where paths entering the loop meet the back-edge from the end of a loop back to the start for repetition.
 Because our types include paths describing how they are reachable from the root, some abstraction is required to give loop invariants that work for any number of iterations --- in a loop traversing a linked list, the iterator pointer would na\"ively have different paths from the root on each iteration, so the exact path is not loop invariant.  However, the paths explored by a loop are regular, so we can abstract the paths by permitting (implicitly) existentially quantified indexes on path fragments, which express the existence of \emph{some} path, without saying \emph{which} path.  The use of an explicit abstract repetition allows the type system to preserve the fact that different references have common path prefixes, even after a loop.
 
-Assertions for \texttt{add} function in lines 19 and 20 in Figure \ref{fig:rculist} show the \textit{loop}'s effects on paths of iterator references used inside the loop, \texttt{current} and \texttt{parent}. 
-On line 20, \texttt{parent}'s path contains has $(Next)^{k}$.
+Assertions for \texttt{add} function in lines 19 and 20 in Figure \ref{fig:rculist} show the \textit{loop}'s effects on paths of iterator references used inside the loop, \texttt{cur} and \texttt{par}. 
+On line 20, \texttt{par}'s path contains has $(Next)^{k}$.
 The $k$ in the $(Next)^{k}$ abstracts the number of loop iterations run, implicitly assumed to be non-negative.
-The trailing $Next$ in \texttt{current}'s path on line 19 --- $(Next)^{k}.Next$ --- expresses the relationship between \texttt{current} and \texttt{parent}: \texttt{parent} is reachable from the root by following $Next$ $k$ times, and \texttt{current} is reachable via one additional $Next$.
+The trailing $Next$ in \texttt{cur}'s path on line 19 --- $(Next)^{k}.Next$ --- expresses the relationship between \texttt{cur} and \texttt{par}: \texttt{par} is reachable from the root by following $Next$ $k$ times, and \texttt{cur} is reachable via one additional $Next$.
 The types of 19 and 20, however, are not the same as lines 23 and 24, so an additional adjustment is needed for the types to become loop-invariant.
-\emph{Reindexing} (\textsc{T-ReIndex} in Figure \ref{fig:type-judgements-for-cf}) effectively increments an abstract loop counter, contracting $(Next)^k.Next$ to $Next^k$ everywhere in a type environment.  This expresses the same relationship between \texttt{parent} and \texttt{current} as before the loop, but the choice of $k$ to make these paths accurate after each iteration would be one larger than the choice before.
+\emph{Reindexing} (\textsc{T-ReIndex} in Figure \ref{fig:type-judgements-for-cf}) effectively increments an abstract loop counter, contracting $(Next)^k.Next$ to $Next^k$ everywhere in a type environment.  This expresses the same relationship between \texttt{par} and \texttt{cur} as before the loop, but the choice of $k$ to make these paths accurate after each iteration would be one larger than the choice before.
 Reindexing the type environment of lines 23--24 yields the type environment of lines 19--20, making the types loop invariant.
 
 %(\textit{\textbf{Choosing Fields to Read}}) - However, w
 While abstraction is required to deal with control flow joins, reasoning about whether and which nodes are unlinked or replaced, and whether cycles are created, requires precision.  Thus the type system also includes means (Figure \ref{fig:type-judgements-for-cf}) to refine imprecise paths and field maps.
 %
 %We should also note that being precise in the field names is so crucial for mutation actions. This means we need to know which fields are used to replace/unlink a heap node. Then, what is the mechanism to become more/less precise in the fields used in both path and field mappings of the \textsf{rcuItr} type? 
-In Listing \ref{lst:altfield}, we see a conditional with the condition $parent.Left == current$. The type system matches this condition to the imprecise types in line 1's typing assertion, and refines the initial type assumptions in each branch accordingly (lines 3 and 8) based on whether execution reflects the truth or falsity of that check.
+In Listing \ref{lst:altfield}, we see a conditional with the condition $par.Left == cur$. The type system matches this condition to the imprecise types in line 1's typing assertion, and refines the initial type assumptions in each branch accordingly (lines 3 and 8) based on whether execution reflects the truth or falsity of that check.
 Similarly, it is sometimes required to check --- and later remember --- whether  a field is null, and the type system supports this.
 %refines the assertions in Listing \ref{lst:altfield} line 1 to the one in the line 3 for the \textit{then} branch and to the one in the line 8 for the \textit{else} branch via making types more precise on the object fields(\textsc{T-Branch1} shown in Figure \ref{fig:type-judgements-for-cf}).
 
@@ -263,29 +263,29 @@ Figure \ref{fig:rculist} is annotated with ``assertions'' --- local type environ
 
 \mypar{Reading a Global \textsf{RCU} Root}
 All \textsf{RCU} data structures have fixed roots, which we characterize with the \textsf{rcuRoot} type.  Each operation in Figure \ref{fig:rculist} begins by reading the root into a new \textsf{rcuItr} reference used to begin traversing the structure.
-After each initial read (line 12 of \lstinline|add| and line 4 of \lstinline|remove|), the path of \texttt{current} reference is the empty path ($\epsilon$) and the field map is empty ($\{\}$), because it is an alias to the root, and none of its field contents are known yet.
+After each initial read (line 12 of \lstinline|add| and line 4 of \lstinline|remove|), the path of \texttt{cur} reference is the empty path ($\epsilon$) and the field map is empty ($\{\}$), because it is an alias to the root, and none of its field contents are known yet.
 
 \mypar{Reading an Object Field and a Variable}
 As expected, we explore the heap of the data structure via reading the objects' fields. 
-Consider line 6 of \lstinline|remove| and its corresponding pre- and post- type environments.  Initially \texttt{parent}'s field map is empty.  After the field read, its field map is updated to reflect that its $Next$ field is aliased in the local variable \texttt{current}.  Likewise, afer the update, \texttt{current}'s path is $Next$ ($=\epsilon\cdot Next$), extending the parent node's path by the field read.  This introduces field aliasing information that can subsequently be used to reason about unlinking.
+Consider line 6 of \lstinline|remove| and its corresponding pre- and post- type environments.  Initially \texttt{par}'s field map is empty.  After the field read, its field map is updated to reflect that its $Next$ field is aliased in the local variable \texttt{cur}.  Likewise, afer the update, \texttt{cur}'s path is $Next$ ($=\epsilon\cdot Next$), extending the par node's path by the field read.  This introduces field aliasing information that can subsequently be used to reason about unlinking.
 %For example, the assertion of \textsf{remove} function in line 7 says that the path to reach the heap node pointed by \texttt{current} is $Next$. The assertion in line 8 for \texttt{parent} tells that there exists a link from the referent of \textsf{parent} to the referent of \textsf{current}. As we observe in the post condition in the lines 7 and 8, reading \texttt{current} to \texttt{parent}'s $Next$ field in line 6 adds the field mapping entry $Next \mapsto \texttt{current}$ to the field mapping set of \texttt{parent} and extends the path of \texttt{current} with $Next$. We call this "properly" linked heap nodes which is a requirement for safe unlinking.
 
 %(\textit{\textbf{Mutation - Unlinking a Heap Node}}) - When we unlink a heap node, the type of the reference to it changes from \textsf{rcuItr} to \textsf{unlinked}. We observe this change for \texttt{current} reference in the assertions of \texttt{remove} in lines 22 and 26.
 \mypar{Unlinking Nodes}
 Line 24 of \lstinline|remove| in Figure \ref{fig:rculist} unlinks a node.
-The type annotations show that before that line \lstinline|current| is in the structure (\textsf{rcuItr}), while afterwards its type is \textsf{unlinked}.
-The type system checks that this unlink disconnects only one node: note how the types of \lstinline|parent|, \lstinline|current|, and \lstinline|currentL| just before line 24 completely describe a section of the list.
+The type annotations show that before that line \lstinline|cur| is in the structure (\textsf{rcuItr}), while afterwards its type is \textsf{unlinked}.
+The type system checks that this unlink disconnects only one node: note how the types of \lstinline|par|, \lstinline|cur|, and \lstinline|curl| just before line 24 completely describe a section of the list.
 
 %(\textit{\textbf{Mutation - Reclaiming a Heap Node after a Grace Period}}) - 
 \mypar{Grace and Reclamation}
-After the referent of \texttt{current} is unlinked, concurrent readers traversing the list may still hold references.  So it is not safe to actually reclaim the memory until after a grace period.
-Lines 28--29 of \lstinline|remove| initiate a grace period and wait for its completion.  At the type level, this is reflected by the change of \lstinline|current|'s type from \textsf{unlinked} to \textsf{freeable}, reflecting the fact that the grace period extends until any reader critical sections that might have observed the node in the structure have completed.
-This matches the precondition required by our rules for calling \lstinline|Free|, which further changes the type of \lstinline|current| to \textsf{undef} reflecting that \lstinline|current| is no longer a valid reference.  The type system also ensures no local (writer) aliases exist to the freed node.
+After the referent of \texttt{cur} is unlinked, concurrent readers traversing the list may still hold references.  So it is not safe to actually reclaim the memory until after a grace period.
+Lines 28--29 of \lstinline|remove| initiate a grace period and wait for its completion.  At the type level, this is reflected by the change of \lstinline|cur|'s type from \textsf{unlinked} to \textsf{freeable}, reflecting the fact that the grace period extends until any reader critical sections that might have observed the node in the structure have completed.
+This matches the precondition required by our rules for calling \lstinline|Free|, which further changes the type of \lstinline|cur| to \textsf{undef} reflecting that \lstinline|cur| is no longer a valid reference.  The type system also ensures no local (writer) aliases exist to the freed node.
 
 \mypar{Fresh Nodes}
 Some code must also allocate new nodes, and the type system must reason about how they are incorporated into the shared data structure.
 Line 8 of the \texttt{add} method allocates a new node \texttt{nw}, and lines 10 and 29 initialize its fields.
-The type system gives it a \textsf{fresh} type while tracking its field contents, until line 32 inserts it into the data structure.  The type system checks that nodes previously reachable from \lstinline|current| remain reachable: note the field maps of \lstinline|current| and \texttt{nw} in lines 30--31 are equal (trivially, though in general the field need not be  null).
+The type system gives it a \textsf{fresh} type while tracking its field contents, until line 32 inserts it into the data structure.  The type system checks that nodes previously reachable from \lstinline|cur| remain reachable: note the field maps of \lstinline|cur| and \texttt{nw} in lines 30--31 are equal (trivially, though in general the field need not be  null).
 %and set its fields in lines 10 and 29. The type of the variable \texttt{nw} in line 9 represents a freshly allocated heap node, whose fields are not set yet. A \textsf{rcuFresh} reference can be used either in setting the fields of a fresh object or linking the fresh object. We will investigate  linking a fresh object in the next analysis but, first we anaylze how we set the fields of the fresh object. In  line 29, we set the fields of the object referenced by \texttt{nw} and we end up having the type in line 30 which seems similar to a type \textsf{rcuItr} with empty path. We will justify why we have separate type \textsf{rcuFresh} instead of typing the freshly allocated heap with \textsf{rcuItr} when we explain the type rules.
 \subsection{Type Rules}
 \label{subsection:type-rules}
@@ -517,7 +517,7 @@ checks that for every \textsf{rcuItr} reference $n$ in $\Gamma$, it is not a pat
  ;
  \end{tikzpicture}
 
- \caption{Safe linking of the \textit{fresh} heap node pointed by \texttt{currentF}-$cf$}
+ \caption{Safe linking of the \textit{fresh} heap node pointed by \texttt{curF}-$cf$}
  \label{fig:frframeout}
  \end{subfigure} \quad
  \begin{subfigure}[b]{.4\linewidth}
@@ -597,7 +597,7 @@ checks that for every \textsf{rcuItr} reference $n$ in $\Gamma$, it is not a pat
  ;
  \end{tikzpicture}
 
- \caption{Safe replacement of the heap node pointed by \texttt{current}-$cr$ by the \textit{fresh} heap node pointed by \texttt{currentF}-$cf$}
+ \caption{Safe replacement of the heap node pointed by \texttt{cur}-$cr$ by the \textit{fresh} heap node pointed by \texttt{curF}-$cf$}
  \label{fig:freshframeout}
  \end{subfigure}
  \caption{Linking and replacing nodes}

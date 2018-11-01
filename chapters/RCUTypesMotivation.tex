@@ -2,29 +2,8 @@
 In this section, we recall the general concepts of read-copy-update concurrency.
 We use the RCU linked-list-based set~\cite{McKenney2015SomeEO} from Figure \ref{fig:rculist} as a running example.  It includes annotations for our type system, which will be explained in Section \ref{subsection:type-action}.
 %One of the most well-known and frequently used linked data structures following RCU programming pattern, singly acyclic linked list. Table ~\ref{tab:rculist} shows how we implement a RCU linked list with our types. We are going to explain the RCU setting with running code in Table ~\ref{tab:rculist} along with pictorial explanations to crucial interleavings in following subsections.
-\begin{comment}
-  \begin{lstlisting}[basicstyle=\tiny]
-    member & 
-int member(int toRead){
-ReadBegin;
-int result;
-BagNode<rcuItr> parent;
-parent = head;
-BagNode<rcuItr> current;
-current = parent.Next;
-while(current.data != toRead){
-  parent = current;
-  current= parent.Next;
-}
-result = current.data;
-ReadEnd;
-return result;
-}
-\end{lstlisting}&
-  
-  \end{comment}
 \begin{figure*}[t!]
-\begin{tabular}{p{0.6\textwidth}p{0.6\textwidth}}
+\begin{tabular}{p{0.47\textwidth}p{0.47\textwidth}}
 \begin{lstlisting}[basicstyle=\scriptsize\ttfamily]
 struct BagNode{
   int data;
@@ -36,66 +15,66 @@ WriteBegin;
 BagNode nw = new;
 $\assert{nw:rcuFresh \; \{\}}$
 nw.data = toAdd;
-$\assert{head:\mathsf{rcuRoot},parent:\mathsf{undef}, current:\mathsf{undef}}$
-BagNode<rcuItr> parent,current = head;
-$\assert{head:\mathsf{rcuRoot},parent:\mathsf{rcuItr}\;\epsilon \; \{\},current:\mathsf{rcuItr} \;\epsilon \; \{\}}$
-$\assert{current:\mathsf{rcuItr} \;\epsilon \; \{\}}$
-current = parent.Next;
-$\assert{current:\mathsf{rcuItr}\; Next \;\{\}}$
-$\assert{parent:\mathsf{rcuItr}\; \epsilon \;\{Next\mapsto current\}}$
-while(current.Next != null){
-  $\assert{current:\mathsf{rcuItr} (Next)^{k}.Next \{\}}$
-  $\assert{parent:\mathsf{rcuItr}  (Next)^{k} \{Next \mapsto current\}}$
-  parent = current;
-  current = parent.Next;
-  $\assert{current:\mathsf{rcuItr} (Next)^{k}.Next.Next \{\}}$
-  $\assert{parent:\mathsf{rcuItr}(Next)^{k}.Next \{Next \mapsto current\}}$
+$\assert{head:\mathsf{rcuRoot},par:\mathsf{undef}, cur:\mathsf{undef}}$
+BagNode<rcuItr> par,cur = head;
+$\assert{head:\mathsf{rcuRoot},par:\mathsf{rcuItr}\;\epsilon  \{\}}$
+$\assert{cur:\mathsf{rcuItr} \;\epsilon  \{\}}$
+cur = par.Next;
+$\assert{cur:\mathsf{rcuItr}\; Next \{\}}$
+$\assert{par:\mathsf{rcuItr}\; \epsilon \{Next\mapsto cur\}}$
+while(cur.Next != null){
+  $\assert{cur:\mathsf{rcuItr} \;(Next)^{k}.Next \{\}}$
+  $\assert{par:\mathsf{rcuItr}  \;(Next)^{k} \{Next \mapsto cur\}}$
+  par = cur;
+  cur = par.Next;
+  $\assert{cur:\mathsf{rcuItr} \;(Next)^{k}.Next.Next \{\}}$
+  $\assert{par:\mathsf{rcuItr}\;(Next)^{k}.Next \{Next \mapsto cur\}}$
 }
-$\assert{nw:\mathsf{rcuFresh} \; \{\}}$
-$\assert{current:\mathsf{rcuItr}\; (Next)^{k}.Next \;\{Next\mapsto null\}}$
-$\assert{ parent:\mathsf{rcuItr}\;  (Next)^{k} \;\{Next \mapsto current\}}$
+$\assert{nw:\mathsf{rcuFresh}  \{\}}$
+$\assert{cur:\mathsf{rcuItr} \;(Next)^{k}.Next \{Next\mapsto null\}}$
+$\assert{ par:\mathsf{rcuItr}  \;(Next)^{k} \{Next \mapsto cur\}}$
 nw.Next= null;
-$\assert{nw:\mathsf{rcuFresh} \; \{Next\mapsto null\}}$
-$\assert{current:\mathsf{rcuItr}\; (Next)^{k}.Next \;\{Next \mapsto null\} }$
-current.Next=nw;
-$\assert{nw:\mathsf{rcuItr} \; (Next)^{k}.Next.Next \; \{Next\mapsto null\}}$
-$\assert{current:\mathsf{rcuItr}\; (Next)^{k}.Next \;\{Next \mapsto nw\} }$
+$\assert{nw:\mathsf{rcuFresh}  \{Next\mapsto null\}}$
+$\assert{cur:\mathsf{rcuItr}\; (Next)^{k}.Next \{Next \mapsto null\} }$
+cur.Next=nw;
+$\assert{nw:\mathsf{rcuItr}\;  (Next)^{k}.Next.Next  \{Next\mapsto null\}}$
+$\assert{cur:\mathsf{rcuItr}\; (Next)^{k}.Next \{Next \mapsto nw\} }$
 WriteEnd;
 }
 \end{lstlisting}&
 \begin{lstlisting}[basicstyle=\scriptsize\ttfamily]
 void remove(int toDel){
 WriteBegin;
-$\assert{head:\mathsf{rcuRoot},parent:\mathsf{undef}, current:\mathsf{undef}}$
-BagNode<rcuItr> parent,current = head;
-$\assert{head:\mathsf{rcuRoot},parent:\mathsf{rcuItr}\;\epsilon \; \{\},current:\mathsf{rcuItr} \;\epsilon \; \{\}}$
-current = parent.Next;
-$\assert{current:\mathsf{rcuItr}\; Next \;\{\}}$
-$\assert{parent:\mathsf{rcuItr}\; \epsilon \;\{Next\mapsto current\}}$
-while(current.Next != null&&current.data != toDel)
+$\assert{head:\mathsf{rcuRoot},par:\mathsf{undef}, cur:\mathsf{undef}}$
+BagNode<rcuItr> par,cur = head;
+$\assert{head:\mathsf{rcuRoot},par:\mathsf{rcuItr}\;\epsilon  \{\},cur:\mathsf{rcuItr} \;\epsilon  \{\}}$
+cur = par.Next;
+$\assert{cur:\mathsf{rcuItr}\; Next \{\}}$
+$\assert{par:\mathsf{rcuItr}\; \epsilon \{Next\mapsto cur\}}$
+while(cur.Next != null&&cur.data != toDel)
 {
-  $\assert{current:\mathsf{rcuItr}\; (Next)^{k}.Next \;\{\}}$
-  $\assert{parent:\mathsf{rcuItr}\;  (Next)^{k} \;\{Next \mapsto current\}}$
-  parent = current;
-  current = parent.Next;
-  $\assert{current:\mathsf{rcuItr}\; (Next)^{k}.Next.Next \;\{\}}$
-  $\assert{parent:\mathsf{rcuItr}  (Next)^{k}.Next \{Next \mapsto current\}}$
+  $\assert{cur:\mathsf{rcuItr}\; (Next)^{k}.Next \{\}}$
+  $\assert{par:\mathsf{rcuItr}\;  (Next)^{k} \{Next \mapsto cur\}}$
+  par = cur;
+  cur = par.Next;
+  $\assert{cur:\mathsf{rcuItr}\; (Next)^{k}.Next.Next \{\}}$
+  $\assert{par:\mathsf{rcuItr} \; (Next)^{k}.Next \{Next \mapsto cur\}}$
 }
-$\assert{nw:rcuFresh \; \{\}}$
-$\assert{parent:\mathsf{rcuItr}\;  (Next)^{k} \;\{Next \mapsto current\}}$
-$\assert{current:\mathsf{rcuItr}\; (Next)^{k}.Next \;\{\}}$
-BagNode<rcuItr> currentL = current.Next;
-$\assert{current:\mathsf{rcuItr}\; (Next)^{k}.Next \;\{Next \mapsto currentL\}}$
-$\assert{currentL:\mathsf{rcuItr}\; (Next)^{k}.Next.Next \;\{\}}$
-prev.Next = currentL;
-$\assert{parent:\mathsf{rcuItr}\;  (Next)^{k} \;\{Next \mapsto currentL\}}$
-$\assert{current:\mathsf{unlinked}}$
-$\assert{currentL:\mathsf{rcuItr}\; (Next)^{k}.Next \;\{\}}$
+$\assert{nw:rcuFresh \{\}}$
+$\assert{par:\mathsf{rcuItr}\;  (Next)^{k} \{Next \mapsto cur\}}$
+$\assert{cur:\mathsf{rcuItr}\; (Next)^{k}.Next \{\}}$
+BagNode<rcuItr> curl = cur.Next;
+$\assert{cur:\mathsf{rcuItr}\; (Next)^{k}.Next \{Next \mapsto curl\}}$
+$\assert{curl:\mathsf{rcuItr}\; (Next)^{k}.Next.Next \{\}}$
+par.Next = curl;
+$\assert{par:\mathsf{rcuItr}\;  (Next)^{k} \{Next \mapsto curl\}}$
+$\assert{cur:\mathsf{unlinked}}$
+$\assert{cur:\mathsf{rcuItr}\; (Next)^{k}.Next \{\}}$
 SyncStart;
 SyncStop;
-$\assert{current:\mathsf{freeable}}$
-Free(current);
-$\assert{current:\mathsf{undef}}$
+$\assert{cur:\mathsf{freeable}}$
+Free(cur);
+$\assert{cur:\mathsf{undef}}$
 WriteEnd;
 }
 \end{lstlisting}
