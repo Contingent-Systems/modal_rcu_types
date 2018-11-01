@@ -9,8 +9,8 @@ We prove type soundness by embedding the type system into an abstract concurrent
     \item Define a denotational interpretation $\db{-}$ of the types(Figure \ref{fig:denotingtypeenviroment} Section \ref{sec:proof}) in terms of an instrumented execution state --- a runtime state (Section \ref{sec:semantics}) with additional bookkeeping to simplify proofs.  
     The denotation encodes invariants specific to each type, like the fact that \textsf{unlinked} references are unreachable from the heap, or that \textsf{freeable} references are unreachable from the heap as well as other threads' local variables.
     The instrumented execution states are also given additional \textit{global invariants}(Appendix \ref{sec:memaxioms}) the type system is intended to maintain, such as acyclicity of the structure.
-    \item Prove a lemma -- called \emph{Axiom Soundness} \ref{lem:axmsoundness} -- that the type rules(Figure \ref{fig:} Section \ref{subsection:type-rules}) are consistent.  Specifically, that given a state in the denotation of the pre-type-environment of a primitive type rule, the operational semantics produce a state in the denotation of the post-type-environment.  This includes preservation of global invariants.
-    \item Give a desugaring of non-trivial control constructs(Figure \ref{fig:}) into the simpler non-deterministic versions provided by Views.
+    \item Prove a lemma -- called \emph{Axiom Soundness} \ref{lem:axmsoundness} -- that the type rules are consistent.  Specifically, that given a state in the denotation of the pre-type-environment of a primitive type rule, the operational semantics produce a state in the denotation of the post-type-environment.  This includes preservation of global invariants.
+    \item Give a desugaring of non-trivial control constructs(Figure \ref{fig:asm}) into the simpler non-deterministic versions provided by Views.
 \end{enumerate}
 The top-level soundness claim takes the form
 $
