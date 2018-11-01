@@ -246,12 +246,11 @@ Proof is similar to one for Lemma \ref{lemma:stblwap} where there is only one si
 The Views Framework defines a program logic (Hoare logic) with judgments of the form $\{ p \} C \{ q \}$ for views p and q and commands $C$. Commands include atomic actions, and soundness of such judgments for atomic actions is a parameter to the framework. The framework itself provides for soundness of rules for sequencing, fork-join parallelism, and other general rules.
 To prove type soundness for our system, we define a denotation of \emph{type judgments} in terms of the Views logic, and show that every valid typing derivation translates to a valid derivation in the Views logic:
 \[\forall\Gamma,C,\Gamma',\mathit{tid}\ldotp\Gamma\vdash_{M,R} C\dashv \Gamma' \Rightarrow \{\llbracket\Gamma\rrbracket_\mathit{tid}\} \llbracket C\rrbracket_\mathit{tid}\{\llbracket\Gamma'\rrbracket_\mathit{tid}\}\]
-The antecedent of the implication is a type judgment shown in Figures \ref{fig:tss} Section \ref{subsection:type-rules}, \ref{fig:type-judgements-for-cf} Section \ref{subsection:typwrt} and \ref{fig:tssr} Appendix \ref{appendix:readtypes}, and the conclusion is a judgment in the Views logic. The environments are translated to views ($\mathsf{View}_\mathcal{M}$) as previously described. Commands $C$ also require translation, because the Views logic is defined for a language with non-deterministic branches and loops, so the standard versions from our core language must be encoded.  The approach to this is based on a standard idea in verification, which we show here for conditionals as shown in Figure \ref{fig:asmap}. $\textsf{assume}(b)$ is a standard construct in verification semantics~\cite{Barnett:2005:BMR:2090458.2090481} ~\cite{Muller:2016:VVI:2963187.2963190}, which ``does nothing'' (freezes) if the condition $b$ is false, so its postcondition in the Views logic can reflect the truth of $b$.  This is also the approach used in previous applications of the Views Framework~\cite{oopsla12,toplas17}.
-\begin{figure}
+The antecedent of the implication is a type judgment(shown in Figure \ref{fig:tss} Section \ref{subsection:type-rules}, Figure \ref{fig:type-judgements-for-cf} Section \ref{subsection:typwrt} and Figure \ref{fig:tssr} Appendix \ref{appendix:readtypes}) and the conclusion is a judgment in the Views logic. The environments are translated to views ($\mathsf{View}_\mathcal{M}$) as previously described. Commands $C$ also require translation, because the Views logic is defined for a language with non-deterministic branches and loops, so the standard versions from our core language must be encoded.  The approach to this is based on a standard idea in verification, which we show here for conditionals as shown in Figure \ref{fig:asmap}. $\textsf{assume}(b)$ is a standard construct in verification semantics~\cite{Barnett:2005:BMR:2090458.2090481} ~\cite{Muller:2016:VVI:2963187.2963190}, which ``does nothing'' (freezes) if the condition $b$ is false, so its postcondition in the Views logic can reflect the truth of $b$.  This is also the approach used in previous applications of the Views Framework~\cite{oopsla12,toplas17}.
+\begin{figure}\scriptsize
 $
 \begin{array}{l}
-\llbracket{\mathsf{if}\;(x.f==y)\;C_1\;C_2}\rrbracket_\mathit{tid} =\\
-\quad z=x.f;((\mathsf{assume}(z=y);C_1)+(\mathsf{assume}(z\neq y);C_2))
+\llbracket{\mathsf{if}\;(x.f==y)\;C_1\;C_2}\rrbracket_\mathit{tid} \overset{\mathrm{def}}{=} z=x.f;((\mathsf{assume}(z=y);C_1)+(\mathsf{assume}(z\neq y);C_2))
 \end{array}
 $
 $
@@ -263,6 +262,9 @@ $
 \right.
 $
 $
+\llbracket{\mathsf{while}\;(e)\;C}\rrbracket \overset{\mathrm{def}}{=} \left(\mathsf{assume}(e);C\right)^{*};(\mathsf{assume}(\lnot e ));
+$
+$
 \inferrule
 {
 \{P\} \cap \{\lceil\mathcal{S} \rceil \}  \sqsubseteq \{Q\}
@@ -272,12 +274,10 @@ $
 }
 $
 \textsf{ where } $\lceil \mathcal{S} \rceil = \{m | \lfloor m \rfloor \cap \mathcal{S} \neq \emptyset \}$
-$
-\llbracket{\mathsf{while}\;(e)\;C}\rrbracket_\mathit{tid} = \left(\mathsf{assume}(e);C\right)^{*};(\mathsf{assume}(\lnot e ));
-$
 \caption{Encoding of \textsf{assume}(b)}
 \label{fig:asmap}
 \end{figure}
+
 The framework also describes a useful concept called the view shift operator $\subseteq$, that describes a way to reinterpret a set of instrumented states as a new set of instrumented states. This operator enables us to define an abstract notion of executing a small step of the program. We express the step from $p$ to $q$ with action $\alpha$ ensuring that the operation interpretation of the action satisfies the specification:$ p \sqsubseteq q \stackrel{def}{\Leftrightarrow} \forall m\in\mathcal{M} \ldotp \lfloor p * \{ m \} \rfloor \subseteq \lfloor q* \mathcal{R}(\{m\})\rfloor$. Because the Views framework handles soundness for the structural rules (sequencing, parallel composition, etc.), there are really only three types of proof obligations for us to prove.  First, we must prove that the non-trivial command translations (i.e., for conditionals and while loops) embed correctly in the Views logic, which is straightforward.  Second, we must show that for our environment subtyping, if $\Gamma<:\Gamma'$, then $\llbracket{\Gamma}\rrbracket\sqsubseteq\llbracket\Gamma'\rrbracket$.  And finally, we must prove that each atomic action's type rule corresponds to a valid semantic judgment in the Views Framework:
 \[
 \forall m\ldotp   \llbracket \alpha \rrbracket ( \lfloor \llbracket \Gamma_{1} \rrbracket_{tid}  * \{m\} \rfloor) \subseteq
