@@ -86,15 +86,15 @@ WriteEnd;
 \label{fig:rculist}
 \end{figure*}
 
-As with concrete RCU implementations, we assume threads operating on a structure are either performing read-only traversals of the structure --- \emph{reader threads} --- or are performing an update --- \emph{writer threads} --- similar to the use of many-reader single-writer reader-writer locks.\footnote{RCU implementation supporting multiple concurrent writers exist~\cite{Arbel:2014:CUR:2611462.2611471}, but are the minority.}  It differs, however, in that readers may execute concurrently with the (single) writer.
+As with concrete RCU implementations, we assume threads operating on a structure are either performing read-only traversals of the structure --- \emph{reader threads} --- or are performing an update --- \emph{writer threads} --- similar to the use of many-reader single-writer reader-writer locks.\footnote{RCU implementations supporting multiple concurrent writers exist~\cite{Arbel:2014:CUR:2611462.2611471}, but are the minority.}  It differs, however, in that readers may execute concurrently with the (single) writer.
 
 This distinction, and some runtime bookkeeping associated with the read- and write-side critical sections, allow this model to determine at modest cost when a node unlinked by the writer can safely be reclaimed.
 
-Figure \ref{fig:rculist} gives the code for adding/deleting nodes to a set(whole type checking including membership queries for bag can be found in Appendix \ref{appendix:bag_paul}). Algorithmically, this code is nearly the same as any sequential implementation. There are only two differences.
+Figure \ref{fig:rculist} gives the code for adding nodes to a bag together with deleting exsisting(to keep example in Figure \ref{fig:rculist} clear) nodes from a bag. Type checking for all code including membership queries for bag can be found in Appendix \ref{appendix:bag_paul}. Algorithmically, this code is nearly the same as any sequential implementation. There are only two differences.
 First, the read-side critical section in \texttt{member} is indicated by the use of \lstinline|ReadBegin| and \lstinline|ReadEnd|; the write-side critical section is between \lstinline|WriteBegin| and \lstinline|WriteEnd|.
 Second, rather than immediately reclaiming the memory for the unlinked node, \texttt{remove} calls \lstinline|SyncStart| to begin a \emph{grace period} --- a wait for reader threads that may still hold references to unlinked nodes to finish their critical sections.
  %with saving the readers on the detached node as bounding readers. 
- \lstinline|SyncStop| blocks execution of the reader thread until these readers exit their read critical section (via \lstinline|ReadEnd|). These are the essential primitives for the implementation of an RCU data structure.
+ \lstinline|SyncStop| blocks execution of the writer thread until these readers exit their read critical section (via \lstinline|ReadEnd|). These are the essential primitives for the implementation of an RCU data structure.
 
 These six primitives together track a critical piece of information: which reader threads' critical sections overlapped the writer's.
 %When a reader thread executes \lstinline|ReadBegin|, some bookkeping data structures are updated to indicate that thread is an active reader; \lstinline|ReadEnd| atomically revokes that status.
@@ -107,15 +107,17 @@ The more interesting primitives are the write-side primitives and memory reclama
 %\texttt{Free}, as the name suggests, reclaims the memory pointed by its argument when active readers are done with the memory that is to be reclaimed.
 
 \lstinline|SyncStart| and \lstinline|SyncStop| implement \emph{grace periods}~\cite{grc}: a mechanism to wait for readers to finish with any nodes the writer may have unlinked.  A grace period begins when a writer requests one, and finishes when all reader threads active \emph{at the start of the grace period} have finished their current critical section.
-Any nodes a writer unlinks before a grace period are physically unlinked, but not logically unlinked until after one grace period. \iso{An astute reader might already realize that our usage of logical/physical unlinking is different than the one used in data-structures literatur where typically a \textit{logical deletion}(marking/unlinking) is followed by a \textit{physical deletion}(free).}
+Any nodes a writer unlinks before a grace period are physically unlinked, but not logically unlinked until after one grace period.
+
+An astute reader might already realize that our usage of logical/physical unlinking is different than the one used in data-structures literatur where typically a \textit{logical deletion}(marking/unlinking) is followed by a \textit{physical deletion}(free).
 Because all threads are forbidden from holding an interior reference into the data structure after leaving their critical sections, waiting for active readers to finish their critical sections ensures they are no longer using any nodes the writer unlinked prior to the grace period.
 This makes actually freeing an unlinked node after a grace period safe.
 %a period of time where the writer waits for all readers active at the that after a node is logically removed from a data structure, the freeing thread must wait for some time to ensure threads that may have read the pointer before it was unlinked are done using the reference.  Typically, the notion of a reader thread being ``done'' with a reference is tied to its read-side critical section: reader threads are forbidden to use interior pointers to inside an RCU structure after leaving their critical section --- even if the use would occur in a subsequent critical section, since the referenced memory may have been reclaimed.
 
 \lstinline|SyncStart| conceptually takes a snapshot of all readers active when it is run.
-\lstinline|SyncStop| then blocks until all those threads \iso{in the snapshot have finished at least one critical section}.
+\lstinline|SyncStop| then blocks until all those threads in the snapshot have finished at least one critical section.
 %is a blocking operation.  Intuitively, it waits for all readers whose critical sections overlapped with \lstinline|SyncStart-SyncStop| calls to finish their critical section.  Once those threads have finished, no other threads retain usable references to unlinked nodes, and the writer thread may continue.
-Note that \lstinline|SyncStop| does not wait for \emph{all} readers to finish, and does not wait for all overlapping readers to simultaneously be out of critical sections.  If two reader threads $A$ and $B$ overlap some \lstinline|SyncStart|-\lstinline|SyncStop|'s critical section, it is possible that $A$ may exit and re-enter a read-side critical section before $B$ exits, and vice versa.  Implementations must distinguish subsequent read-side critical sections from earlier ones that overlapped the writer's initial request to wait: since \lstinline|SyncStart| is used \emph{after} a node is physically removed from the data structure and readers may not retain RCU references across critical sections, $A$ re-entering a fresh read-side critical section will not permit it to re-observe the node to be freed.
+Note that \lstinline|SyncStop| does not wait for \emph{all} readers to finish, and does not wait for all overlapping readers to simultaneously be out of critical sections.
 
 To date, every description of RCU semantics, most centered around the notion of a grace period, has been given algorithmically, as a specific (efficient) implementation.  While the implementation aspects are essential to real use, the lack of an abstract characterization makes judging the correctness of these implementations --- or clients --- difficult in general. In Section \ref{sec:semantics} we give formal \emph{abstract} semantics for RCU implementations --- horrifically inefficient if implemented directly, but correct from a memory-safety and programming model perspective, and not tied to the low-level RCU implementation details.
 %We handle the management of grace periods (and in particular, distinguishing multiple overlapping read-side critical sections by the same thread) in intuitive ways, which would be terribly inefficient to implement directly, but express the intended semantics of more sophisticated implementations.
@@ -127,11 +129,12 @@ To use these semantics or a concrete implementation correctly, client code must 
 \item Unlinked nodes are always freed by the unlinking thread \emph{after} the unlinking, \emph{after} a grace period, and \emph{inside} the critical section
 \item Nodes are freed at most once
 \end{itemize}
-In practice, RCU data structures typically ensure additional invariants to simplify the above:
+In practice, RCU data structures typically ensure additional invariants to simplify the above, e.g.:
 \begin{itemize}
 \item The data structure is always an acyclic tree
 \item A writer thread unlinks or replaces only one node at a time. 
 \end{itemize}
+and our type system in Section \ref{sec:tslbl} guarantees these invariants.
 % \subsection{Relation to Concrete Implementations}
 % Operations on RCU data structure have two kinds of computational blocks, \textsf{Read Block} and \textsf{Write Block}. \textsf{Read Block} is the block where read-only travelsals to do queries on \textsf{RCU} data structures occur. \textsf{Mutator Block} is the block where mutation on \textsf{RCU} data structures occur.
 % \subsubsection{Mutator Block in RCU}
