@@ -231,14 +231,14 @@ The types of 19 and 20, however, are not the same as lines 23 and 24, so an addi
 \emph{Reindexing} (\textsc{T-ReIndex} in Figure \ref{fig:type-judgements-for-cf}) effectively increments an abstract loop counter, contracting $(Next)^k.Next$ to $Next^k$ everywhere in a type environment.  This expresses the same relationship between \texttt{par} and \texttt{cur} as before the loop, but the choice of $k$ to make these paths accurate after each iteration would be one larger than the choice before.
 Reindexing the type environment of lines 23--24 yields the type environment of lines 19--20, making the types loop invariant.
 
-%(\textit{\textbf{Choosing Fields to Read}}) - However, w
+\iso{Here I have to }
+
 While abstraction is required to deal with control flow joins, reasoning about whether and which nodes are unlinked or replaced, and whether cycles are created, requires precision.  Thus the type system also includes means (Figure \ref{fig:type-judgements-for-cf}) to refine imprecise paths and field maps.
 %
 %We should also note that being precise in the field names is so crucial for mutation actions. This means we need to know which fields are used to replace/unlink a heap node. Then, what is the mechanism to become more/less precise in the fields used in both path and field mappings of the \textsf{rcuItr} type? 
 In Listing \ref{lst:altfield}, we see a conditional with the condition $par.Left == cur$. The type system matches this condition to the imprecise types in line 1's typing assertion, and refines the initial type assumptions in each branch accordingly (lines 3 and 8) based on whether execution reflects the truth or falsity of that check.
 Similarly, it is sometimes required to check --- and later remember --- whether  a field is null, and the type system supports this.
 %refines the assertions in Listing \ref{lst:altfield} line 1 to the one in the line 3 for the \textit{then} branch and to the one in the line 8 for the \textit{else} branch via making types more precise on the object fields(\textsc{T-Branch1} shown in Figure \ref{fig:type-judgements-for-cf}).
-
 %(\textit{\textbf{Points to }}\textsf{null}) - Typing rules(\textsc{T-Branch3} and \textsc{T-Loop2}) in Figure \ref{fig:type-judgements-for-cf} refine field mappings with respect to \texttt{null} value in control flow statements.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsection{Types in Action}
@@ -282,7 +282,7 @@ The type system checks that this unlink disconnects only one node: note how the 
 \mypar{Grace and Reclamation}
 After the referent of \texttt{cur} is unlinked, concurrent readers traversing the list may still hold references.  So it is not safe to actually reclaim the memory until after a grace period.
 Lines 28--29 of \lstinline|remove| initiate a grace period and wait for its completion.  At the type level, this is reflected by the change of \lstinline|cur|'s type from \textsf{unlinked} to \textsf{freeable}, reflecting the fact that the grace period extends until any reader critical sections that might have observed the node in the structure have completed.
-This matches the precondition required by our rules for calling \lstinline|Free|, which further changes the type of \lstinline|cur| to \textsf{undef} reflecting that \lstinline|cur| is no longer a valid reference.  The type system also ensures no local (writer) aliases exist to the freed node.
+This matches the precondition required by our rules for calling \lstinline|Free|, which further changes the type of \lstinline|cur| to \textsf{undef} reflecting that \lstinline|cur| is no longer a valid reference.  The type system also ensures no local (writer) aliases exist to the freed node.  \iso{Add side effects of unlinking and linking of framing}.
 
 \mypar{Fresh Nodes}
 Some code must also allocate new nodes, and the type system must reason about how they are incorporated into the shared data structure.
