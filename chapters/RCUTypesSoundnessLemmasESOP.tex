@@ -1815,11 +1815,6 @@ F_1 \uplus F_2 = F
 \textsf{WellFormed}(\sigma,O_{2},U_{2},T_{2},F_2)
 \end{gather}
 
-We also assume from the operational semantics that
-\begin{gather}\label{opsfree1}
-  \textrm{where}~ \forall_{f,o'}\ldotp rt \neq s(x,tid) \textrm{ and } o' \neq s(x,tid) \implies h(o',f) = h'(o',f) \textrm{ and } \forall_{f}\ldotp h'(o,f)=\textsf{undef}
-\end{gather}
-
 We must show $\exists_{O'_{1}, O'_{2}, U'_{1}, U'_{2}, T'_{1}, T'_{2},F'_1, F'_2}$ such that
 \begin{gather}\label{phu5free}
 \begin{aligned}
@@ -1851,10 +1846,9 @@ F'_1 \uplus F'_2 = F'
 
 From operational semantics we know that
 \begin{gather}\label{ahusfree}
-\sigma_1' =  \sigma_1
+  \forall_{f,o'}\ldotp rt \neq s(x,tid) \land  o' \neq s(x,tid) \implies h(o',f) = h'(o',f) \land \forall_{f}\ldotp h'(o,f)=\textsf{undef}
 \end{gather}
 
-There exists no change in the observation of heap locations
 \begin{gather}\label{ahus1free}
   O'_1 =  O_1(s(x,tid))[\textsf{freeable}\mapsto \textsf{undef}]
 \end{gather}
@@ -1875,7 +1869,7 @@ There exists no change in the observation of heap locations
 Let $T'_1$ to be $T_1$. All \ref{ahusfree}-\ref{ahus4free} show(\ref{phu5free}) that $(\sigma',O'_1,U_1',T_1',F'_1)$ is in denotation of  
 \[\llbracket  x:\textsf{undef}  \rrbracket \]
 
-In the rest of the proof, we prove \ref{phu10free}, \ref{phu11free}\ref{phu10}, \ref{phu11} and show the composition of $(\sigma'_1, O'_1, U'_1,T'_1,F'_1)$ and  $(\sigma'_2, O'_2, U'_2,T'_2,F'_2)$.. To prove \ref{phu10free}, we need to show that each of the memory axioms in Section \ref{sec:memaxioms} holds for the state $(\sigma',O'_1,U_1',T_1',F'_1)$ and it it trivial by \ref{ahusfree}-\ref{ahus4free} and \ref{phu5free}.
+In the rest of the proof, we prove \ref{phu10free}, \ref{phu11free} and show the composition of $(\sigma'_1, O'_1, U'_1,T'_1,F'_1)$ and  $(\sigma'_2, O'_2, U'_2,T'_2,F'_2)$.. To prove \ref{phu10free}, we need to show that each of the memory axioms in Section \ref{sec:memaxioms} holds for the state $(\sigma',O'_1,U_1',T_1',F'_1)$ and it it trivial by \ref{ahusfree}-\ref{ahus4free} and \ref{phu5free}.
 
 To prove \ref{phu6free}, we need to show interference relation
 \[(\sigma, O_2, U_2, T_2,F_2) \mathcal{R} (\sigma', O'_2, U'_2, T'_2,F'_2)  \]
