@@ -49,7 +49,7 @@ The bounding set $B$ tracks which threads the writer is \emph{actively} waiting 
 (\textsc{RCU-REnd}) & \llbracket\texttt{ReadEnd}\rrbracket & (s,h,tid,rt,R\uplus\{tid\},B) & (s,h,l,rt,R,B\setminus \{tid\}) \qquad  \mathit{tid} \neq l& \\
 (\textsc{RCU-SStart}) & \llbracket\texttt{SyncStart}\rrbracket & (s,h,l,rt,R,\emptyset) & (s,h,l,rt,R,R) &\\  %\forall_{t\in R}\ldotp t \notin r \\
 (\textsc{RCU-SStop}) & \llbracket\texttt{SyncStop}\rrbracket & (s,h,l,rt,R,\emptyset) & (s,h,l,rt,R,\emptyset) &  \\
-(\textsc{Free}) & {\llbracket\texttt{Free}(x)\rrbracket} & (s,h,l,rt,R,\emptyset) & (s,h,l,rt,R,\emptyset) &
+(\textsc{Free}) & {\llbracket\texttt{Free}(x)\rrbracket} & (s,h,l,rt,R,\emptyset) & (s,h',l,rt,R,\emptyset) &
 \end{array}\]
 $\textrm{where}~ \forall_{f,o'}\ldotp rt \neq s(x,tid) \textrm{ and } o' \neq s(x,tid) \implies h(o',f) = h'(o',f) \textrm{ and } \forall_{f}\ldotp h'(o,f)=\textsf{undef}$
 \[\begin{array}{c@{\;}rl@{\Downarrow_{\mathit{tid}}}ll} 
