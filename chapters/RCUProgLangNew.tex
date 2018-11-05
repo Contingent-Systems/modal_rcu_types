@@ -229,9 +229,7 @@ The $k$ in the $(Next)^{k}$ abstracts the number of loop iterations run, implici
 The trailing $Next$ in \texttt{cur}'s path on line 19 --- $(Next)^{k}.Next$ --- expresses the relationship between \texttt{cur} and \texttt{par}: \texttt{par} is reachable from the root by following $Next$ $k$ times, and \texttt{cur} is reachable via one additional $Next$.
 The types of 19 and 20, however, are not the same as lines 23 and 24, so an additional adjustment is needed for the types to become loop-invariant.
 \emph{Reindexing} (\textsc{T-ReIndex} in Figure \ref{fig:type-judgements-for-cf}) effectively increments an abstract loop counter, contracting $(Next)^k.Next$ to $Next^k$ everywhere in a type environment.  This expresses the same relationship between \texttt{par} and \texttt{cur} as before the loop, but the choice of $k$ to make these paths accurate after each iteration would be one larger than the choice before.
-Reindexing the type environment of lines 23--24 yields the type environment of lines 19--20, making the types loop invariant.
-
-\iso{Here I have to }
+Reindexing the type environment of lines 23--24 yields the type environment of lines 19--20, making the types loop invariant. The choice of $k$ does not violate the \textit{soundness} of the type rules because the \textit{framing} in unlinking(\textsc{T-UnlinkH}) or replacing(\textsc{T-LinkF}) a heap node asserts the preservation of the relative order for the heap nodes involved in unlinking/replacement as a part of enforcing the \textit{locality} on the effects of the heap update.
 
 While abstraction is required to deal with control flow joins, reasoning about whether and which nodes are unlinked or replaced, and whether cycles are created, requires precision.  Thus the type system also includes means (Figure \ref{fig:type-judgements-for-cf}) to refine imprecise paths and field maps.
 %
