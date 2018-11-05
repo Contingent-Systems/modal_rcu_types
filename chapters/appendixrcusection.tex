@@ -3,19 +3,18 @@
 \begin{figure}[!htb]
 %\begin{subfigure}[b]{.4\linewidth}
 \begin{mathpar}
-  \tau_{local} := \textsf{rcuItr} \and
-\fbox{$\Gamma \vdash_{R} \alpha \dashv \Gamma'$} \and
-\inferrule[\scriptsize(T-Root)]
-{ y \notin \textsf{FV}(\Gamma) }
-{\Gamma\,,r:\textsf{rcuRoot}\,,y:\textsf{undef} \vdash y = r \dashv y: \textsf{rcuItr}\,,r:\textsf{rcuRoot}\,,\Gamma}
-\and
-\inferrule[\scriptsize(T-ReadS)]
+  \fbox{$\Gamma \vdash_{R} \alpha \dashv \Gamma'$} \;\;
+  \inferrule[\scriptsize(T-ReadS)]
 {
 z \notin  \textsf{FV}(\Gamma)
 }
 {
 \Gamma\,, z:\_ \, , x:\textsf{rcuItr}\vdash z=x \dashv  x:\textsf{rcuItr} \, , z:\textsf{rcuItr}\, , \Gamma
 }
+\and
+\inferrule[\scriptsize(T-Root)]
+{ y \notin \textsf{FV}(\Gamma) }
+{\Gamma\,,r:\textsf{rcuRoot}\,,y:\textsf{undef} \vdash y = r \dashv y: \textsf{rcuItr}\,,r:\textsf{rcuRoot}\,,\Gamma}
 \and
 \inferrule[\scriptsize(T-ReadH)]
 {
@@ -27,6 +26,7 @@ z \notin  \textsf{FV}(\Gamma)
  \dashv  x:\textsf{rcuItr} \, ,z:\textsf{rcuItr}  \, , \Gamma
 }
 \and
+\fbox{$\Gamma \vdash_{R} C \dashv \Gamma'$} \;\;
 \inferrule[\scriptsize(ToRCURead)]
 {
  \Gamma\, , y : \textsf{rcuItr} \vdash_R \bar{s} \dashv \Gamma' \quad \textsf{FType}(f)=\textsf{RCU}
@@ -35,16 +35,7 @@ z \notin  \textsf{FV}(\Gamma)
 \Gamma \vdash \textsf{RCURead}\, x.f \textsf{ as }y\textsf{ in } \{ \bar{s} \}
 }
 \and
-\fbox{$\Gamma \vdash_{M,R} C \dashv \Gamma'$} \and
-\inferrule[\scriptsize(T-Loop1)]
-{
-\Gamma(x) = \textsf{bool} \and
-\Gamma \vdash C \dashv \Gamma 
-}
-{
-\Gamma \vdash \textsf{while}(x)\{C\} \dashv  \Gamma
-}
-\and
+\fbox{$\Gamma \vdash_{M,R} C \dashv \Gamma'$} \;\;
 \inferrule[\scriptsize(T-Branch2)]
 {
 \Gamma(x)= \textsf{bool} \\
@@ -52,6 +43,15 @@ z \notin  \textsf{FV}(\Gamma)
 }
 {
 \Gamma \vdash \textsf{if}(x) \textsf{ then } C_1  \textsf{ else } C_2 \dashv \Gamma'
+}
+\and
+\inferrule[\scriptsize(T-Loop1)]
+{
+\Gamma(x) = \textsf{bool} \and
+\Gamma \vdash C \dashv \Gamma 
+}
+{
+\Gamma \vdash \textsf{while}(x)\{C\} \dashv  \Gamma
 }
 \and
 \inferrule[\scriptsize(T-Seq)]
