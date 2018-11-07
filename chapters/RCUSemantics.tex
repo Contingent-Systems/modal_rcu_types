@@ -8,7 +8,7 @@ In this section, we outline the details of an abstract semantics for RCU impleme
 \label{fig:prog-lang}
 \end{figure}\end{comment}
 %RCU allows a single mutator thread and  multiple  reader threads to traverse a data structure. When a writer mutates some state, it waits  until all concurrent reads are completed to free the mutated state. To represent this in our semantics, we augment the  machine state,$\textsf{MState}$, ranged over by $\sigma$, consists of:
-In our semantics, shown in Figure \ref{fig:operationalsemrcu}, an abstract machine state contains:\\
+In our semantics, shown in Figure \ref{fig:operationalsemrcu}, an abstract machine state, \textsf{MState}, contains:\\
 
 %\noindent
 %\begin{minipage}{0.5\textwidth}
