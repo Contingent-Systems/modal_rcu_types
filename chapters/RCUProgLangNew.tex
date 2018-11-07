@@ -418,136 +418,6 @@ The remaining rules are a bit more involved, and form the heart of the type syst
 
 \mypar{Grace Periods}
 \textsc{T-Sync} gives pre- and post-environments to the compound statement \lstinline|SyncStart;SyncStop|, which implements a grace period.  As mentioned earlier, this works in any type environment, and updates the environment afterwards to reflect that any nodes \textsf{unlinked} before the wait become \textsf{freeable} after the wait.
-\begin{figure}[!t]\scriptsize
- \centering
- \begin{subfigure}[b]{.4\linewidth}
-\centering
- \begin{tikzpicture}[>=stealth',node distance=1.2cm,semithick,auto]
- \tikzstyle{hollow node}=[circle,draw,inner sep=1]
- \tikzstyle{sub node}=[triangle,draw,inner sep=1]
- \tikzstyle{solid node}=[rectangle,draw,inner sep=1]
- \tikzstyle{solids node}=[rectangle,draw=red,inner sep=1]
-\tikzstyle{null node}=[circle,draw=red,fill=red]
- \tikzset{
- 	red node/.style={rectangle,draw=black,fill=red,inner sep=1},
- 	blue node/.style={rectangle,draw=black,inner sep=1},
- 	reader node/.style={circle,draw=black,inner sep=1},
-        redreader node/.style={circle,draw=red,inner sep=1},
-        readerr node/.style={dashed,circle,draw=black,inner sep=1},
- 	writer node/.style={circle,draw=black,inner sep=1}
- }
-
-       \node[solid node] (R) {$R$};
-       \node[solid node] (1) [right of=R] {$H_0$};
-       \node[solids node] (2) [right of=1] {$H_1$};
-       \node[solids node] (3) [right of=2] {$H_2$};
-       \node[solids node] (4) [right of=3] {$H_3$};
-       \node[solid node] (5) [above  of=3] {$H_4$};
-       \node[null node] (nl) [above right of = 3]{};
-       \node[solid node] (6) [above  of=4] {$H_5$};
-       
-       \node[redreader node] (r0) [below  of= 2]  {$pr$};
-       \node[redreader node] (r1) [below  of= 3]  {$cr$};
-       \node[redreader node] (r2)  [below  of= 4] {$crl$};
-
-       \node[readerr node] (r0a) [above  of= 1]  {$a_1$};
-       \node[readerr node] (r1a) [above   of= 2]  {$a_2$};
-       \node[readerr node] (r2a)  [below right of= 4] {$a_3$};
-
-       \node[reader node] (r1f) [above  of= 5]  {$a_4$};
-       \node[reader node] (r2f)  [above  of= 6] {$a_5$};
-
-     \path[->]  (R) edge node[below] {$l$} (1);
-     \path[->]  (1) edge node[below] {$l$} (2);
-     \path[draw=red,->]  (2) edge node[below] {$l$} (3);
-     \path[draw=red,->]  (3) edge node[below] {$l$} (4);
-     \path[dashed,->]  (5) edge node {$l$} (3);
-     \path[dashed,->]  (6) edge node {$l$} (4);
-
-     \path[draw=red,->]  (r0) edge node {} (2);
-     \path[draw=red,->]  (r1) edge node  {}  (3);
-     \path[draw=red,->]  (r2) edge  node  {}   (4);
-
-     \path[dashed,->]  (r0a) edge node {} (2);
-     \path[dashed,->]  (r1a) edge node  {}  (3);
-     \path[dashed,->]  (r2a) edge  node  {}   (4);
-
-     \path[->]  (r1f) edge node  {}  (5);
-     \path[->]  (r2f) edge  node  {}   (6);
-    \path[draw=red,->] (3) edge node[below] {$r$} (nl);
-%\path[dotted,->] (1) edge[bend left] node  {$f^{*}$} (5)
- ;
- 
- \end{tikzpicture}
- \caption{\textsf{Framing} before unlinking the heap node pointed by \texttt{cur}-$cr$.}
- \label{fig:bframeout}
- \end{subfigure}\quad\quad
-\begin{subfigure}[b]{.4\linewidth}
- \centering
- \begin{tikzpicture}[>=stealth',node distance=1.2cm,semithick,auto]
- \tikzstyle{hollow node}=[circle,draw,inner sep=1]
- \tikzstyle{sub node}=[triangle,draw,inner sep=1]
- \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
- \tikzstyle{solids node}=[rectangle,draw=red,inner sep=1.5]
-  \tikzstyle{solidss node}=[dashed,rectangle,draw=red,inner sep=1.5]
- \tikzstyle{null node}=[circle,draw=red,fill=red]
- \tikzset{
- 	red node/.style={rectangle,draw=black,fill=red,inner sep=1.5},
- 	blue node/.style={rectangle,draw=black,inner sep=1.5},
- 	reader node/.style={circle,draw=black,inner sep=1},
-        redreader node/.style={circle,draw=red,inner sep=1},
-                rredreader node/.style={dashed,circle,draw=red,inner sep=1},
-        readerr node/.style={dashed,circle,draw=black,inner sep=1},
- 	writer node/.style={circle,draw=black,inner sep=1}
- }
-
-       \node[solid node] (R) {$R$};
-       \node[solid node] (1) [right of=R] {$H_0$};
-       \node[solids node] (2) [right of=1] {$H_1$};
-       \node[solidss node] (3) [right of=2] {$H_2$};
-       \node[solids node] (4) [right of=3] {$H_3$};
-       \node[solid node] (5) [above  of=3] {$H_4$};
-       \node[solid node] (6) [above  of=4] {$H_5$};
-       \node[null node] (nl) [above right of = 3]{};
-
-       \node[redreader node] (r0) [below  of= 2]  {$pr$};
-       \node[rredreader node] (r1) [below  of= 3]  {$cr$};
-       \node[redreader node] (r2)  [below  of= 4] {$crl$};
-
-       \node[readerr node] (r0a) [above  of= 1]  {$a_1$};
-       \node[readerr node] (r1a) [above   of= 2]  {$a_2$};
-       \node[readerr node] (r2a)  [below right of= 4] {$a_3$};
-
-       \node[reader node] (r1f) [above  of= 5]  {$a_4$};
-       \node[reader node] (r2f)  [above  of= 6] {$a_5$};
-
-     \path[->]  (R) edge node[below] {$l$} (1);
-     \path[->]  (1) edge node[below] {$l$} (2);
-     \path[draw=red,->]  (2) edge [bend right] node[below left] {$l$} (4);
-     \path[dashed,draw=red,->]  (3) edge node[below] {$l$} (4);
-     \path[dashed,->]  (5) edge node {$l$} (3);
-     \path[dashed,->]  (6) edge node {$l$} (4);
-
-     \path[draw=red,->]  (r0) edge node {} (2);
-     \path[dashed,draw=red,->]  (r1) edge node  {}  (3);
-     \path[draw=red,->]  (r2) edge  node  {}   (4);
-
-     \path[dashed,->]  (r0a) edge node {} (2);
-     \path[dashed,->]  (r1a) edge node  {}  (3);
-     \path[dashed,->]  (r2a) edge  node  {}   (4);
-
-     \path[->]  (r1f) edge node  {}  (5);
-     \path[->]  (r2f) edge  node  {}   (6);
-     \path[dashed,draw=red, ->] (3) edge node[below] {$r$} (nl);
- ;
- \end{tikzpicture}
-
- \caption{Safe unlinking of the heap node pointed by \texttt{cur}-$cr$ via \textsf{Framing}}
- \label{fig:bunlinkframeout}
-\end{subfigure}
-\caption{Safe unlinking of a heap node from a \textsf{BST}}
- \label{fig:unlkappndx}\vspace{-2mm}
- \end{figure}
 
 \mypar{Unlinking}
 \textsc{T-UnlinkH} type checks heap updates that remove a node from the data structure.  The rule assumes three objects $x$, $z$, and $r$, whose identities we will conflate with the local variable names in the type rule.  The rule checks the case where $x.f_1==z$ and $z.f_2==r$ initially (reflected in the path and field map components, and a write $x.f_1=r$ removes $z$ from the data structure (we assume, and ensure, the structure is a tree).
@@ -730,7 +600,133 @@ checks that for every \textsf{rcuItr} reference $n$ in $\Gamma$, it is not a pat
  \caption{Safe replacement of the heap node pointed by \texttt{cur}-$cr$ with the \textit{fresh} heap node pointed by \texttt{curF}-$cf$}
  \label{fig:freshframeout}
  \end{subfigure}
- \caption{Linking and replacing nodes}
+ \\
+ \begin{subfigure}[b]{.4\linewidth}
+\centering
+ \begin{tikzpicture}[>=stealth',node distance=1.2cm,semithick,auto]
+ \tikzstyle{hollow node}=[circle,draw,inner sep=1]
+ \tikzstyle{sub node}=[triangle,draw,inner sep=1]
+ \tikzstyle{solid node}=[rectangle,draw,inner sep=1]
+ \tikzstyle{solids node}=[rectangle,draw=red,inner sep=1]
+\tikzstyle{null node}=[circle,draw=red,fill=red]
+ \tikzset{
+ 	red node/.style={rectangle,draw=black,fill=red,inner sep=1},
+ 	blue node/.style={rectangle,draw=black,inner sep=1},
+ 	reader node/.style={circle,draw=black,inner sep=1},
+        redreader node/.style={circle,draw=red,inner sep=1},
+        readerr node/.style={dashed,circle,draw=black,inner sep=1},
+ 	writer node/.style={circle,draw=black,inner sep=1}
+ }
+
+       \node[solid node] (R) {$R$};
+       \node[solid node] (1) [right of=R] {$H_0$};
+       \node[solids node] (2) [right of=1] {$H_1$};
+       \node[solids node] (3) [right of=2] {$H_2$};
+       \node[solids node] (4) [right of=3] {$H_3$};
+       \node[solid node] (5) [above  of=3] {$H_4$};
+       \node[null node] (nl) [above right of = 3]{};
+       \node[solid node] (6) [above  of=4] {$H_5$};
+       
+       \node[redreader node] (r0) [below  of= 2]  {$pr$};
+       \node[redreader node] (r1) [below  of= 3]  {$cr$};
+       \node[redreader node] (r2)  [below  of= 4] {$crl$};
+
+       \node[readerr node] (r0a) [above  of= 1]  {$a_1$};
+       \node[readerr node] (r1a) [above   of= 2]  {$a_2$};
+       \node[readerr node] (r2a)  [below right of= 4] {$a_3$};
+
+       \node[reader node] (r1f) [above  of= 5]  {$a_4$};
+       \node[reader node] (r2f)  [above  of= 6] {$a_5$};
+
+     \path[->]  (R) edge node[below] {$l$} (1);
+     \path[->]  (1) edge node[below] {$l$} (2);
+     \path[draw=red,->]  (2) edge node[below] {$l$} (3);
+     \path[draw=red,->]  (3) edge node[below] {$l$} (4);
+     \path[dashed,->]  (5) edge node {$l$} (3);
+     \path[dashed,->]  (6) edge node {$l$} (4);
+
+     \path[draw=red,->]  (r0) edge node {} (2);
+     \path[draw=red,->]  (r1) edge node  {}  (3);
+     \path[draw=red,->]  (r2) edge  node  {}   (4);
+
+     \path[dashed,->]  (r0a) edge node {} (2);
+     \path[dashed,->]  (r1a) edge node  {}  (3);
+     \path[dashed,->]  (r2a) edge  node  {}   (4);
+
+     \path[->]  (r1f) edge node  {}  (5);
+     \path[->]  (r2f) edge  node  {}   (6);
+    \path[draw=red,->] (3) edge node[below] {$r$} (nl);
+%\path[dotted,->] (1) edge[bend left] node  {$f^{*}$} (5)
+ ;
+ 
+ \end{tikzpicture}
+ \caption{\textsf{Framing} before unlinking the heap node pointed by \texttt{cur}-$cr$.}
+ \label{fig:bframeout}
+ \end{subfigure}\quad\quad
+\begin{subfigure}[b]{.4\linewidth}
+ \centering
+ \begin{tikzpicture}[>=stealth',node distance=1.2cm,semithick,auto]
+ \tikzstyle{hollow node}=[circle,draw,inner sep=1]
+ \tikzstyle{sub node}=[triangle,draw,inner sep=1]
+ \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+ \tikzstyle{solids node}=[rectangle,draw=red,inner sep=1.5]
+  \tikzstyle{solidss node}=[dashed,rectangle,draw=red,inner sep=1.5]
+ \tikzstyle{null node}=[circle,draw=red,fill=red]
+ \tikzset{
+ 	red node/.style={rectangle,draw=black,fill=red,inner sep=1.5},
+ 	blue node/.style={rectangle,draw=black,inner sep=1.5},
+ 	reader node/.style={circle,draw=black,inner sep=1},
+        redreader node/.style={circle,draw=red,inner sep=1},
+                rredreader node/.style={dashed,circle,draw=red,inner sep=1},
+        readerr node/.style={dashed,circle,draw=black,inner sep=1},
+ 	writer node/.style={circle,draw=black,inner sep=1}
+ }
+
+       \node[solid node] (R) {$R$};
+       \node[solid node] (1) [right of=R] {$H_0$};
+       \node[solids node] (2) [right of=1] {$H_1$};
+       \node[solidss node] (3) [right of=2] {$H_2$};
+       \node[solids node] (4) [right of=3] {$H_3$};
+       \node[solid node] (5) [above  of=3] {$H_4$};
+       \node[solid node] (6) [above  of=4] {$H_5$};
+       \node[null node] (nl) [above right of = 3]{};
+
+       \node[redreader node] (r0) [below  of= 2]  {$pr$};
+       \node[rredreader node] (r1) [below  of= 3]  {$cr$};
+       \node[redreader node] (r2)  [below  of= 4] {$crl$};
+
+       \node[readerr node] (r0a) [above  of= 1]  {$a_1$};
+       \node[readerr node] (r1a) [above   of= 2]  {$a_2$};
+       \node[readerr node] (r2a)  [below right of= 4] {$a_3$};
+
+       \node[reader node] (r1f) [above  of= 5]  {$a_4$};
+       \node[reader node] (r2f)  [above  of= 6] {$a_5$};
+
+     \path[->]  (R) edge node[below] {$l$} (1);
+     \path[->]  (1) edge node[below] {$l$} (2);
+     \path[draw=red,->]  (2) edge [bend right] node[below left] {$l$} (4);
+     \path[dashed,draw=red,->]  (3) edge node[below] {$l$} (4);
+     \path[dashed,->]  (5) edge node {$l$} (3);
+     \path[dashed,->]  (6) edge node {$l$} (4);
+
+     \path[draw=red,->]  (r0) edge node {} (2);
+     \path[dashed,draw=red,->]  (r1) edge node  {}  (3);
+     \path[draw=red,->]  (r2) edge  node  {}   (4);
+
+     \path[dashed,->]  (r0a) edge node {} (2);
+     \path[dashed,->]  (r1a) edge node  {}  (3);
+     \path[dashed,->]  (r2a) edge  node  {}   (4);
+
+     \path[->]  (r1f) edge node  {}  (5);
+     \path[->]  (r2f) edge  node  {}   (6);
+     \path[dashed,draw=red, ->] (3) edge node[below] {$r$} (nl);
+ ;
+ \end{tikzpicture}
+
+ \caption{Safe unlinking of the heap node pointed by \texttt{cur}-$cr$ via \textsf{Framing}}
+ \label{fig:bunlinkframeout}
+\end{subfigure} 
+ \caption{Linking/Replacing and Unlinking Heap Nodes}
  \label{fig:alloc}\vspace{-2mm}
  \end{figure}
 %\textit{\textbf{Creating a Fresh Node}} - We deffered answering the question: "Why do we need a separate type \textsf{rcuFresh} instead of using \textsf{rcuItr} for typing a freshly allocated heap node in \textsf{Write} critical section ?". To understand and answer the question easily, we illustrate the setting for creating a fresh \textsf{BST} heap node and linking it in Figures \ref{fig:frframeout} and \ref{fig:freshframeout}.
