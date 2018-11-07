@@ -51,7 +51,7 @@ Each memory region can be observed in one of the following type states within a 
 \[\textsf{obs} := \texttt{iterator} \; \mathrm{tid} \mid \texttt{unlinked} \mid \texttt{fresh} \mid \texttt{freeable} \mid \texttt{root}\]
 
 We are interested in \textsf{RCU} typed of heap domain which we define as:
-\[\textsf{RCU} = \{ o \mid \textsf{ftype}(f) = \textsf{RCU} \land \exists o' \ldotp h(o',f) = o \}\]
+\[\textsf{RCU} = \{ o \mid \textsf{FType}(f) = \textsf{RCU} \land \exists o' \ldotp h(o',f) = o \}\]
 
 A thread's (or scope's) \emph{view} of memory is a subset of the instrumented(logical states), which satisfy certain \textsf{WellFormed}ness criteria relating the physical state and the additional meta-data ($O$, $U$, $T$ and $F$)
 \[\mathcal{M} \stackrel{def}{=} \{ m \in (\textsf{MState} \times O \times U \times T \times F) \mid  \textsf{WellFormed}(m) \} \]
