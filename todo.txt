@@ -1,3 +1,5 @@
+Rearrange the text for unlinking and fresh
+=====================================
 One well-known way of implementing RCU synchronization without hurting readers performance is \textsf{Quiescent State Based Reclamation}(QSBR) ~\cite{urcu_ieee}. In QSBR model, the writer thread and each reader thread have their own counters. Tassarotti uses \textsf{iGPS} to verify a RCU linked list under \textit{Release-Acquire} semantics ~\cite{verrcu} against. In this section we take Tassarotti's approach as a reference to understand and explain our approach with respect to the following aspects in a comparative fashion.
 
 \mypar{RCU Model} Tassarotti et al. ~\cite{verrcu} formalizes the crucial synchronization points in QSBR via the following relations.
