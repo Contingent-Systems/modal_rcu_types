@@ -62,7 +62,7 @@
  
  \end{tikzpicture}
  \caption{\textsf{Framing} before unlinking the heap node pointed by \texttt{current}-$cr$.}
- \label{fig:apbframeout}
+ \label{fig:bframeout}
  \end{subfigure}\quad \quad \quad
 \begin{subfigure}[b]{.4\linewidth}
  \centering
@@ -125,10 +125,10 @@
  \end{tikzpicture}
 
  \caption{Safe unlinking of the heap node pointed by \texttt{current}-$cr$ via \textsf{Framing}}
- \label{fig:apbunlinkframeout}
+ \label{fig:bunlinkframeout}
 \end{subfigure}
 \caption{Safe unlinking of a heap node from a \textsf{BST}}
- \label{fig:apunlkappndx}\vspace{-2mm}
+ \label{fig:unlkappndx}\vspace{-2mm}
  \end{figure}
 
 Preserving invariants of a data structure against possible mutations under \textsf{RCU} semantics is challenging. Unlinking a heap node is one way of mutating the heap. To understand the importance of the locality on the possible effects of the mutation, we illustrate a setting for unlinking a heap in Figures  \ref{fig:bframeout} and \ref{fig:bunlinkframeout}. The square nodes filled with $R$ -- a root node -- and $H$ -- a heap node -- are heap nodes. The hollow nodes are stack pointers to the square heap nodes. All resources in red form the memory foot print of unlinking. The hollow red nodes -- $pr$, $cr$ and $crl$ -- point to the red square heap nodes which are involved in unlinking of the heap node pointed by \texttt{cr}. We have $a_1$, $a_2$ and $a_3$ which are aliases with \texttt{parent}-$pr$, \texttt{current}-$cr$ and \texttt{currenL}-$crl$ respectively. We call them the \textit{path-aliases} as they share the same path from root to the node that they reference. The red filled circle depicts \texttt{null}, $l$ field which depicts $Left$ and $r$ depicts $Right$ field.
