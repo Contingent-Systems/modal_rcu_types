@@ -45,21 +45,12 @@ z \notin  \textsf{FV}(\Gamma)
 \Gamma \vdash \textsf{if}(x) \textsf{ then } C_1  \textsf{ else } C_2 \dashv \Gamma'
 }
 \and
-\inferrule[\scriptsize(T-Loop1)]
-{
-\Gamma(x) = \textsf{bool} \and
-\Gamma \vdash C \dashv \Gamma 
-}
-{
-\Gamma \vdash \textsf{while}(x)\{C\} \dashv  \Gamma
-}
-\and
 \inferrule[\scriptsize(T-Seq)]
 {
-\Gamma_1 \vdash C_1 \dashv   \Gamma_2  \qquad   \Gamma_2 \vdash_{M,R} C_2 \dashv   \Gamma_3
+\Gamma_1 \vdash C_1 \dashv   \Gamma_2  \qquad   \Gamma_2 \vdash C_2 \dashv   \Gamma_3
 }
 {
-\Gamma_1  \vdash_{M,R} C_1 \; ; \; C_2 \dashv  \Gamma_3
+\Gamma_1  \vdash C_1 \; ; \; C_2 \dashv  \Gamma_3
 }
 \and
 \inferrule[\scriptsize(T-Par)]
@@ -90,9 +81,9 @@ z \notin  \textsf{FV}(\Gamma)
 {
 }
 {
- \Gamma \vdash_{M,R} \textsf{skip} \dashv   \Gamma
+ \Gamma \vdash \textsf{skip} \dashv   \Gamma
 }
 \end{mathpar}
-\caption{Type Rules for \textsf{Read} critical section for \textsf{RCU} Programming and standard type rules}
+\caption{Type Rules for \textsf{Read} critical section for \textsf{RCU} Programming}
 \label{fig:tssr}
 \end{figure}

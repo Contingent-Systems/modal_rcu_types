@@ -46,7 +46,7 @@ Unlinked references become freeable after a writer has waited for a full grace p
 \mypar{Subtyping}
 It is sometimes necessary to use imprecise types --- mostly for control flow joins.  Our type system performs these abstractions via subtyping on individual types and full contexts, as in Figure \ref{fig:sub-typing}.  We discuss subtyping before the full type rules to give a sense of what kinds of imprecision exist in our type system.
 %%%%%%%%%%%%%%%%%%%%%%%%SUB TYPING JUDGEMENTS%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\begin{figure}[!t]\ssmall
+\begin{figure}[!t]\scriptsize
 \begin{mathpar}
  \fmapname \quad \fmapfieldemp \\ \fmapempty \quad \fmapextendn \quad \fmapdiff \\ \fmapwithf \quad \fmapextend %\and \typelocalmap %\and  \ftypedecl \and \rpth 
 \\
@@ -155,9 +155,9 @@ It is sometimes necessary to use imprecise types --- mostly for control flow joi
 Figure \ref{fig:sub-typing} includes four judgments.  The first two --- $\vdash\N\prec:\N'$ and $\vdash\rho\prec:\rho'$ --- describe relaxations of field maps and paths respectively.  $\vdash\N\prec:\N'$ is read as ``the field map $\N$ is more precise than $\N'$'' and similarly for paths.
 The third judgment $\vdash T\prec:T'$ uses path and field map subtyping to give subtyping among \textsf{rcuItr} types --- one \textsf{rcuItr} is a subtype of another if their paths and field maps are similarly more precise --- and to allow \textsf{rcuItr} references to be ``forgotten'' --- this is occasionally needed to satisfy non-interference checks in the type rules.
 The final judgment $\vdash\Gamma\prec:\Gamma'$ extends subtyping to all assumptions in a type context, allowing any or all types in the context to be relaxed to a supertype.
-\begin{figure}[!t]\ssmall
+\begin{figure}[!t]\scriptsize
 \begin{mathpar}
-\fbox{$\Gamma \vdash_{M} C \dashv \Gamma'$} \;\;\;\;\;\;
+\fbox{$\Gamma \vdash_{M,R} C \dashv \Gamma'$} \;\;\;\;\;\;
 \inferrule[\scriptsize(T-ReIndex)]
 {
 }
@@ -182,12 +182,29 @@ The final judgment $\vdash\Gamma\prec:\Gamma'$ extends subtyping to all assumpti
 \Gamma,\,x:\textsf{rcuItr} \, \rho \, \N([f\rightharpoonup y]) \vdash \textsf{if}(x.f == \textsf{null}) \textsf{ then } C_1  \textsf{ else } C_2 \dashv \Gamma'
 }
 \and
-\inferrule[\scriptsize(T-Loop2)]
+\inferrule*[left=\scriptsize(T-Loop2)]
 {
 \Gamma,\, x:\textsf{rcuItr}\;\rho \; \N([f\rightharpoonup \_]) \vdash C \dashv \Gamma, x:\textsf{rcuItr}\;\rho' \; \N([f\rightharpoonup \_])
 }
 {
 \Gamma,\, x:\textsf{rcuItr}\;\rho \; \N([f\rightharpoonup \_]) \vdash \textsf{while}(x.f \neq \textsf{null})\{C\} \dashv   x:\textsf{rcuItr}\;\rho' \; \N([f\rightharpoonup \textsf{null}]) ,\,  \Gamma
+}
+\and
+\inferrule*[left=\scriptsize(T-Branch2)]
+{
+\Gamma(x)= \textsf{bool} \\
+ \Gamma \vdash C_1 \dashv\Gamma' \and \Gamma \vdash C_2 \dashv \Gamma'
+}
+{
+\Gamma \vdash \textsf{if}(x) \textsf{ then } C_1  \textsf{ else } C_2 \dashv \Gamma'
+}
+\inferrule*[left=\scriptsize(T-Loop1)]
+{
+\Gamma(x) = \textsf{bool} \and
+\Gamma \vdash C \dashv \Gamma 
+}
+{
+\Gamma \vdash \textsf{while}(x)\{C\} \dashv  \Gamma
 }
 
 \end{mathpar}
@@ -289,7 +306,7 @@ The type system gives it a \textsf{fresh} type while tracking its field contents
 %and set its fields in lines 10 and 29. The type of the variable \texttt{nw} in line 9 represents a freshly allocated heap node, whose fields are not set yet. A \textsf{rcuFresh} reference can be used either in setting the fields of a fresh object or linking the fresh object. We will investigate  linking a fresh object in the next analysis but, first we anaylze how we set the fields of the fresh object. In  line 29, we set the fields of the object referenced by \texttt{nw} and we end up having the type in line 30 which seems similar to a type \textsf{rcuItr} with empty path. We will justify why we have separate type \textsf{rcuFresh} instead of typing the freshly allocated heap with \textsf{rcuItr} when we explain the type rules.
 \subsection{Type Rules}
 \label{subsection:type-rules}
-\begin{figure}[!t]\ssmall
+\begin{figure}[!t]\scriptsize
 \begin{mathpar}
 \fbox{$\Gamma \vdash_{M} \alpha \dashv \Gamma'$} \;\;
 \inferrule*[left=\scriptsize(T-Root)]
@@ -349,9 +366,9 @@ z:\textsf{rcuItr} \; \rho.f \; \_ \quad \N(f)=z \quad f \notin dom (\N')
 \Gamma \vdash \textsf{SyncStart};\textsf{SyncStop} \dashv \Gamma[\overline{x:\textsf{freeable}/x:\textsf{unlinked}}]
 }
 \and
+{
 \inferrule[\scriptsize(T-UnlinkH)]
 {
-%\textsf{FV}(\Gamma) \cap \{x,z,r\} = \emptyset  \\ 
 \rho.f_1=\rho_1 \\
 \rho_1.f_2=\rho_2 \\
 \forall_{f\in dom(\N_1)} \ldotp f\neq f_2 \implies (\N_1(f) = \textsf{null})
@@ -367,14 +384,16 @@ z:\textsf{rcuItr} \; \rho.f \; \_ \quad \N(f)=z \quad f \notin dom (\N')
 \end{array}
 }
 {
-\Gamma,\,x:\textsf{rcuItr}\, \rho \, \N  ,
-z:\textsf{rcuItr}\, \rho_1 \, \N_1  ,  r:\textsf{rcuItr} \, \rho_2 \, \N_2 
+\Gamma,x:\textsf{rcuItr} \rho  \N  ,
+z:\textsf{rcuItr} \rho_1  \N_1  ,  r:\textsf{rcuItr}  \rho_2  \N_2 
 \vdash x.f_1=r \dashv
 z:\unlinked,
-x:\textsf{rcuItr} \, \rho \, \N([f_1\rightharpoonup  r]) ,
-r:\textsf{rcuItr} \, \rho_1 \, \N_2, \Gamma
+x:\textsf{rcuItr}  \rho  \N([f_1\rightharpoonup  r]) ,
+r:\textsf{rcuItr}  \rho_1  \N_2, \Gamma
+}
 }
 \and
+{
 \inferrule[\scriptsize(T-LinkF)]
 {
 \N(f)=o \and \rho.f  = \rho_1  \and 
@@ -383,13 +402,14 @@ r:\textsf{rcuItr} \, \rho_1 \, \N_2, \Gamma
 \forall_{x \in \Gamma, \N_3, \rho_2,f_1,y} \ldotp (x:\textsf{rcuItr}\,\rho_2\,\N_3([f_1 \rightharpoonup y])) \implies (\neg\mathsf{MayAlias}(\rho_2,\{\rho,\rho_1\}) \land (y\neq o  ))
 }
 {
-\Gamma,\,
- p:\textsf{rcuItr}\, \rho \, \N ,
-  o:\textsf{rcuItr}\, \rho_1 \, \N_1  , n:\textsf{rcuFresh} \, \N_2
+\Gamma,
+ p:\textsf{rcuItr} \rho  \N ,
+  o:\textsf{rcuItr} \rho_1  \N_1  , n:\textsf{rcuFresh}  \N_2
   \vdash p.f = n \dashv
-  p:\textsf{rcuItr}\, \rho \, \N([f \rightharpoonup  n])  ,
-  n:\textsf{rcuItr}\, \rho_1 \, \N_2 ,
+  p:\textsf{rcuItr} \rho  \N([f \rightharpoonup  n])  ,
+  n:\textsf{rcuItr} \rho_1  \N_2 ,
   o:\unlinked ,  \Gamma
+}
 }
 \and
 \fbox{$\Gamma \vdash_{M} C \dashv \Gamma'$} \;\;
