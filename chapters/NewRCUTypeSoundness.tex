@@ -65,7 +65,7 @@ that projects instrumented states to the common components with \textsf{MState}.
 &
 \left\{
 \begin{array}{l|l}
-\sigma,O,U,T,F
+m \in \mathcal{M}
 &(\textsf{iterator} \, tid\in  O(s(x,tid)))  \land (x \notin U)  \\
 & \land (\forall_{f_i\in dom(\N)  x_i\in codom(\N) } \ldotp
 \left\{\begin{array}{l}  s(x_i,tid) = h(s(x,tid), f_i)  \\
@@ -79,7 +79,7 @@ that projects instrumented states to the common components with \textsf{MState}.
 &
 \left\{
 \begin{array}{l|l}
-\sigma,O,U,T,F
+m \in \mathcal{M}
 &(\textsf{iterator} \, tid\in  O(s(x,tid)))  \land (x \notin U) \land \\
 & (tid \in B) \implies \left\{\begin{array}{l}( \exists_{T'\subseteq B}\ldotp \{s(x,tid) \mapsto T'\} \cap F \neq \emptyset) \land \\ \land (tid \in T') \end{array}\right.
 \end{array}
@@ -89,7 +89,7 @@ that projects instrumented states to the common components with \textsf{MState}.
 &
 \left\{
 \begin{array}{l|l}
-\sigma,O,U,T,F
+m \in \mathcal{M}
 &(\textsf{unlinked}\in  O(.s(x,tid)) \land l = tid \land x \notin U) \land \\
 & (\exists_{T'\subseteq T}\ldotp \{s(x,tid) \mapsto T'\}\in F \implies T' \subseteq B \land tid \notin T' )
 \end{array}
@@ -99,7 +99,7 @@ that projects instrumented states to the common components with \textsf{MState}.
 &
 \left\{
 \begin{array}{l|l}
-\sigma,O,U,T,F
+m \in \mathcal{M}
 &\begin{array}{l}\textsf{freeable}\in  O(s(x,tid)) \land l = tid \land x \notin U \land \\
 \{ s(x,tid) \mapsto \{\emptyset\}\} \in F \end{array}
 \end{array}
@@ -109,7 +109,7 @@ that projects instrumented states to the common components with \textsf{MState}.
 &
 \left\{
 \begin{array}{l|l}
-\sigma,O,U,T,F
+m \in \mathcal{M}
 &(\textsf{fresh}\in  O(s(x,tid)) \land x \notin U  \land s(x,tid) \notin dom(F))\\
 &(\forall_{f_i\in dom(\N), x_i\in codom(\N) } \ldotp s(x_i,tid) = h(s(x,tid), f_i) \\
 &\land \textsf{iterator}\,tid \in O(s(x_i,tid)) \land s(x_i,tid) \notin dom(F)) 
@@ -120,7 +120,7 @@ that projects instrumented states to the common components with \textsf{MState}.
 &
 \left\{
 \begin{array}{l|l}
-\sigma,O,U,T,F
+m \in \mathcal{M}
 &
 (x,tid) \in U \land s(x,tid) \notin dom(F)
 \end{array}
@@ -130,7 +130,7 @@ that projects instrumented states to the common components with \textsf{MState}.
 &
 \left\{
 \begin{array}{l|l}
-\sigma,O,U,T,F
+m \in \mathcal{M}
 & \begin{array}{l}((rt \notin U \land s(x,tid) = rt \land rt \in dom(h) \land \\ 
 O(rt) \in \textsf{root} \land s(x,tid) \notin dom(F) ) \end{array}
 \end{array}
