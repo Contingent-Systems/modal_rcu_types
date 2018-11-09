@@ -46,7 +46,7 @@ Unlinked references become freeable after a writer has waited for a full grace p
 \mypar{Subtyping}
 It is sometimes necessary to use imprecise types --- mostly for control flow joins.  Our type system performs these abstractions via subtyping on individual types and full contexts, as in Figure \ref{fig:sub-typing}.  We discuss subtyping before the full type rules to give a sense of what kinds of imprecision exist in our type system.
 %%%%%%%%%%%%%%%%%%%%%%%%SUB TYPING JUDGEMENTS%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\begin{figure}[!t]\scriptsize
+\begin{figure}[!t]\ssmall
 \begin{mathpar}
  \fmapname \quad \fmapfieldemp \\ \fmapempty \quad \fmapextendn \quad \fmapdiff \\ \fmapwithf \quad \fmapextend %\and \typelocalmap %\and  \ftypedecl \and \rpth 
 \\
@@ -155,7 +155,7 @@ It is sometimes necessary to use imprecise types --- mostly for control flow joi
 Figure \ref{fig:sub-typing} includes four judgments.  The first two --- $\vdash\N\prec:\N'$ and $\vdash\rho\prec:\rho'$ --- describe relaxations of field maps and paths respectively.  $\vdash\N\prec:\N'$ is read as ``the field map $\N$ is more precise than $\N'$'' and similarly for paths.
 The third judgment $\vdash T\prec:T'$ uses path and field map subtyping to give subtyping among \textsf{rcuItr} types --- one \textsf{rcuItr} is a subtype of another if their paths and field maps are similarly more precise --- and to allow \textsf{rcuItr} references to be ``forgotten'' --- this is occasionally needed to satisfy non-interference checks in the type rules.
 The final judgment $\vdash\Gamma\prec:\Gamma'$ extends subtyping to all assumptions in a type context, allowing any or all types in the context to be relaxed to a supertype.
-\begin{figure}[!t]\scriptsize
+\begin{figure}[!t]\ssmall
 \begin{mathpar}
 \fbox{$\Gamma \vdash_{M} C \dashv \Gamma'$} \;\;\;\;\;\;
 \inferrule[\scriptsize(T-ReIndex)]

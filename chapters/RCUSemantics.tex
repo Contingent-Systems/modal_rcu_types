@@ -30,7 +30,7 @@ The lock $l$ enforces mutual exclusion between write-side critical sections.
 The root location $rt$ is the root of  an \textsf{RCU} data structure. We model only a single global RCU data structure, as the generalization to multiple structures is straightforward but complicates formal development later in the paper.
 The reader set $R$ tracks the thread IDs (TIDs) of all threads currently executing a read block. 
 The bounding set $B$ tracks which threads the writer is \emph{actively} waiting for during a grace period --- it is empty if the writer is not waiting.
-\begin{comment}\begin{figure*}\scriptsize
+\begin{comment}\begin{figure*}\ssmall
   \meta
 \caption{Programming Language}
 \label{fig:plang}
