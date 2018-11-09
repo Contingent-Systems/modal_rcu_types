@@ -52,47 +52,47 @@ It is sometimes necessary to use imprecise types --- mostly for control flow joi
 \\
 \fbox{$\vdash \, \N \subt \N'$}
 \and
-\inferrule[\scriptsize{T-NSub3}]
+\inferrule[\scriptsize(T-NSub3)]
 {
 }
 {\vdash \, \N_{f,\emptyset} \subt \N([f \rightharpoonup y]) }
 \and
-\inferrule[\scriptsize{T-NSub4}]
+\inferrule[\scriptsize(T-NSub4)]
 {
 }
 {\vdash \,  \N_{\emptyset} \subt \N}
 \and
-\inferrule[\scriptsize{T-NSub5}]
+\inferrule[\scriptsize(T-NSub5)]
 {
 }
 {\vdash \, \N \subt \N}
 \and
-\inferrule*[left=\scriptsize{T-NSub2}]
+\inferrule*[left=\scriptsize(T-NSub2)]
 {
 }
 {\vdash \, \N([f_2 \rightharpoonup y]) \subt \N([f_1|f_2 \rightharpoonup y])}
 \and
-\inferrule*[left=\scriptsize{T-NSub1}]
+\inferrule*[left=\scriptsize(T-NSub1)]
 {
 }
 {\vdash \, \N([f_1 \rightharpoonup y]) \subt  \N([f_1|f_2 \rightharpoonup y])}
 \and
 \fbox{$\vdash \, \rho \subt \rho'$} \;\;
-\inferrule*[left=\scriptsize{T-PSub1}]
+\inferrule*[left=\scriptsize(T-PSub1)]
 {
 }
 {
  \vdash  \rho.f_1 \subt \rho.f_1|f_2
 }
 \and
-\inferrule*[left=\scriptsize{T-PSub2}]
+\inferrule*[left=\scriptsize(T-PSub2)]
 {
 }
 {
  \vdash  \rho.f_2 \subt  \rho.f_1|f_2
 }
 \and
-\inferrule*[left=\scriptsize{T-PSub3}]
+\inferrule*[left=\scriptsize(T-PSub3)]
 {
 }
 {
@@ -101,21 +101,21 @@ It is sometimes necessary to use imprecise types --- mostly for control flow joi
 \\
 \fbox{$\vdash \, T \subt T'$} 
 \and
-\inferrule[\scriptsize{T-TSub2}]
+\inferrule[\scriptsize(T-TSub2)]
 {
 }
 {
 \vdash \textsf{rcuItr}   \subt \textsf{rcuItr}
 }
 \and
-\inferrule[\scriptsize{T-TSub}]
+\inferrule[\scriptsize(T-TSub)]
 {
 }
 {
 \vdash \textsf{rcuItr}\; \_   \subt \textsf{undef}
 }
 \and
-\inferrule[\scriptsize{T-TSub1}]
+\inferrule[\scriptsize(T-TSub1)]
 {
 \vdash\rho\subt \rho' \qquad \vdash \N \subt \N'
 }
@@ -124,7 +124,7 @@ It is sometimes necessary to use imprecise types --- mostly for control flow joi
 }
 \and
 \fbox{$\vdash \, \Gamma \subt \Gamma'$} \;\;
-\inferrule*[left=\scriptsize{T-CSub1}]
+\inferrule*[left=\scriptsize(T-CSub1)]
 {
 \vdash\Gamma \subt \Gamma' \;\; \vdash \text{T}  \subt \text{T'}
 }
@@ -140,7 +140,7 @@ It is sometimes necessary to use imprecise types --- mostly for control flow joi
 % \vdash  \Gamma \subt \Gamma'
 %}
 %\and
-\inferrule*[left=\scriptsize{T-CSub}]
+\inferrule*[left=\scriptsize(T-CSub)]
 {
 }
 {
@@ -369,8 +369,10 @@ z:\textsf{rcuItr} \; \rho.f \; \_ \quad \N(f)=z \quad f \notin dom (\N')
 {
 \inferrule[\scriptsize(T-UnlinkH)]
 {
+\N(f_1)=z\\
 \rho.f_1=\rho_1 \\
 \rho_1.f_2=\rho_2 \\
+\N'=\N([f_1\rightharpoonup z \setminus r])\\
 \forall_{f\in dom(\N_1)} \ldotp f\neq f_2 \implies (\N_1(f) = \textsf{null})
 \\
 \N(f_1)=z\\
@@ -388,7 +390,7 @@ z:\textsf{rcuItr} \; \rho.f \; \_ \quad \N(f)=z \quad f \notin dom (\N')
 z:\textsf{rcuItr} \rho_1  \N_1  ,  r:\textsf{rcuItr}  \rho_2  \N_2 
 \vdash x.f_1=r \dashv
 z:\unlinked,
-x:\textsf{rcuItr}  \rho  \N([f_1\rightharpoonup  r]) ,
+x:\textsf{rcuItr}  \rho  \N' ,
 r:\textsf{rcuItr}  \rho_1  \N_2, \Gamma
 }
 }
@@ -396,7 +398,7 @@ r:\textsf{rcuItr}  \rho_1  \N_2, \Gamma
 {
 \inferrule[\scriptsize(T-LinkF)]
 {
-\N(f)=o \and \rho.f  = \rho_1  \and 
+\N(f)=o \\ \N'=\N([f \rightharpoonup o\setminus n])\\ \rho.f  = \rho_1  \\
 \N_1 = \N_2 \and
 \textsf{FV}(\Gamma) \cap \{p,o,n\}  =\emptyset \\
 \forall_{x \in \Gamma, \N_3, \rho_2,f_1,y} \ldotp (x:\textsf{rcuItr}\,\rho_2\,\N_3([f_1 \rightharpoonup y])) \implies (\neg\mathsf{MayAlias}(\rho_2,\{\rho,\rho_1\}) \land (y\neq o  ))
@@ -406,7 +408,7 @@ r:\textsf{rcuItr}  \rho_1  \N_2, \Gamma
  p:\textsf{rcuItr} \rho  \N ,
   o:\textsf{rcuItr} \rho_1  \N_1  , n:\textsf{rcuFresh}  \N_2
   \vdash p.f = n \dashv
-  p:\textsf{rcuItr} \rho  \N([f \rightharpoonup  n])  ,
+  p:\textsf{rcuItr} \rho  \N'  ,
   n:\textsf{rcuItr} \rho_1  \N_2 ,
   o:\unlinked ,  \Gamma
 }
