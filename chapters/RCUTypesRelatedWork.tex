@@ -1,8 +1,7 @@
 \section{Related Work}
 \label{sec:relatedwork}
 Related work for correctness of code involving RCU memory management includes relevant work in concurrent program logics, model checking, and type systems.
-\subsection{Overview on Existing Approaches}
-%(\textit{\textbf{Program Logic}}) -
+
 \mypar{Modeling RCU}
 Alglave et al.~\cite{Alglave:2018:FSC:3173162.3177156} propose a memory model to be assumed by the platform-independent parts of the Linux kernel, regardless of the underlying hardware's memory model.
 As part of this, they give the first formalization of what it means for an RCU implementation to be correct (previously this was difficult to state, as the guarantees in principle could vary by underlying CPU architecture). Essentially, that reader critical sections do not span grace periods.  They prove by hand that the Linux kernel RCU implementation~\cite{DBLP:conf/cav/AlglaveKT13,abssem} satisfies this property. 

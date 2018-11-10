@@ -165,6 +165,15 @@ The final judgment $\vdash\Gamma\prec:\Gamma'$ extends subtyping to all assumpti
 \Gamma \vdash C_{k} \dashv  \Gamma[\rho.f^{k}/\rho.f^{k}.f]
 }
 \and
+\inferrule*[left=\scriptsize(T-Loop1)]
+{
+\Gamma(x) = \textsf{bool} \and
+\Gamma \vdash C \dashv \Gamma 
+}
+{
+\Gamma \vdash \textsf{while}(x)\{C\} \dashv  \Gamma
+}
+\and
 \inferrule*[left=\scriptsize(T-Branch1)]
 {
  \Gamma\, ,x:\textsf{rcuItr}\,\rho \, \N([f_1 \rightharpoonup  z]) \vdash C_1 \dashv\Gamma_4 \and
@@ -198,15 +207,6 @@ The final judgment $\vdash\Gamma\prec:\Gamma'$ extends subtyping to all assumpti
 {
 \Gamma \vdash \textsf{if}(x) \textsf{ then } C_1  \textsf{ else } C_2 \dashv \Gamma'
 }
-\inferrule*[left=\scriptsize(T-Loop1)]
-{
-\Gamma(x) = \textsf{bool} \and
-\Gamma \vdash C \dashv \Gamma 
-}
-{
-\Gamma \vdash \textsf{while}(x)\{C\} \dashv  \Gamma
-}
-
 \end{mathpar}
 \vspace{-2em}
 \caption{Type Judgements for Control-Flow.}
