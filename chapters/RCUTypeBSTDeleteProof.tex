@@ -44,7 +44,7 @@ void\;delete(\;\INT\;data)\;\{\\
     \;\;\text{// At this point, we've found the node to remove}\\
     \;\;BinaryTreeNode \;lmParent = current.Right;\\
     \;\;BinaryTreeNode \;currentL = current.Left;\\
-    \;\;\specline{current:rcuItr\; (Left|Right)^{k}.(Left|Right) \; \{ Left \mapsto currentL, Right \mapsto lmParent\} }\\
+    \;\;\specline{current:rcuItr (Left|Right)^{k}.(Left|Right) \{ Left \mapsto currentL, Right \mapsto lmParent\} }\\
     \;\;\specline{currentL:rcuItr\; (Left|Right)^{k}.(Left|Right).Left \; \{\} }\\
      \;\;\specline{lmParent:rcuItr\; Left|Right)^{k}.(Left|Right).Right \; \{ \} }\\
     
@@ -1095,7 +1095,6 @@ newN\rightarrow right = r;\\
 \end{array}
 \]
 \end{comment}
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

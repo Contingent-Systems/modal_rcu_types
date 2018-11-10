@@ -495,9 +495,12 @@ This follows from the fact that none of the possible $\alpha$s modifies the glob
   \textbf{FR}(\sigma,O,U,T,F) =
  \begin{array}{ll}
    \forall_{tid,x,o} \ldotp (\sigma.s(x,tid) = o \land \textsf{fresh} \in O(o) ) \implies \\
+   \left\{
 	\begin{array}{cl}
-          (\forall_{y,o',f',tid'}. (h(o',f') \neq o) \lor  (s(y,tid) \neq)  o \lor (tid'\neq tid \implies s(y,tid') \neq o ))
+          (\forall_{y,o',f',tid'}. (h(o',f') \neq o) \lor  (s(y,tid) \neq  o \\
+          \lor (tid'\neq tid \implies s(y,tid') \neq o ))
         \end{array}
+        \right\}
         \end{array}
 \]
 \caption{Fresh-Reachable}
@@ -585,8 +588,9 @@ This follows from the fact that none of the possible $\alpha$s modifies the glob
 \[
 \textbf{UNQRT}(\sigma,O,U,T,F) =
   \left\{ \begin{array}{ll}
- \forall_{\rho \neq \epsilon} \ldotp \textsf{iterator} \, tid \in O( h^{*}(\sigma.rt,\rho) \land \lnot(\exists_{f'} \ldotp \sigma.rt = h( h^{*}(\sigma.rt,\rho),f'))
-\end{array} \right.%\}
+    \forall_{\rho \neq \epsilon} \ldotp \textsf{iterator} \, tid \in O( h^{*}(\sigma.rt,\rho)\\
+    \land \lnot(\exists_{f'} \ldotp \sigma.rt = h( h^{*}(\sigma.rt,\rho),f'))
+\end{array} \right\}
 \]
     \caption{Unique-Root}
 \label{fig:uroot}
@@ -615,7 +619,7 @@ This follows from the fact that none of the possible $\alpha$s modifies the glob
 \begin{align*}
   \llbracket x.f_1:=r \rrbracket (\lfloor \llbracket \Gamma, \, x:\mathsf{rcuItr}\,\rho\,\N ( [f_1 \rightharpoonup  z]), z:\mathsf{rcuItr} \, \rho' \,\N'([ f_2 \rightharpoonup r]), \;
   r:\mathsf{rcuItr} \, \rho'' \,\N'' \rrbracket_{M,tid} * \{m\}\rfloor)     \subseteq \\
-                                                              \lfloor \llbracket \Gamma, \,  x:\mathsf{rcuItr} \, \rho \, \N( f_1 \rightharpoonup z \setminus r),\;
+   \lfloor \llbracket \Gamma, \,  x:\mathsf{rcuItr} \, \rho \, \N( f_1 \rightharpoonup z \setminus r),\;
                                                               z:\mathsf{unlinked}, \;
                                                               r:\mathsf{rcuItr} \, \rho' \, \N'' \rrbracket  * \mathcal{R}(\{m\})\rfloor
 \end{align*}
@@ -640,7 +644,8 @@ From assumptions in the type rule of \textsc{T-UnlinkH} we assume that
 \begin{array}{l}\footnotesize
 \forall_{n\in \Gamma,m,\N''', p''',f}\ldotp n:\textsf{rcuItr}\,\rho'''\,\N'''([f\rightharpoonup m]) \implies %\arcr
 \left\{\begin{array}{l}
-((\neg\mathsf{MayAlias}(\rho''',\{\rho,\rho',\rho''\})  ) \land (m\not\in\{z,r\} ) ) \arcr
+((\neg\mathsf{MayAlias}(\rho''',\{\rho,\rho',\rho''\})  ) \arcr
+\land (m\not\in\{z,r\} ) ) \arcr
 \land (\forall_{\rho''''\neq \epsilon} \ldotp \neg\mathsf{MayAlias}(\rho''', \rho''.\rho'''') )
 \end{array}\right.
 \end{array}

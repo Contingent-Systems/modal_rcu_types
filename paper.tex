@@ -9,9 +9,10 @@
 % for section-numbered lemmas etc., use "numberwithinsect"
 \usepackage{microtype}%if unwanted, comment out or use option "draft"
 %\graphicspath{{./graphics/}}%helpful if your graphic files are in another directory
-\usepackage[11pt]{moresize}
 %\usepackage{t1enc}
 %\usepackage[strings]{underscore}
+%%%%%\usepackage{geometry}
+
 \usepackage[rawfloats=true]{floatrow} 
 \restylefloat{figure}    
 \DeclareMathSizes{4}{4}{4}{4}
@@ -45,15 +46,16 @@
 \usepackage{pgfplots}
 \usepackage{caption,capt-of}
 \usepackage{color}
-
-
 \usepackage{soul}
 \setul{1ex}{0.8ex}
 \definecolor{orange}{rgb}{1,0.5,0}
 \setulcolor{orange}
 \usepackage{subcaption}
 \usepackage{lipsum}
-
+\usepackage{afterpage}
+%%sequeezeeee
+\addtolength{\textfloatsep}{-10pt}
+\addtolength{\dbltextfloatsep}{-10pt}
 
 \newcommand{\defeq}{\mathbin{\stackrel{\text{def}}{=}}}
 % some stuff for prettier proof outlines
@@ -1228,8 +1230,6 @@ We present a static type system to ensure correct use of RCU memory management: 
 \bibliography{references/paper}
 \newpage
 \appendix
-%%This does not include definitions and expl.
-%\input{chapters/RCUTypesSoundnessLemmas.tex}
 \input{chapters/RCUTypesSoundnessLemmasESOP.tex}
 \newpage
 \input{chapters/RCUTypeBSTDeleteProof.tex}
