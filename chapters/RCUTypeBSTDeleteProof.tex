@@ -1,6 +1,11 @@
 \makeatletter
 \newcommand{\srcsize}{\@setfontsize{\srcsize}{2pt}{2pt}}
 \makeatother
+\tcbset{common/.style={
+ halign=flush left, leftrule=4mm,
+      hbox
+        
+}}
 \section{RCU BST Delete}
 \label{appendix:bst_del}
 \[\small
@@ -50,7 +55,6 @@ void\;delete(\;\INT\;data)\;\{\\
     
 \end{array}
 \]
-
 \[\small
 \begin{array}{@{}l@{}}
     \;\;\text{// We now need to "rethread" the tree}\\
