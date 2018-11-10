@@ -9,7 +9,14 @@ Figure \ref{fig:rculist} gives the type-annotated code for \lstinline|add| and \
 Appendix \ref{appendix:bag_paul} contains the code for membership checking.
 
 We have also type checked the most challenging part of an RCU binary search tree, the deletion (which also contains the code for a lookup).
-Our implementation is a slightly simplified version of the Citrus BST~\cite{Arbel:2014:CUR:2611462.2611471}: their code supports fine-grained locking for multiple writers, while ours uses only single global lock for writer threads.
-For lack of space the annotated code is only in Appendix \ref{appendix:bst_del}, but it motivates some of the conditional-related flexibility discussed in Section \ref{subsection:type-action} \iso{Colin, it would be great if you could articulate the importance of BST delete proof here}.
+Our implementation is a slightly simplified version of the Citrus BST~\cite{Arbel:2014:CUR:2611462.2611471}: their code supports fine-grained locking for multiple writers, while ours supports only one writer by virtue of using our single-writer primitives.
+For lack of space the annotated code is only in Appendix \ref{appendix:bst_del}, but it motivates some of the conditional-related flexibility discussed in Section \ref{subsection:type-action}.
+The use of disjunction ($Left|Right$) in field maps and paths is required to capture traversals which follow different fields at different times, such as the lookup in a binary search tree.
+
+The most subtle aspect of the deletion is the final step in the case the node $R$ to remove has both children.  In this case, the value $V$ of the left-most node of $R$'s right child --- the next element in the collection order --- is copied into a new node, which is then used to \emph{replace} node $R$: the replacement's fields exactly match $R$'s except for the data, and the parent is updated to reference the replacement, unlinking $R$.  At this point, there are two nodes with value $V$ in the tree: the replacement node, and what was the left-most node under $R$'s right child. This latter (original) node for $V$ must be unlinked, which is simplified because by being left-most the left child is null, avoiding another round of replacement.
+The complexity in checking safety here is that once $R$ is found, another loop is used to find $V$ and its parent (since that node will later be removed as well).
+After $V$ is found, there are \emph{two} local unlinking operations, at different depths of the tree.  This is why the type system must keep separate abstract iteration counts for traversals in loops --- these indices act like multiple cursors into the data structure, and allow the types to carry enough information to keep those changes separate and ensure neither introduces a cycle.
 
 To the best of our knowledge, we are the first to check such code for memory-safe use of RCU primitives modularly, without appeal to the specific implementation of RCU primitives.
+
+\colin{I want to refer to rules here, but I'm very tired from OOPSLA and travel, and can't sort out which three rules deal with (1) just unlinking as in list delete, (2) just linking without removing as in list add, and (3) simultaneous link and remove as in the BST. Can you patch those into the explanation above? I'll revise more this weekend.}
