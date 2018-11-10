@@ -446,10 +446,21 @@ The remaining rules are a bit more involved, and form the heart of the type syst
 %(\textit{\textbf{Mutation - Unlinking a Heap Node}}) - Preserving invariants of a data structure against possible mutations under \textsf{RCU} semantics is challenging. Unlinking a heap node is one way of mutating the heap and the type rule for unlinking(\textsc{T-UnlinkH}) enforces the locality on the effect of unlinking to enforce memory safety. First essential property is "proper local linkage" in between the heap nodes involved in unlinking(footpring of unlinking). The type rule asserts that the $x$, $z$ and $r$ references are linked with field mappings $\N([f_1\rightharpoonup z])$ e.g. ($Left \mapsto current$) of $x$, $\N'([f_2\rightharpoonup r])$ e.g. ($Left \mapsto currentL$) of $y$. In accordance with the field mappings, the type rule also asserts that $x$ has the path $\rho$ e.g. ($(Left)^{k}$), $y$ has the path $\rho.f_1$ e.g. ($(Left)^{k}.Left$) and $z$ has the path $\rho.f_1.f_2$ e.g. ($(Left)^{k}.Left.Left$).
 
 The rule must also avoid unlinking multiple nodes: this is the purpose of the first (smaller) implication: it ensures that beyond the reference from $z$ to $r$, all fields of $z$ are null.
+\[\forall_{f\in dom(\N_1)} \ldotp f\neq f_2 \implies (\N_1(f) = \textsf{null})\] 
 
 Finally, the rule must ensure that no types in $\Gamma$ are invalidated.  This could happen one of two ways: either a field map in $\Gamma$ for an alias of $x$ duplicates the assumption that $x.f_1==z$ (which is changed by this write), or $\Gamma$ contains a descendant of $r$, whose path from the root will change when its ancestor is modified.
 The final assumption of \textsc{T-UnlinkH} (the implication)
 checks that for every \textsf{rcuItr} reference $n$ in $\Gamma$, it is not a path alias of $x$, $z$, or $r$; no entry of its field map ($m$) refers to $r$ or $z$ (which would imply $n$ aliased $x$ or $z$ initially); and its path is not an extension of $r$ (i.e., it is not a descendant).
+\[
+\begin{array}{l}
+\forall_{n\in \Gamma,m,\N_3, p_3,f}\ldotp n:\textsf{rcuItr}\,\rho_3\,\N_3([f\rightharpoonup m]) \implies %\arcr
+\left\{\begin{array}{l}
+(\neg\mathsf{MayAlias}(\rho_3,\{\rho,\rho_1,\rho_2\}) ) \arcr
+\land (m\not\in\{z,r\} ) \arcr
+\land (\forall_{\rho_4\neq \epsilon} \ldotp \neg\mathsf{MayAlias}(\rho_3, \rho_2.\rho_4) )
+\end{array}\right.
+\end{array}
+\]
 \textsf{MayAlias} is a predicate on two paths (or a path and set of paths) which is true if it is possible that any concrete paths the arguments may abstract (e.g., via adding non-determinism through $|$ or abstracting iteration with indexing) \emph{could} be the same.  The negation of a \textsf{MayAlias} use is true only when the paths are guaranteed to refer to different locations in the heap.
 %Restricting the unlink to a single node prevents unintentionally disconnecting large sections of the tree.. So, sharing through aliasing to the resources under mutation needs to be handled carefully. Aliasing can occur via either through  object fields -- via field mappings -- or stack references -- via path components. Assume that we have \textit{path-aliases}, $a_1$, $a_2$ and $a_3$ to $x$, $z$ and $r$ respectively. The reason for framing-out path aliases is to prevent inconsistencies in components of the aliases since unlinking the heap node in the middle which is referenced by $z$ has effects:
 %\begin{itemize}
