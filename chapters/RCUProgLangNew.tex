@@ -662,12 +662,12 @@ checks that for every \textsf{rcuItr} reference $n$ in $\Gamma$, it is not a pat
  \end{figure}
 %\textit{\textbf{Creating a Fresh Node}} - We deffered answering the question: "Why do we need a separate type \textsf{rcuFresh} instead of using \textsf{rcuItr} for typing a freshly allocated heap node in \textsf{Write} critical section ?". To understand and answer the question easily, we illustrate the setting for creating a fresh \textsf{BST} heap node and linking it in Figures \ref{fig:frframeout} and \ref{fig:freshframeout}.
 
-\mypar{Linking a Fresh Node}
-Linking a \textsf{rcuFresh} reference faces the same aliasing complications as direct unlinking.
+\mypar{Replacing with a Fresh Node}
+Replacing with a \textsf{rcuFresh} reference faces the same aliasing complications as direct unlinking.
 We illustrate these challenges in Figures \ref{fig:frframeout} and \ref{fig:freshframeout}(Figures \ref{fig:bframeout} and \ref{fig:bunlinkframeout} illustrating complexities in unlinking can be found in Appendix \ref{appendix:rcuunlink}).
 The square $R$ nodes are root nodes, and $H$ nodes are general heap nodes.
 All resources in red and green form the memory foot print of unlinking. The hollow red circular nodes -- $pr$ and $cr$ -- point to the nodes involved in replacing $H_1$ (referenced by \texttt{cr}) wih $H_f$ (referenced by $cf$) in the structure.
-We we may have $a_0$ and $a_1$ which are aliases with $pr$ and $cr$ respectively. They are \textit{path-aliases} as they share the same path from root to the node that they reference. 
+We may have $a_0$ and $a_1$ which are aliases with $pr$ and $cr$ respectively. They are \textit{path-aliases} as they share the same path from root to the node that they reference. 
 Edge labels $l$ and $r$ are abbreviations for the $Left$ and $Right$ fields of a binary search tree.
 The dashed green $H_f$ denotes the freshly allocated heap node referenced by green dashed  $cf$. The dashed green field $l$ is set to point to the referent of $cl$ and the green dashed field $r$ is set to point to the referent of the heap node referenced by $lm$.
 
@@ -679,10 +679,10 @@ Otherwise another mechanism would be required to ensure that once a fresh refere
 The transition from the Figure \ref{fig:frframeout} to \ref{fig:freshframeout} illustrates the effects of the heap mutation (linking a fresh node). The reasoning in the type system for linking a fresh node is nearly the same as for unlinking an existing node, with one exception.
 In linking a fresh node, there is no need to consider the paths of nodes deeper in the tree than the point of mutation.  In the unlinking case, those nodes' static paths would become invalid.  In the case of linking a fresh node, those descendants' paths are preserved.
 Our type rule for ensuring safe linking (\textsc{T-LinkF}) prevents path aliasing (nonexistence of $a_0$ and $a_1$) by negating a \textsf{MayAlias} query and prevents field mapping aliasing (nonexistence of any object field from any other context pointing to $cr$) via asserting $(y\neq o)$. It is important to note that objects($H_4,H_2$) in the field mappings of the $cr$ whose referent is to be unlinked captured by the heap node's field mappings referenced by $cf$ in \textsf{rcuFresh}. This is part of enforcing locality on the heap mutation and captured by assertion $\N = \N'$ in the type rule(\textsc{T-LinkF}). 
- 
 %(\textit{\textbf{Mutation - Reclaiming a Heap Node after a Grace Period}}) - The reason why we have type \textsf{freeable} after the grace period is to prevent the ability to call \texttt{Free} before the grace period ends. This means that we cannot give ownership of a heap node to heap right after unlinking. Our type rule(\textsc{T-Sync}) ensures this via enforcing that we call \texttt{Free} only with a reference in type \textsf{freeable}. To get \textsf{freeable} reference, first we wait the grace period \texttt{SyncStart};\texttt{SyncStop} for unlinked heap nodes to end. The \texttt{SyncStart} does not have any effect on type of the variables.
 
-There is also another rule, \textsc{T-LinkF-Null}, not shown in Figure \ref{fig:tss}, which handles the case where the fields of the fresh node are not object references, but instead all contain null (e.g., for appending to the end of a linked list or inserting a leaf node in a tree).
+\mypar{Linking a Fresh Node}
+\textsc{T-LinkFL} type checks heap updates that links a fresh node without doing replacement from the data structure. Linking a \textsf{rcuFresh} reference without doing replacement faces the some of the aliasing complications that we have already discussed for direct unlinking and replacing an existing node with a fresh one. There is also another rule, \textsc{T-LinkF-Null}, not shown in Figure \ref{fig:tss}, which handles the case where the fields of the fresh node are not object references, but instead all contain null (e.g., for appending to the end of a linked list or inserting a leaf node in a tree).
 
 \mypar{Entering a Critical Section}
 (\textit{\textbf{Referencing inside \textsf{RCU} Blocks}})
