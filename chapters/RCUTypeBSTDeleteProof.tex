@@ -67,7 +67,8 @@ void\;delete(\;\INT\;data)\;\{\\
         \;\;\;\;\specline{currentL:rcuItr\; (Left|Right)^{k}.(Left|Right).Left \; \{\} }\\
         
             \;\;\;\;if\; (parent.Left == current)\\
-                \;\;\;\;\;\;\text{// parent.Value is greater than current.Value, so make current's left child a left child of parent}\\
+                \;\;\;\;\;\;\text{// parent.Value is greater than current.Value}\\
+                \;\;\;\;\;\;\text{// so make current's left child a left child of parent}\\
                 \;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Left \mapsto current\} }\\
                 \;\;\;\;\;\;\specline{current:rcuItr\; (Left|Right)^{k}.Left \; \{Left\mapsto currentL, Right\mapsto null\} }\\
                 \;\;\;\;\;\;\specline{currentL:rcuItr\; (Left|Right)^{k}.Left.Left \; \{\} }\\
@@ -78,7 +79,8 @@ void\;delete(\;\INT\;data)\;\{\\
                 
             \;\;\;\;else \\
 
-                \;\;\;\;\;\;\text{// parent.Value is less than current.Value, so make current's left child a right child of parent}\\
+                \;\;\;\;\;\;\text{// parent.Value is less than current.Value}\\
+                \;\;\;\;\;\;\text{// so make current's left child a right child of parent}\\
                 \;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Right \mapsto current\} }\\
                 \;\;\;\;\;\;\specline{current:rcuItr\; (Left|Right)^{k}.Right \; \{Left\mapsto currentL, Right \mapsto null\} }\\
                 \;\;\;\;\;\;\specline{currentL:rcuItr\; (Left|Right)^{k}.Right.Left \; \{\} }\\
@@ -110,7 +112,8 @@ void\;delete(\;\INT\;data)\;\{\\
                 \;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Left \mapsto current\} }\\
                 \;\;\;\;\;\;\specline{current:rcuItr\; (Left|Right)^{k}.Left \; \{Left\mapsto null, Right\mapsto lmParent\} }\\
                 \;\;\;\;\;\;\specline{lmParent:rcuItr\; (Left|Right)^{k}.Left.Right \; \{\} }\\
-                \;\;\;\;\;\;\text{// parent.Value is greater than current.Value, so make current's right child a left child of parent}\\
+                \;\;\;\;\;\;\text{// parent.Value is greater than current.Value}\\
+                \;\;\;\;\;\;\text{// so make current's right child a left child of parent}\\
                 \;\;\;\;\;\;parent.Left = lmParent;\\
                 \;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Left \mapsto lmParent\} }\\
                 \;\;\;\;\;\;\specline{current:unlinked }\\
@@ -119,7 +122,8 @@ void\;delete(\;\INT\;data)\;\{\\
                 \;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Right \mapsto current\} }\\
                 \;\;\;\;\;\;\specline{current:rcuItr\; (Left|Right)^{k}.Right \; \{Left\mapsto null, Right\mapsto lmParent\} }\\
                 \;\;\;\;\;\;\specline{lmParent:rcuItr\; (Left|Right)^{k}.Right.Right \; \{\} }\\
-                \;\;\;\;\;\;\text{// parent.Value is less than current.Value, so make current's right child a right child of parent}\\
+                \;\;\;\;\;\;\text{// parent.Value is less than current.Value}\\
+                \;\;\;\;\;\;\text{// so make current's right child a right child of parent}\\
                 \;\;\;\;\;\;parent.Right = lmParent;\\
                 \;\;\;\;\;\;\specline{parent:rcuItr\; (Left|Right)^{k} \; \{ Right \mapsto lmParent\} }\\
                 \;\;\;\;\;\;\specline{lmParent:rcuItr\; (Left|Right)^{k}.Right \; \{\} }\\
@@ -245,7 +249,7 @@ void\;delete(\;\INT\;data)\;\{\\
         \;\;\;\;\;\;\specline{lmParent:rcuItr\; (Left|Right)^{k}.(Left|Right).Right.Left(Left)^{l} \; \{Left \mapsto leftmost\} }\\
         \;\;\;\;\;\;\specline{leftmost:rcuItr\; (Left|Right)^{k}.(Left|Right).Right.Left(Left)^{l}.Left \; \{Left \mapsto null\} }\\
         \;\;\;\;\;\;BinaryTreeNode\; leftmostR = leftmost.Right;\\
-        \;\;\;\;\;\;\specline{leftmost:rcuItr\; (Left|Right)^{k}.(Left|Right).Right.Left(Left)^{l}.Left \; \{Left \mapsto null, Right \mapsto leftmostR\} }\\
+        \;\;\;\;\;\;\specline{leftmost:rcuItr\; (Left|Right)^{k}.(Left|Right).Right.Left(Left)^{l}.Left \;  \left\{ \begin{array}{ll} Left \mapsto null, \\ Right \mapsto leftmostR \end{array} \right\} }\\
         \;\;\;\;\;\;\specline{lmParent:rcuItr\; (Left|Right)^{k}.(Left|Right).Right.Left(Left)^{l} \; \{Left \mapsto leftmost\} }\\
         \;\;\;\;\;\;\specline{leftmostR:rcuItr\; (Left|Right)^{k}.(Left|Right).Right.Left(Left)^{l}.Left.Right \; \{\} }\\
         \;\;\;\;\;\;\text{// the parent's left subtree becomes the leftmost's right subtree}\\
