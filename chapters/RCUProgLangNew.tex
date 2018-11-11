@@ -413,6 +413,23 @@ r:\textsf{rcuItr}  \rho_1  \N_2, \Gamma
   o:\unlinked ,  \Gamma
 }
 }
+{
+\inferrule[\scriptsize(T-LinkFL)]
+{
+\N'=\N([f \rightharpoonup o\setminus n])\\ \rho.f  = \rho_1  \\
+\N = \N_1 
+\textsf{FV}(\Gamma) \cap \{p,o,n\}  =\emptyset \\
+}
+{
+\Gamma,
+ p:\textsf{rcuItr} \rho  \N ,
+  o:\textsf{rcuItr} \rho.f  \N_2  , n:\textsf{rcuFresh}  \N_1
+  \vdash p.f = n \dashv
+  p:\textsf{rcuItr} \rho  \N'  ,
+  n:\textsf{rcuItr} \rho.f  \N_1 ,
+  o:\textsf{rcuItr} \rho.f.f \N_2 ,  \Gamma
+}
+}
 \and
 \fbox{$\Gamma \vdash_{M} C \dashv \Gamma'$} \;\;
 \inferrule*[left=\scriptsize(ToRCUWrite)]
