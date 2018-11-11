@@ -1058,11 +1058,12 @@ To show \ref{ahusigf'} we consider two cases: $\sigma'_1 \cap \sigma'_2 = \empty
    \begin{align*}
   \llbracket p.f := n \rrbracket (\lfloor \llbracket \Gamma,\,
  p:\textsf{rcuItr}\, \rho \, \N \, ,
-  r:\textsf{rcuItr}\, \rho' \, \N' \, , n:\textsf{rcuFresh} \, \N''\rrbracket_{M,tid} * \{m\}\rfloor)  \subseteq \\
-  \lfloor \llbracket \Gamma \,,p:\textsf{rcuItr}\, \rho \, \N([f \rightharpoonup r \setminus  n]) \, , n:\textsf{rcuItr}\, \rho' \, \N'' \, ,r:\unlinked \rrbracket  * \mathcal{R}(\{m\})\rfloor
+  r:\textsf{rcuItr}\, \rho_1 \, \N_2 \, , n:\textsf{rcuFresh} \, \N_1 \rrbracket_{M,tid} * \{m\}\rfloor)  \subseteq \\
+  \lfloor \llbracket \Gamma \,,p:\textsf{rcuItr}\, \rho \, \N([f \rightharpoonup r \setminus  n]) \, , n:\textsf{rcuItr}\, \rho_1 \, \N_1 \, ,r:\textsf{rcuItr}\,\rho_2\,\N_2 \rrbracket  * \mathcal{R}(\{m\})\rfloor
 \end{align*}
  \end{lemma}
  \begin{proof}
+   
  \end{proof}
  \begin{lemma}[\textsc{ReadStack}]
    \label{lemma:readstack}
