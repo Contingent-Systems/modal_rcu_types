@@ -1053,6 +1053,17 @@ Both together with \ref{ahu13f} and \ref{phu5f} proves \ref{phu7f}.
 
 To show \ref{ahusigf'} we consider two cases: $\sigma'_1 \cap \sigma'_2 = \emptyset$ and $\sigma'_1 \cap \sigma'_2 \neq \emptyset$. First is trivial. Second follows from \ref{phu10f}.\textbf{OW}-\textbf{HD} and \ref{phu11f}.\textbf{OW}-\textbf{HD}. \ref{phu8f}, \ref{phufff} and \ref{phu9f} are trivial by choices on related maps and semantics of the composition operators for these maps. All compositions shown  let us to derive conclusion for $(\sigma'_1, O'_1, U'_1, T'_1,F'_1) \bullet (\sigma'_2, O'_2, U'_2, T'_2,F'_2) $.
  \end{proof}
+ \begin{lemma}[\textsc{LinkFreshL}]
+   \label{lemma:linkfl}
+   \begin{align*}
+  \llbracket p.f := n \rrbracket (\lfloor \llbracket \Gamma,\,
+ p:\textsf{rcuItr}\, \rho \, \N \, ,
+  r:\textsf{rcuItr}\, \rho' \, \N' \, , n:\textsf{rcuFresh} \, \N''\rrbracket_{M,tid} * \{m\}\rfloor)  \subseteq \\
+  \lfloor \llbracket \Gamma \,,p:\textsf{rcuItr}\, \rho \, \N([f \rightharpoonup r \setminus  n]) \, , n:\textsf{rcuItr}\, \rho' \, \N'' \, ,r:\unlinked \rrbracket  * \mathcal{R}(\{m\})\rfloor
+\end{align*}
+ \end{lemma}
+ \begin{proof}
+ \end{proof}
  \begin{lemma}[\textsc{ReadStack}]
    \label{lemma:readstack}
 \begin{align*}
