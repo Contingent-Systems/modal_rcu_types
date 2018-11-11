@@ -413,21 +413,22 @@ r:\textsf{rcuItr}  \rho_1  \N_2, \Gamma
   o:\unlinked ,  \Gamma
 }
 }
+\and
 {
 \inferrule[\scriptsize(T-LinkFL)]
 {
-\N'=\N([f \rightharpoonup o\setminus n])\\ \rho.f  = \rho_1  \\
-\N = \N_1 
+\N'=\N([f \rightharpoonup o\setminus n])\\ \rho.f  = \rho_1 \\ \rho_1.f = \rho_2 \\ \N = \N_1 \\ 
 \textsf{FV}(\Gamma) \cap \{p,o,n\}  =\emptyset \\
+\forall_{x \in \Gamma, \N_3, \rho_3,f_1,y} \ldotp (x:\textsf{rcuItr}\,\rho_3\,\N_3([f_1 \rightharpoonup y])) \implies (\neg\mathsf{MayAlias}(\rho_3,\{\rho_1,\rho_2\}))
 }
 {
 \Gamma,
  p:\textsf{rcuItr} \rho  \N ,
-  o:\textsf{rcuItr} \rho.f  \N_2  , n:\textsf{rcuFresh}  \N_1
+  o:\textsf{rcuItr} \rho_1  \N_2  , n:\textsf{rcuFresh}  \N_1
   \vdash p.f = n \dashv
   p:\textsf{rcuItr} \rho  \N'  ,
-  n:\textsf{rcuItr} \rho.f  \N_1 ,
-  o:\textsf{rcuItr} \rho.f.f \N_2 ,  \Gamma
+  n:\textsf{rcuItr} \rho_1  \N_1 ,
+  o:\textsf{rcuItr} \rho_2 \N_2 ,  \Gamma
 }
 }
 \and
