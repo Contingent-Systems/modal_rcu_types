@@ -1162,7 +1162,7 @@ Let $T'_1$ be $T_1$, $F'_1$ be $F_1$ and $\sigma'_1$ be determined by operationa
 
 In the rest of the proof, we prove \ref{phu10flk}, \ref{phu11flk} and show the composition of $(\sigma'_1, O'_1, U'_1,T'_1,F'_1)$ and  $(\sigma'_2, O'_2, U'_2,T'_2,F'_2)$. To prove \ref{phu10flk}, we need to show that each of the memory axioms in Section \ref{sec:memaxioms} holds for the state $(\sigma',O'_1,U_1',T_1',F'_1)$.
 
-Proofs for \textbf{OW}, \textbf{RWOW}, \textbf{AWRT}, \textbf{IFL}, \textbf{WULK}, \textbf{FLR}, \textbf{FPI}, \textbf{WF}, \textbf{FR}, \textbf{HD}, \textbf{WNR}, \textbf{RINFL} and \textbf{ULKR}. The proof of \textbf{UNQR} is similar to the ones  we did for Lemma  \label{lemma:linkf} and Lemma \ref{lemma:unlink} with a simpler fact to prove: we assume framing conditions \ref{ahu3flk}-\ref{ahu6flk} together with the \ref{ahu16flk}.\textbf{UNQR} and \ref{ahu16flk}.\textbf{FR} which makes \ref{phu10flk}\textbf{UNQR} trivial.
+Proofs for \textbf{OW}, \textbf{RWOW}, \textbf{AWRT}, \textbf{IFL}, \textbf{WULK}, \textbf{FLR}, \textbf{FPI}, \textbf{WF}, \textbf{FR}, \textbf{HD}, \textbf{WNR}, \textbf{RINFL} and \textbf{ULKR}. The proof of \textbf{UNQR} is similar to the ones  we did for Lemma  \ref{lemma:linkf} and Lemma \ref{lemma:unlink} with a simpler fact to prove: we assume framing conditions \ref{ahu3flk}-\ref{ahu6flk} together with the \ref{ahu16flk}.\textbf{UNQR} and \ref{ahu16flk}.\textbf{FR} which makes \ref{phu10flk}\textbf{UNQR} trivial.
 
 To prove \ref{phu6flk}, we need to show  interference relation
 \[(\sigma, O_2, U_2, T_2,F_2) \mathcal{R} (\sigma', O'_2, U'_2, T'_2,F'_2)  \]
@@ -1187,28 +1187,11 @@ which by definition means that we must show
 
 To prove all relations (\ref{phu17f}-\ref{phu23f}) we assume \ref{ahus3flk} which is to assume $T_2$ as subset of reader threads. Let $\sigma'_2$ be $\sigma_2$, $F'_2$ be $F_2$. $O_2$ need not change so we pick $O'_2$  as $O_2$. Since $T_2$ is subset of reader threads, we pick $T_2$ as  $T'_2$. By assuming \ref{ahu17flk}  we show \ref{phu11flk}. \ref{phu20flk} and \ref{phu21flk} follow trivially. \ref{phu23flk} follows from choice of $\sigma'_2$ and \ref{ahus3flk}.
 
-\ref{phu17flk} and \ref{phu18flk} follow from \ref{ahus3flk} and choice of $F_2'$. \begin{comment} \ref{phu22f}, \ref{phufrt1} and \ref{phufrt2} are determined by  choice of $\sigma'_2$, operational semantics and choices made on maps related to the assertions.
+\ref{phu17flk} and \ref{phu18flk} follow from \ref{ahus3flk} and choice of $F_2'$. \ref{phu22flk}, \ref{phufrt1lk} and \ref{phufrt2lk} are determined by  choice of $\sigma'_2$, operational semantics and choices made on maps related to the assertions.
 
-To prove \ref{phu7f} consider two cases: $O'_1 \cap O'_2 = \emptyset$ and $O'_1 \cap O'_2 \neq \emptyset$. The first case is trivial. The second case is where we consider \ref{intersect1} and \ref{intersect2}
-\begin{gather}\label{intersect1}
-\textsf{iterator}\,tid \in O'_2(o_r)
-\end{gather}
-From \ref{ahus1f} we know that
-\[\textsf{unliked} \in O'_1(o_r)\]
-Both together with \ref{ahu13f} and \ref{phu5f} proves \ref{phu7f}.
+\ref{phu7flk} follows from assumptions \ref{ahus1flk}, \ref{ahu13flk} and choice of $O'_2$ as $O_2$.
 
-For case \ref{intersect2}
-\begin{gather}\label{intersect2}
-\textsf{fresh} \in O_2(o_n)
-\end{gather}
-From \ref{ahus2f} we know that
-\[\textsf{iterator}\, tid \in O'_1(o_n)\]
-Both together with \ref{ahu13f} and \ref{phu5f} proves \ref{phu7f}.
-
-To show \ref{ahusigf'} we consider two cases: $\sigma'_1 \cap \sigma'_2 = \emptyset$ and $\sigma'_1 \cap \sigma'_2 \neq \emptyset$. First is trivial. Second follows from \ref{phu10f}.\textbf{OW}-\textbf{HD} and \ref{phu11f}.\textbf{OW}-\textbf{HD}. \ref{phu8f}, \ref{phufff} and \ref{phu9f} are trivial by choices on related maps and semantics of the composition operators for these maps. All compositions shown  let us to derive conclusion for $(\sigma'_1, O'_1, U'_1, T'_1,F'_1) \bullet (\sigma'_2, O'_2, U'_2, T'_2,F'_2) $.
-
-\end{comment}
-
+To show \ref{ahusigf'lk} we consider two cases: $\sigma'_1 \cap \sigma'_2 = \emptyset$ and $\sigma'_1 \cap \sigma'_2 \neq \emptyset$. First is trivial. Second follows from \ref{phu10flk}.\textbf{OW}-\textbf{HD} and \ref{phu11flk}.\textbf{OW}-\textbf{HD}. \ref{phu8flk}, \ref{phuffflk} and \ref{phu9flk} are trivial by choices on related maps and semantics of the composition operators for these maps. All compositions shown  let us to derive conclusion for $(\sigma'_1, O'_1, U'_1, T'_1,F'_1) \bullet (\sigma'_2, O'_2, U'_2, T'_2,F'_2) $.
  \end{proof}
  \begin{lemma}[\textsc{ReadStack}]
    \label{lemma:readstack}
