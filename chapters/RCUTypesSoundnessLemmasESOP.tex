@@ -1063,6 +1063,101 @@ To show \ref{ahusigf'} we consider two cases: $\sigma'_1 \cap \sigma'_2 = \empty
 \end{align*}
  \end{lemma}
  \begin{proof}
+ We assume
+\begin{gather}\label{ahu1flk}
+  \begin{aligned}
+    (\sigma, O, U, T,F) \, \in &  \llbracket \Gamma,\,
+ p:\textsf{rcuItr}\, \rho \, \N \, ,
+  r:\textsf{rcuItr}\, \rho_1 \, \N_2 \, , n:\textsf{rcuFresh} \, \N_1 \rrbracket_{M,tid} * \{m\}
+    \end{aligned} \\
+\textsf{WellFormed}(\sigma,O,U,T,F)
+\label{ahu2flk}
+\end{gather}
+From assumptions in the type rule of \textsc{T-LinkFL} we assume that
+\begin{gather}
+\textsf{FV}(\Gamma) \cap \{p,r,n\}  =\emptyset 
+  \label{ahu3flk} \\
+\rho.f  = \rho_1 \text{ and } \rho.f  = \rho_2 \text{ and } \N(f) = r
+    \label{ahu4flk} \\
+\N = \N_1
+\label{ahu5flk} \\
+\begin{aligned}
+  \forall_{x \in \Gamma, \N_3, \rho_3,f_1,y} \ldotp (x:\textsf{rcuItr}\,\rho_3\,\N_3([f_1\rightharpoonup y])) \implies\left\{\begin{array}{l} (\neg\mathsf{MayAlias}(\rho_3,\{\rho_1,\rho_2\}) ) \arcr
+\land (\forall_{\rho_4\neq \epsilon} \ldotp \neg\mathsf{MayAlias}(\rho_3, \rho_2.\rho_4) )
+  \end{array}\right.
+\label{ahu6flk}
+  \end{aligned}
+\end{gather}
+We split the composition in  \ref{ahu1flk} as 
+\begin{gather} \label{ahu11flk}
+  \begin{aligned}
+    (\sigma_1, O_{1}, U_{1}, T_{1} ,F_1) \in & \llbracket \Gamma,\,
+ p:\textsf{rcuItr}\, \rho \, \N \, ,
+  r:\textsf{rcuItr}\, \rho_1 \, \N_2 \, , n:\textsf{rcuFresh} \, \N_1 \rrbracket_{M,tid} \end{aligned}\\
+\label{ahu12flk}
+(\sigma_2, O_{2}, U_{2}, T_{2},F_2) = m
+\\
+\label{ahu13flk}
+O_{1} \bullet_{O} O_{2} = O
+\\
+\label{ahusigflk}
+\sigma_1 \bullet_s \sigma_2 = \sigma \\
+\label{ahu14flk}
+U_{1} \cup U_{2} = U
+\\
+\label{ahu15flk}
+T_{1} \cup T_{2} = T
+\\
+\label{ahuffflk}
+F_1 \uplus F_2 = F
+\\
+\label{ahu16flk}
+\textsf{WellFormed}(\sigma_1,O_{1},U_{1},T_{1},F_1)
+\\
+\label{ahu17flk}
+\textsf{WellFormed}(\sigma_2,O_{2},U_{2},T_{2},F_2)
+\end{gather}
+We must show $\exists_{\sigma'_1, \sigma'_2, O'_{1}, O'_{2}, U'_{1}, U'_{2}, T'_{1}, T'_{2}, F'_1, F'_2}$ such that
+\begin{gather}\label{phu5flk}
+\begin{aligned}
+(\sigma_1',O'_{1},U'_{1}, T'_{1},F'_1)  \in \llbracket p:\textsf{rcuItr}\, \rho \, \N([f\rightharpoonup r \setminus n]) \, , n:\textsf{rcuItr}\, \rho_1 \, \N_1 \, , r:\textsf{rcuItr}\, \rho_2\, \N_2\, ,  \Gamma \rrbracket_{M,tid}
+\end{aligned}
+\\
+\label{phu6flk}
+(\sigma_2',O'_{2},U'_{2}, T'_{2}, F'_2) \in \mathcal{R}(\{m\})
+\\
+\label{phu7flk}
+O'_{1} \bullet_{O} O'_{2} = O'
+\\
+\label{ahusigf'lk}
+\sigma'_1 \bullet_s \sigma'_2 = \sigma' \\
+\label{phu8flk}
+U'_{1} \cup U'_{2} = U'
+\\
+\label{phu9flk}
+T'_{1} \cup T'_{2} = T'
+\\
+\label{phuffflk}
+F'_1 \uplus F'_2 = F'
+\\
+\label{phu10flk}
+\textsf{WellFormed}(\sigma_1',O'_{1},U'_{1},T'_{1},F'_1) \\
+\label{phu11flk}
+\textsf{WellFormed}(\sigma_2',O'_{2},U'_{2},T'_{2},F'_2)
+\end{gather}
+We also know from operational semantics that the machine state has changed as
+\begin{gather}\label{ahusflk}
+\sigma_1' =  \sigma_1[h(s(p,tid),f ) \mapsto s(n,tid) ]
+\end{gather}
+
+We know that changes in observation map are
+\begin{gather}\label{ahus1flk}
+O'_1 =  O_1(s(n,tid))[\textsf{fresh} \mapsto \textsf{iterator}\;tid ]
+\end{gather}
+
+
+
+
    
  \end{proof}
  \begin{lemma}[\textsc{ReadStack}]
