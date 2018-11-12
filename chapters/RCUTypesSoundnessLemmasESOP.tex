@@ -944,7 +944,7 @@ O'_1 =  O_1(s(n,tid))[\textsf{fresh} \mapsto \textsf{iterator}\,tid]
 Let $T'_1$ be $T_1$, $F'_1$ be $F_1$ and $\sigma'_1$ be determined by operational semantics. The undefined map need not change so we can pick $U'_1$ as $U_1$. Assuming \ref{ahu11f} and choices on maps makes $(\sigma_1',O'_{1},U'_{1}, T'_{1})$ in denotation
 \[\llbracket p:\textsf{rcuItr}\, \rho \, \N(f \rightharpoonup r \setminus n) \, , n:\textsf{rcuItr}\, \rho' \, \N'' \, , r:\unlinked\, ,  \Gamma \rrbracket_{M,tid}\]
 
-In the rest of the proof, we prove \ref{phu10f}, \ref{phu11f} and show the composition of $(\sigma'_1, O'_1, U'_1,T'_1)$ and  $(\sigma'_2, O'_2, U'_2,T'_2)$. To prove \ref{phu10f}, we need to show that each of the memory axioms in Section \ref{sec:memaxioms} holds for the state $(\sigma',O'_1,U_1',T_1')$.
+In the rest of the proof, we prove \ref{phu10f}, \ref{phu11f} and show the composition of $(\sigma'_1, O'_1, U'_1,T'_1,F'_1)$ and  $(\sigma'_2, O'_2, U'_2,T'_2,F'_2)$. To prove \ref{phu10f}, we need to show that each of the memory axioms in Section \ref{sec:memaxioms} holds for the state $(\sigma',O'_1,U_1',T_1',F'_1)$.
 
 \begin{case}\label{unqrf} - \textbf{UNQR} 
 Let $o_p$ be $\sigma.s(p,tid)$, $o_r$ be $\sigma.s(r,tid)$ and $o_n$ be $\sigma.s(n,tid)$. 
@@ -1054,7 +1054,7 @@ Both together with \ref{ahu13f} and \ref{phu5f} proves \ref{phu7f}.
 To show \ref{ahusigf'} we consider two cases: $\sigma'_1 \cap \sigma'_2 = \emptyset$ and $\sigma'_1 \cap \sigma'_2 \neq \emptyset$. First is trivial. Second follows from \ref{phu10f}.\textbf{OW}-\textbf{HD} and \ref{phu11f}.\textbf{OW}-\textbf{HD}. \ref{phu8f}, \ref{phufff} and \ref{phu9f} are trivial by choices on related maps and semantics of the composition operators for these maps. All compositions shown  let us to derive conclusion for $(\sigma'_1, O'_1, U'_1, T'_1,F'_1) \bullet (\sigma'_2, O'_2, U'_2, T'_2,F'_2) $.
  \end{proof}
  \begin{lemma}[\textsc{LinkFreshL}]
-   \label{lemma:linkfl}
+   \label{lemma:linkflk}
    \begin{align*}
   \llbracket p.f := n \rrbracket (\lfloor \llbracket \Gamma,\,
  p:\textsf{rcuItr}\, \rho \, \N \, ,
@@ -1154,11 +1154,82 @@ We know that changes in observation map are
 \begin{gather}\label{ahus1flk}
 O'_1 =  O_1(s(n,tid))[\textsf{fresh} \mapsto \textsf{iterator}\;tid ]
 \end{gather}
+%%%%%Stop here
+\ref{ahus3flk} follows from \ref{ahu1flk}
+\begin{gather}\label{ahus3flk}
+  T_1 = \{tid\} \text{ and } tid = \sigma.l
+\end{gather}
+Let $T'_1$ be $T_1$, $F'_1$ be $F_1$ and $\sigma'_1$ be determined by operational semantics. The undefined map need not change so we can pick $U'_1$ as $U_1$. Assuming \ref{ahu11flk} and choices on maps makes $(\sigma_1',O'_{1},U'_{1}, T'_{1})$ in denotation
+\[\llbracket p:\textsf{rcuItr}\, \rho \, \N(f \rightharpoonup r \setminus n) \, , n:\textsf{rcuItr}\, \rho_1 \, \N_1 \, , r:\textsf{rcuItr}\,\rho_2\,\N_2\, ,  \Gamma \rrbracket_{M,tid}\]
 
+In the rest of the proof, we prove \ref{phu10flk}, \ref{phu11flk} and show the composition of $(\sigma'_1, O'_1, U'_1,T'_1,F'_1)$ and  $(\sigma'_2, O'_2, U'_2,T'_2,F'_2)$. To prove \ref{phu10flk}, we need to show that each of the memory axioms in Section \ref{sec:memaxioms} holds for the state $(\sigma',O'_1,U_1',T_1',F'_1)$.
 
+\begin{case}\label{unqrf} - \textbf{UNQR} 
+Let $o_p$ be $\sigma.s(p,tid)$, $o_r$ be $\sigma.s(r,tid)$ and $o_n$ be $\sigma.s(n,tid)$. 
+  \ref{ahus3f} and \ref{ahus4f} follow from framing assumption(\ref{ahu3f}-\ref{ahu6f}), denotations of the precondition(\ref{ahu11f}), \ref{ahu16}.\textbf{FR} and \ref{ahu16f}.\textbf{UNQR}
+  \begin{gather}\label{ahusbf}
+    \rho \neq \rho.f \neq \forall_{\N'([f_i \rightharpoonup x_i])}\ldotp \rho.f.f_i
+  \end{gather}
+and   
+  \begin{gather}\label{ahus4f}
+    o_p \neq o_r \neq o_n \neq o_i \text{  where  } o_i=h(o_r,f_i)
+  \end{gather}
+where $o_p$,  $o_r$ are  $\sigma.h^{*}(\sigma.rt,\rho)$, $\sigma.h^{*}(\sigma.rt,\rho.f)$ respectively and they(heap locations in \ref{ahus4f} and paths in \ref{ahusbf}) are unique(From \ref{ahu16f}.\textbf{FR}, we assume that there exists no field alias/path alias to heap location freshly allocated $o_n$). 
 
+We must prove 
+\begin{gather}\label{phuc1f}
+    \rho \neq \rho.f \neq \rho.f.f_i \iff \sigma'.h^{*}(\sigma.rt,\rho) \neq \sigma'.h^{*}(\sigma.rt, \rho.f) )  \neq \sigma'.h^{*}(\sigma.rt, \rho.f.f_i) )
+\end{gather}
 
-   
+We know from operational semantics that root has not changed so
+\[\sigma.rt = \sigma'.rt\]
+
+From denotations (\ref{phu5f}) we know that all heap locations reached by following $\rho$ and $\rho.f$ are observed as $\textsf{iteartor}\,tid$ including the final reached heap locations($\textsf{iterator}\,tid \in O'_1(\sigma'.h^{*}(\sigma.rt,\rho))$, $\textsf{iterator}\,tid \in O'_1(\sigma'.h^{*}(\sigma.rt,\rho.f))$ and $\textsf{iterator}\,tid \in O'_1(\sigma'.h^{*}(\sigma.rt,\rho.f.f_i))$). The preservation of uniqueness follows from \ref{ahus1f}, \ref{ahus2f}, \ref{ahusf} and \ref{ahu16f}.\textbf{FR}.
+
+from which we conclude \ref{ahus5f} and \ref{ahus6f}
+  \begin{gather}\label{ahus5f}
+    \rho \neq \rho.f \neq \rho.f.f_i
+  \end{gather}
+    \begin{gather}\label{ahus6f}
+    o_p \neq o_n \neq o_r 
+  \end{gather}
+from which \ref{phuc1f} follows.
+\end{case}
+\begin{case} - \textbf{OW} By \ref{ahu16f}.\textbf{OW}, \ref{ahusf}, \ref{ahus1f} and \ref{ahus2f}.
+\end{case}
+\begin{case} - \textbf{RWOW} By \ref{ahu16f}.\textbf{RWOW}, \ref{ahusf}, \ref{ahus1f} and \ref{ahus2f}
+\end{case}
+\begin{case} - \textbf{AWRT} Trivial.
+\end{case}
+\begin{case} - \textbf{IFL}  By \ref{ahu16f}.\textbf{WULK}, \ref{ahus1f}, \ref{ahus2f} choice of $F'_1$ and operational semantics.
+\end{case}
+\begin{case} - \textbf{FLR} By choice of $F'_1$ and \ref{ahu16f}. 
+\end{case}
+\begin{case} - \textbf{FPI} By \ref{phu5f}.
+\end{case}
+\begin{case} - \textbf{WULK} Determined by operational semantics By \ref{ahu16f}.\textbf{WULK}, \ref{ahus1f}, \ref{ahus2f} and operational semantics.
+\end{case}
+\begin{case} - \textbf{WF} and \textbf{FR} Trivial.
+\end{case}
+\begin{case} - \textbf{HD} 
+\end{case}
+\begin{case} - \textbf{WNR} By \ref{ahus3f} and operational semantics.
+\end{case}
+\begin{case} - \textbf{RINFL} Determined by operational semantics(\ref{ahusf}) and \ref{ahu16f}.\textbf{RINFL}.
+\end{case}
+\begin{case} - \textbf{ULKR} We must prove 
+  \begin{gather}\label{phuc2f}
+\begin{aligned}
+\forall_{o',f'} \ldotp \sigma'.h(o',f') = o_r \implies &\textsf{unlinked} \in O'_1(o') \\
+ & \textsf{freeable} \in O'_1(o')
+                \end{aligned}
+\end{gather}
+which follows from \ref{phu5f}, \ref{ahu16f}.\textbf{OW} and determined by operational semantics(\ref{ahusf}), \ref{ahus1f}, \ref{ahus2f}.  If $o'$ were observed as \textsf{iterator} then that would conflict with \ref{phu10f}.\textbf{UNQR}.
+\end{case}
+\begin{case} - \textbf{UNQRT} By \ref{ahu16f}.\textbf{UNQRT}, \ref{ahus1f}, \ref{ahus2f} and \ref{ahusf}.
+\end{case}
+
+%%%%%%%%%%%%%%
  \end{proof}
  \begin{lemma}[\textsc{ReadStack}]
    \label{lemma:readstack}
@@ -1253,7 +1324,7 @@ O'_1 =  O_1
   T_1 = \{tid\} \text{ and } tid = \sigma.l
 \end{gather}
 
-$\sigma'_1$ is determined by operational semantics. The undefined map, $T_1$ and free list need not change so we can pick $U'_1$ as $U_1$, $T'_1$  as $T_1$ and $F'_1$ as $F_1$. Assuming \ref{ahu11sr} and choices on maps makes $(\sigma_1',O'_{1},U'_{1}, T'_{1})$ in denotation
+$\sigma'_1$ is determined by operational semantics. The undefined map, $T_1$ and free list need not change so we can pick $U'_1$ as $U_1$, $T'_1$  as $T_1$ and $F'_1$ as $F_1$. Assuming \ref{ahu11sr} and choices on maps makes $(\sigma_1',O'_{1},U'_{1}, T'_{1},F'_1)$ in denotation
 \[\llbracket \Gamma\,, \rcuitrT{x}{G}{k}{k+1}{\_}\, , \rcuitrT{z}{G}{k}{k+1}{\_}  \rrbracket_{M,tid}\]
 
 In the rest of the proof, we prove \ref{phu10sr}, \ref{phu11sr} and show the composition of $(\sigma'_1, O'_1, U'_1,T'_1,F'_1)$ and  $(\sigma'_2, O'_2, U'_2,T'_2,F'_2)$. \ref{phu10sr} follows from \ref{ahu16sr} trivially.
@@ -1363,9 +1434,9 @@ T'_{1} \cup T'_{2} = T'
 F'_1 \uplus F'_2 = F'
 \\
 \label{phu10hr}
-\textsf{WellFormed}(\sigma_1',O'_{1},U'_{1},T'_{1}) \\
+\textsf{WellFormed}(\sigma_1',O'_{1},U'_{1},T'_{1},F'_1) \\
 \label{phu11hr}
-\textsf{WellFormed}(\sigma_2',O'_{2},U'_{2},T'_{2})
+\textsf{WellFormed}(\sigma_2',O'_{2},U'_{2},T'_{2},F'_2)
 \end{gather}
 
 Let $h(s(z,tid),f)$ be $o_z$. We also know from operational semantics that the machine state has changed as
@@ -1384,12 +1455,12 @@ O'_1 =  O_1
   T_1 = \{tid\} \text{ and } tid = \sigma.l
 \end{gather}
 
-$\sigma'_1$ is determined by operational semantics. The undefined map, free list and $T_1$ need not change so we can pick $U'_1$ as $U_1$, $F'_1$ as $F_1$ and $T'_1$ and $T_1$. Assuming \ref{ahu11hr} and choices on maps makes $(\sigma_1',O'_{1},U'_{1}, T'_{1})$ in denotation
+$\sigma'_1$ is determined by operational semantics. The undefined map, free list and $T_1$ need not change so we can pick $U'_1$ as $U_1$, $F'_1$ as $F_1$ and $T'_1$ and $T_1$. Assuming \ref{ahu11hr} and choices on maps makes $(\sigma_1',O'_{1},U'_{1}, T'_{1},F'_1)$ in denotation
 \[ \llbracket \Gamma\,,  x:\textsf{rcuItr} \, \rho \, \N[f\mapsto z]\, ,z:\textsf{rcuItr} \, \rho' \, \N_{\emptyset} \rrbracket_{M,tid}\]
 
-In the rest of the proof, we prove \ref{phu10hr}, \ref{phu11hr} and show the composition of $(\sigma'_1, O'_1, U'_1,T'_1)$ and  $(\sigma'_2, O'_2, U'_2,T'_2)$. 
+In the rest of the proof, we prove \ref{phu10hr}, \ref{phu11hr} and show the composition of $(\sigma'_1, O'_1, U'_1,T'_1,F'_1)$ and  $(\sigma'_2, O'_2, U'_2,T'_2,F'_2)$. 
 
-To prove \ref{phu6hr}, we need to show that each of the memory axioms in Section \ref{sec:memaxioms} holds for the state $(\sigma',O'_1,U_1',T_1')$.
+To prove \ref{phu6hr}, we need to show that each of the memory axioms in Section \ref{sec:memaxioms} holds for the state $(\sigma',O'_1,U_1',T_1',F'_1)$.
 \begin{case} - \textbf{UNQR} By \ref{ahushr}, \ref{ahu16hr}.\textbf{UNQR} and $\sigma.rt = \sigma.rt'$.
 \end{case}
 \begin{case} - \textbf{OW} By \ref{ahushr}, \ref{ahus1hr} and \ref{ahu16hr}.\textbf{OW}
@@ -1607,7 +1678,7 @@ To prove all relations (\ref{phu17wf}-\ref{phu23wf}) we assume \ref{ahus2wf} whi
 
 $O'_1 \bullet O'_2 $ follows from \ref{ahu13wf}, \ref{ahus1wf} and choice of $O_2$. 
 
-We assume $\sigma_1.h \bullet \sigma_2.h$. We know from \ref{ahu4wf} that $f \notin dom(\N')$. From \ref{phu5wf}, \ref{phu10wf}-\ref{phu11wf}.\textbf{FNR}, \ref{phu10wf}-\ref{phu11wf}.\textbf{RITR} and \ref{phu10wf}-\ref{phu11wf}.\textbf{WNR} we show $\sigma'_1.h \bullet \sigma'_2.h$ (with choices for other maps in the machine state we show \ref{ahusighr'}). All compositions shown  let us to derive conclusion for $(\sigma'_1, O'_1, U'_1, T'_1) \bullet (\sigma'_2, O'_2, U'_2, T'_2) $.
+We assume $\sigma_1.h \bullet \sigma_2.h$. We know from \ref{ahu4wf} that $f \notin dom(\N')$. From \ref{phu5wf}, \ref{phu10wf}-\ref{phu11wf}.\textbf{FNR}, \ref{phu10wf}-\ref{phu11wf}.\textbf{RITR} and \ref{phu10wf}-\ref{phu11wf}.\textbf{WNR} we show $\sigma'_1.h \bullet \sigma'_2.h$ (with choices for other maps in the machine state we show \ref{ahusighr'}). All compositions shown  let us to derive conclusion for $(\sigma'_1, O'_1, U'_1, T'_1,F'_1) \bullet (\sigma'_2, O'_2, U'_2, T'_2,F'_2) $.
  \end{proof}
 \begin{lemma}[\textsc{Sycn}]
    \label{lemma:syncstop}
@@ -1951,9 +2022,9 @@ T'_{1} \cup T'_{2} = T'
 F'_1 \uplus F'_2 = F'
 \\
 \label{phu10free}
-\textsf{WellFormed}(\sigma',O'_{1},U'_{1},T'_{1}) \\
+\textsf{WellFormed}(\sigma',O'_{1},U'_{1},T'_{1},F'_1) \\
 \label{phu11free}
-\textsf{WellFormed}(\sigma',O'_{2},U'_{2},T'_{2})
+\textsf{WellFormed}(\sigma',O'_{2},U'_{2},T'_{2},T'_2)
 \end{gather}
 
 From operational semantics we know that
