@@ -1082,9 +1082,7 @@ From assumptions in the type rule of \textsc{T-LinkFL} we assume that
 \N = \N_1
 \label{ahu5flk} \\
 \begin{aligned}
-  \forall_{x \in \Gamma, \N_3, \rho_3,f_1,y} \ldotp (x:\textsf{rcuItr}\,\rho_3\,\N_3([f_1\rightharpoonup y])) \implies\left\{\begin{array}{l} (\neg\mathsf{MayAlias}(\rho_3,\{\rho_1,\rho_2\}) ) \arcr
-\land (\forall_{\rho_4\neq \epsilon} \ldotp \neg\mathsf{MayAlias}(\rho_3, \rho_2.\rho_4) )
-  \end{array}\right.
+  \forall_{x \in \Gamma, \N_3, \rho_3,f_1,y} \ldotp (x:\textsf{rcuItr}\,\rho_3\,\N_3([f_1\rightharpoonup y])) \implies(\forall_{\rho_4\neq \epsilon} \ldotp \neg\mathsf{MayAlias}(\rho_3, \rho.\rho_4) )
 \label{ahu6flk}
   \end{aligned}
 \end{gather}
@@ -1154,7 +1152,6 @@ We know that changes in observation map are
 \begin{gather}\label{ahus1flk}
 O'_1 =  O_1(s(n,tid))[\textsf{fresh} \mapsto \textsf{iterator}\;tid ]
 \end{gather}
-%%%%%Stop here
 \ref{ahus3flk} follows from \ref{ahu1flk}
 \begin{gather}\label{ahus3flk}
   T_1 = \{tid\} \text{ and } tid = \sigma.l
@@ -1163,7 +1160,7 @@ Let $T'_1$ be $T_1$, $F'_1$ be $F_1$ and $\sigma'_1$ be determined by operationa
 \[\llbracket p:\textsf{rcuItr}\, \rho \, \N(f \rightharpoonup r \setminus n) \, , n:\textsf{rcuItr}\, \rho_1 \, \N_1 \, , r:\textsf{rcuItr}\,\rho_2\,\N_2\, ,  \Gamma \rrbracket_{M,tid}\]
 
 In the rest of the proof, we prove \ref{phu10flk}, \ref{phu11flk} and show the composition of $(\sigma'_1, O'_1, U'_1,T'_1,F'_1)$ and  $(\sigma'_2, O'_2, U'_2,T'_2,F'_2)$. To prove \ref{phu10flk}, we need to show that each of the memory axioms in Section \ref{sec:memaxioms} holds for the state $(\sigma',O'_1,U_1',T_1',F'_1)$.
-
+%%Stop here
 \begin{case}\label{unqrf} - \textbf{UNQR} 
 Let $o_p$ be $\sigma.s(p,tid)$, $o_r$ be $\sigma.s(r,tid)$ and $o_n$ be $\sigma.s(n,tid)$. 
   \ref{ahus3f} and \ref{ahus4f} follow from framing assumption(\ref{ahu3f}-\ref{ahu6f}), denotations of the precondition(\ref{ahu11f}), \ref{ahu16}.\textbf{FR} and \ref{ahu16f}.\textbf{UNQR}
@@ -2024,7 +2021,7 @@ F'_1 \uplus F'_2 = F'
 \label{phu10free}
 \textsf{WellFormed}(\sigma',O'_{1},U'_{1},T'_{1},F'_1) \\
 \label{phu11free}
-\textsf{WellFormed}(\sigma',O'_{2},U'_{2},T'_{2},T'_2)
+\textsf{WellFormed}(\sigma',O'_{2},U'_{2},T'_{2},F'_2)
 \end{gather}
 
 From operational semantics we know that

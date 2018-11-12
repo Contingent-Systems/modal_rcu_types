@@ -313,21 +313,21 @@ The type system gives it a \textsf{fresh} type while tracking its field contents
 { %\textsf{FV}(\Gamma) \cap \{r,y\}  =\emptyset
   y\not\in\textsf{FV}(\Gamma)
 }
-{\Gamma\,,r:\textsf{rcuRoot}\,,y:\textsf{undef} \vdash y = r \dashv y: \textsf{rcuItr}\, \epsilon \, \N_{\emptyset}\,,r:\textsf{rcuRoot}\,,\Gamma}
+{\Gamma,r:\textsf{rcuRoot},y:\textsf{undef} \vdash y = r \dashv y: \textsf{rcuItr} \epsilon \N_{\emptyset},r:\textsf{rcuRoot},\Gamma}
 \and
 \inferrule*[left=\scriptsize(T-ReadS)]
 { %\textsf{FV}(\Gamma) \cap \{z,x\}  =\emptyset 
   z\not\in\textsf{FV}(\Gamma)
 }
 {
-\Gamma\,, z:\_ \, ,\rcuitrT{x}{G}{k}{k+1}{\_} \vdash z=x \dashv  \rcuitrT{x}{G}{k}{k+1}{\_}\, , \rcuitrT{z}{G}{k}{k+1}{\_} \,, \Gamma
+\Gamma, z:\_  ,\rcuitrT{x}{G}{k}{k+1}{\_} \vdash z=x \dashv  \rcuitrT{x}{G}{k}{k+1}{\_}, \rcuitrT{z}{G}{k}{k+1}{\_}, \Gamma
 }
 \and
 \inferrule*[left=\scriptsize(T-Alloc)]
 {
 }
 {
- \Gamma\,, x:\textsf{undef} \vdash x = \NEW \dashv x:\textsf{rcuFresh} \, \N_{\emptyset} \, ,  \Gamma
+ \Gamma, x:\textsf{undef} \vdash x = \NEW \dashv x:\textsf{rcuFresh} \N_{\emptyset} ,  \Gamma
 }
 \;\;
 \inferrule*[left=\scriptsize(T-Free)]
@@ -344,19 +344,19 @@ The type system gives it a \textsf{fresh} type while tracking its field contents
   z\not\in\textsf{FV}(\Gamma)
 }
 {
- \Gamma\, , z:\_ \, ,  x:\textsf{rcuItr} \, \rho \, \N   \vdash
+ \Gamma , z:\_  ,  x:\textsf{rcuItr} \rho \N   \vdash
  	z=x.f
- \dashv  x:\textsf{rcuItr} \, \rho \, \N([f\rightharpoonup z])\, ,z:\textsf{rcuItr} \, \rho' \, \N_{\emptyset} \, , \Gamma
+ \dashv  x:\textsf{rcuItr} \rho  \N([f\rightharpoonup z]),z:\textsf{rcuItr} \rho'  \N_{\emptyset}  , \Gamma
 }
 \and
 \inferrule[\scriptsize(T-WriteFH)]
 {
-z:\textsf{rcuItr} \; \rho.f \; \_ \quad \N(f)=z \quad f \notin dom (\N')
+z:\textsf{rcuItr}  \rho.f  \_ \quad \N(f)=z \quad f \notin dom (\N')
 }
 {
- \Gamma, p:\textsf{rcuFresh}\,\N',\; x:\textsf{rcuItr}\;\; \rho \;\; \N
+ \Gamma, p:\textsf{rcuFresh}\,\N', x:\textsf{rcuItr} \rho  \N
   \vdash_{M} p.f = z \dashv
-  p:\textsf{rcuFresh}\,\N'([f\rightharpoonup z])  \, , x:\textsf{rcuItr}\, \rho \, \N([f\rightharpoonup z]), \, \Gamma
+  p:\textsf{rcuFresh}\N'([f\rightharpoonup z])   , x:\textsf{rcuItr}\, \rho  \N([f\rightharpoonup z]),  \Gamma
 }
 \and
 \inferrule*[left=\scriptsize(T-Sync)]
@@ -437,7 +437,7 @@ r:\textsf{rcuItr}  \rho_1  \N_2, \Gamma
 \inferrule*[left=\scriptsize(ToRCUWrite)]
 {
   \textsf{NoFresh}(\Gamma') \and \textsf{NoUnlinked}(\Gamma')  \and \textsf{NoFreeable}(\Gamma') \\
- \Gamma\, , y : \textsf{rcuItr}\, \_ \vdash_M C \dashv \Gamma' \and \textsf{FType}(f)=\textsf{RCU} 
+ \Gamma , y : \textsf{rcuItr} \_ \vdash_M C \dashv \Gamma' \and \textsf{FType}(f)=\textsf{RCU} 
 }
 {
 \Gamma \vdash \textsf{RCUWrite}\, x.f \textsf{ as }y\textsf{ in } \{ C \}
