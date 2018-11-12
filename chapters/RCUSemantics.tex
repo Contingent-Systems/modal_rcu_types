@@ -25,6 +25,7 @@ The root location $rt$ is the root of  an \textsf{RCU} data structure. We model 
 The reader set $R$ tracks the thread IDs (TIDs) of all threads currently executing a read block. 
 The bounding set $B$ tracks which threads the writer is \emph{actively} waiting for during a grace period --- it is empty if the writer is not waiting.
 \begin{figure*}\scriptsize%%%%%%%%%%%%OPdERATIONAL SEMANTICS%%%%%%%%%%%%%%
+  \begin{mdframed}
   \grammar
    $\desugarsync$ \\
   $\desugarwrite$\\
@@ -38,18 +39,21 @@ The bounding set $B$ tracks which threads the writer is \emph{actively} waiting 
 (\textsc{RCU-SStop}) & \llbracket\texttt{SyncStop}\rrbracket & (s,h,l,rt,R,\emptyset) & (s,h,l,rt,R,\emptyset) &  \\
 (\textsc{Free}) & {\llbracket\texttt{Free}(x)\rrbracket} & (s,h,l,rt,R,\emptyset) & (s,h',l,rt,R,\emptyset) &
 \end{array}\]
-$\textrm{where}~ \forall_{f,o'}\ldotp rt \neq s(x,tid) \textrm{ and } o' \neq s(x,tid) \implies h(o',f) = h'(o',f) \textrm{ and } \forall_{f}\ldotp h'(o,f)=\textsf{undef}$
+$\textrm{provided}~ \forall_{f,o'}\ldotp rt \neq s(x,tid) \textrm{ and } o' \neq s(x,tid) \implies h(o',f) = h'(o',f) \textrm{ and } \forall_{f}\ldotp h'(o,f)=\textsf{undef}$
 \[\begin{array}{c@{\;}rl@{\Downarrow_{\mathit{tid}}}ll} 
 (\textsc{HUpdt}) & \llbracket\texttt{x.f=y}\rrbracket   &(s,h,l,rt,R,B)& (s,h[s(x,tid),f \mapsto s(y,tid)],l,rt,R,B) &\\
 (\textsc{HRead})   & \llbracket\texttt{y=x.f}\rrbracket   &(s,h,l,rt,R,B)& (s[(y,tid) \mapsto h(s(x,tid),f)],h,l,rt,R,B) & \\
 (\textsc{SUpdt}) & \llbracket\texttt{y=x}\rrbracket     &(s,h,l,rt,R,B)& (s[(y,tid) \mapsto (x,tid)],h,l,rt,R,B) &\\
 (\textsc{HAlloc}) & \llbracket\texttt{y=new}\rrbracket &(s,h,l,rt,R,B)& (s,h[\ell\mapsto\mathsf{nullmap}],l,rt,R,B) & 
 \end{array}\]
-$\textrm{where}~ rt \neq s(y,tid) \textrm{ and } s[(y,tid) \mapsto \ell], \textrm{ and }$
-$h[\ell \mapsto \mathsf{nullmap}] \overset{\mathrm{def}}{=} \lambda (o',f) . \textrm{ if } o=o' \textrm{ then } skip \textrm{ else } h(o',f) $
+\begin{align*}
+  \textrm{provided}~ rt \neq s(y,tid) \textrm{ and } s[(y,tid) \mapsto \ell], \textrm{ and }\\
+  h[\ell \mapsto \mathsf{nullmap}] \overset{\mathrm{def}}{=} \lambda (o',f) . \textrm{ if } o=o' \textrm{ then } skip \textrm{ else } h(o',f)
+  \end{align*}
 \caption{Operational Semantics for \textsf{RCU}}
 \label{fig:operationalsemrcu}
 \vspace{-2mm}
+\end{mdframed}
 \end{figure*}%%%%%%%%%%%%%%%%%%%%%OPERATIONAL SEMANTICS ENDS%%%%%%%%%%%%%%%%%%
 
 Figure \ref{fig:operationalsemrcu} gives operational semantics for \emph{atomic} actions; conditionals, loops, and sequencing all have standard semantics, and parallel composition uses sequentially-consistent interleaving semantics.
