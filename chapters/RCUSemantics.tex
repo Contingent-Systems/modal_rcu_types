@@ -25,7 +25,6 @@ The root location $rt$ is the root of  an \textsf{RCU} data structure. We model 
 The reader set $R$ tracks the thread IDs (TIDs) of all threads currently executing a read block. 
 The bounding set $B$ tracks which threads the writer is \emph{actively} waiting for during a grace period --- it is empty if the writer is not waiting.
 \begin{figure*}\scriptsize%%%%%%%%%%%%OPdERATIONAL SEMANTICS%%%%%%%%%%%%%%
-  \begin{mdframed}
   \grammar
    $\desugarsync$ \\
   $\desugarwrite$\\
@@ -53,7 +52,6 @@ $\textrm{provided}~ \forall_{f,o'}\ldotp rt \neq s(x,tid) \textrm{ and } o' \neq
 \caption{Operational Semantics for \textsf{RCU}}
 \label{fig:operationalsemrcu}
 \vspace{-2mm}
-\end{mdframed}
 \end{figure*}%%%%%%%%%%%%%%%%%%%%%OPERATIONAL SEMANTICS ENDS%%%%%%%%%%%%%%%%%%
 
 Figure \ref{fig:operationalsemrcu} gives operational semantics for \emph{atomic} actions; conditionals, loops, and sequencing all have standard semantics, and parallel composition uses sequentially-consistent interleaving semantics.

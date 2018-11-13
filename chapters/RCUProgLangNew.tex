@@ -47,7 +47,6 @@ Unlinked references become freeable after a writer has waited for a full grace p
 It is sometimes necessary to use imprecise types --- mostly for control flow joins.  Our type system performs these abstractions via subtyping on individual types and full contexts, as in Figure \ref{fig:sub-typing}.  We discuss subtyping before the full type rules to give a sense of what kinds of imprecision exist in our type system.
 %%%%%%%%%%%%%%%%%%%%%%%%SUB TYPING JUDGEMENTS%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \begin{figure}[!t]\scriptsize
-\begin{mdframed}
 \begin{mathpar}
  \fmapname \quad \fmapfieldemp \\ \fmapempty \quad \fmapextendn \quad \fmapdiff \\ \fmapwithf \quad \fmapextend %\and \typelocalmap %\and  \ftypedecl \and \rpth 
 \\
@@ -143,14 +142,12 @@ It is sometimes necessary to use imprecise types --- mostly for control flow joi
 \vspace{-2em}
 \caption{Sub-Typing Rules}
 \label{fig:sub-typing}
-\end{mdframed}
 \end{figure}
 
 Figure \ref{fig:sub-typing} includes four judgments.  The first two --- $\vdash\N\prec:\N'$ and $\vdash\rho\prec:\rho'$ --- describe relaxations of field maps and paths respectively.  $\vdash\N\prec:\N'$ is read as ``the field map $\N$ is more precise than $\N'$'' and similarly for paths.
 The third judgment $\vdash T\prec:T'$ uses path and field map subtyping to give subtyping among \textsf{rcuItr} types --- one \textsf{rcuItr} is a subtype of another if their paths and field maps are similarly more precise --- and to allow \textsf{rcuItr} references to be ``forgotten'' --- this is occasionally needed to satisfy non-interference checks in the type rules.
 The final judgment $\vdash\Gamma\prec:\Gamma'$ extends subtyping to all assumptions in a type context, allowing any or all types in the context to be relaxed to a supertype.
 \begin{figure}[!t]\scriptsize
-\begin{mdframed}
 \begin{mathpar}
 \fbox{$\Gamma \vdash_{M,R} C \dashv \Gamma'$} \;\;\;\;\;\;
 \inferrule[\scriptsize(T-ReIndex)]
@@ -206,7 +203,6 @@ The final judgment $\vdash\Gamma\prec:\Gamma'$ extends subtyping to all assumpti
 \vspace{-2em}
 \caption{Type Rules for Control-Flow.}
 \label{fig:type-judgements-for-cf}
-\end{mdframed}
 \end{figure}
 
 It is often necessary to abstract the contents of field maps or paths, without simply forgetting the contents entirely.  In a binary search tree, for example, it may be the case that one node is a child of another, but \emph{which} parent field points to the child depends on which branch was followed in an earlier conditional (consider the lookup in a BST, which alternates between following left and right children).
@@ -215,7 +211,7 @@ In Listing \ref{lst:altfield}, we see that \texttt{cur} aliases different fields
 %We see the join of the type assertions in lines 6 and 11 to the one in the line 12. 
 The types after the conditional must overapproximate this, here as $Left|Right\mapsto cur$ in \texttt{par}'s field map, and a similar path disjunction in \texttt{cur}'s path.
 This is reflected in Figure \ref{fig:sub-typing}'s \textsc{T-NSub1-5} and \textsc{T-PSub1-2} --- within each branch, each type is coerced to a supertype to validate the control flow join.
-\begin{lstlisting}[caption={Choosing fields to read},label={lst:altfield},numbersep=1pt,xrightmargin=-1cm,xleftmargin=0.1\textwidth, numbers=left, numbersep=5pt,basicstyle=\scriptsize\ttfamily,float,floatplacement=H]
+\begin{lstlisting}[caption={Choosing fields to read},label={lst:altfield},numbersep=1pt,xrightmargin=-1cm,xleftmargin=0.1\textwidth, numbers=left, numbersep=5pt,basicstyle=\scriptsize\ttfamily]
 $\assert{cur:\mathsf{rcuItr}\; Left|Right \;\{\},\;\;par:\mathsf{rcuItr}\;  \epsilon \;\{Left|Right\mapsto cur\}}$
 if(par.Left == cur){
   $\assert{cur:\mathsf{rcuItr}\; Left \;\{\} ,\;\; par:\mathsf{rcuItr}\;  \epsilon \;\{Left\mapsto cur\}}$
@@ -301,7 +297,6 @@ The type system gives it a \textsf{fresh} type while tracking its field contents
 \subsection{Type Rules}
 \label{subsection:type-rules}
 \begin{figure}[!t]\scriptsize
-\begin{mdframed}[innerbottommargin=0.1pt]
 \begin{mathpar}
 \fbox{$\Gamma \vdash_{M} \alpha \dashv \Gamma'$} \;\;
 \inferrule*[left=\scriptsize(T-Root)]
@@ -440,9 +435,7 @@ r\textsf{:rcuItr}  \rho_1  \N_2, \Gamma
 \end{mathpar}
 \caption{Type Rules for \textsf{Write} side critical section}
 \label{fig:tss}
-\end{mdframed}
 \end{figure}
-
 Figure \ref{fig:tss} gives the primary type rules used in checking write-side critical section code as in Figure \ref{fig:rculist}.
 %Our aim in this section is to investigate potential memory safety issues, discuss what memory inconsistencies they can cause and how type rules prevent it and justify why the flow of change in types serves to the correct \textsf{RCU} programming.
 

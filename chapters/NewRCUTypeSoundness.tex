@@ -59,7 +59,6 @@ We do our reasoning for soundness over instrumented states and define an erasure
 \[\lfloor - \rfloor :\mathsf{MState} \implies \textsf{LState}\]
 that projects instrumented states to the common components with \textsf{MState}.
 \begin{figure}[!t]\scriptsize
-  \begin{mdframed}
 \[
 \begin{array}{l@{\;\;=\;\;}l}
  \llbracket \, x : \textsf{rcuItr}\,\rho\,\N \,  \rrbracket_{tid}
@@ -144,7 +143,6 @@ $
 \caption{Type Environments}
 \label{fig:denotingtypeenviroment}
 \vspace{-2mm}
-\end{mdframed}
 \end{figure}
 
 Every type environment represents a set of possible views (\textsf{WellFormed} logical states) consistent with the types in the environment.  We make this precise with a denotation function
@@ -158,7 +156,6 @@ Composition of instrumented states is an operation
 \[\bullet : \mathcal{M} \longrightarrow \mathcal{M} \longrightarrow \mathcal{M}\]
 that is commutative and associative, and defined component-wise in terms of composing physical states, observation maps, undefined sets, and thread sets as shown in Figure \ref{fig:comp}
 \begin{figure}[!t]\scriptsize
-  \begin{mdframed}
     \begin{flalign*}
       \bullet  = (\bullet_{\sigma},\bullet_O,\cup,\cup) \;\; (F_1 \bullet_F F_2) \overset{\mathrm{def}}{=}  F_1  \cup F_2 \texttt{   when   } dom(F_1) \cap dom(F_2) = \emptyset \\
       O_{1} \bullet_O O_{2}(loc) \overset{\mathrm{def}}{=}  O_{1}(loc) \cup O_{2}(loc) \;\;   (s_1 \bullet_s s_2) \overset{\mathrm{def}}{=}  s_1 \cup s_2 \texttt{   when   } dom(s_1) \cap dom(s_2) = \emptyset    
@@ -193,7 +190,6 @@ v & \textrm{if}~h_1(o,f)=v\land h_2(o,f)=\mathrm{undef}\\
 \caption{Composition($\bullet$) and Thread Interference Relation($\mathcal{R}_{0}$)}
 \label{fig:comp}
 \vspace{-2mm}
-\end{mdframed}
 \end{figure}
 %\emph{Separation algebra} is a model to define and axiomatize the \emph{join/composition} operation over a domain which is \emph{set of instrumented states} in our case.
 An important property of composition is that it preserves validity of logical states:
