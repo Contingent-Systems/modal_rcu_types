@@ -208,16 +208,14 @@ The final judgment $\vdash\Gamma\prec:\Gamma'$ extends subtyping to all assumpti
 \label{fig:type-judgements-for-cf}
 \end{mdframed}
 \end{figure}
-%%%%%%%%%%%%%%%COND TYPE JUDGEMENTS ENDS%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%(\textit{\textbf{Approximation on Fields}}) - 
 It is often necessary to abstract the contents of field maps or paths, without simply forgetting the contents entirely.  In a binary search tree, for example, it may be the case that one node is a child of another, but \emph{which} parent field points to the child depends on which branch was followed in an earlier conditional (consider the lookup in a BST, which alternates between following left and right children).
 %Since our list based bag example's objects have single field($Next$), we take small code snippet from our \textsf{BST} type checking effort in Appendix \ref{appendix:bst_del} in which objects have two fields $Left$ and $Right$. Field mappings take field names to local variable names. They are added to the field map, $\N$, when the object's fields are read. 
 In Listing \ref{lst:altfield}, we see that \texttt{cur} aliases different fields of \texttt{par} --- either $Left$ or $Right$ --- in different branches of the conditional.
 %We see the join of the type assertions in lines 6 and 11 to the one in the line 12. 
 The types after the conditional must overapproximate this, here as $Left|Right\mapsto cur$ in \texttt{par}'s field map, and a similar path disjunction in \texttt{cur}'s path.
 This is reflected in Figure \ref{fig:sub-typing}'s \textsc{T-NSub1-5} and \textsc{T-PSub1-2} --- within each branch, each type is coerced to a supertype to validate the control flow join.
-\begin{lstlisting}[caption={Choosing fields to read},label={lst:altfield},numbersep=1pt,xrightmargin=-1cm,xleftmargin=0.1\textwidth, numbers=left, numbersep=5pt,basicstyle=\scriptsize\ttfamily]
+\begin{lstlisting}[caption={Choosing fields to read},label={lst:altfield},numbersep=1pt,xrightmargin=-1cm,xleftmargin=0.1\textwidth, numbers=left, numbersep=5pt,basicstyle=\scriptsize\ttfamily,float,floatplacement=H]
 $\assert{cur:\mathsf{rcuItr}\; Left|Right \;\{\},\;\;par:\mathsf{rcuItr}\;  \epsilon \;\{Left|Right\mapsto cur\}}$
 if(par.Left == cur){
   $\assert{cur:\mathsf{rcuItr}\; Left \;\{\} ,\;\; par:\mathsf{rcuItr}\;  \epsilon \;\{Left\mapsto cur\}}$
