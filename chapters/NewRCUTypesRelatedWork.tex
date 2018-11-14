@@ -1,4 +1,4 @@
-\section{Related Work and Conclusions}
+\section{Related Work}
 \label{sec:relatedwork}
 Our type system work builds on a great deal of related work on RCU implementations and models; and general concurrent program verification (via program logics, model checking, and type systems).
 
@@ -35,5 +35,29 @@ Howard et al.~\cite{Howard:2011:RES:2001252.2001267} enhance \textsf{STM} in Has
 A follow up paper from Cooper et al.~\cite{Cooper2015RelativisticPI} presents a \textsf{Haskell} library called \emph{Monadic RP}, for relativistic programming. Similar to our approach, Monadic RP provides types and relativistic programming constructs for write/read critical sections which enforce correct usage of relativistic programming pattern. 
 They also have only checked a linked list.
 Thus our work is the first type system for ensuring correct use of RCU primitives that is known to handle more complex structures than linked lists.
+\section{Conclusions}
+\label{sec:concls}
+\begin{comment}
+We aim to  captures the requirements of RCU setting~\cite{abssem}.
 
-\colin{There are no actual conclusions!}
+\mypar{Grace-Period Guarantee} To reclaim a heap location, a mutator thread must synchronize with all of the reader threads with overlapping read-side critical sections.
+The operational semantics enforce a \textit{protocol} on the mutator thread's actions. First it unlinks a node from the data structure; the local type for that reference becomes \textsf{unlinked}. Then it waits for current reader threads to exit, after which the local type is \textsf{freeable}. Finally, it may safely reclaim the memory, after which the local type is \textsf{undef}.
+%The mutator thread's reference to the heap location in between {unlinking} and {synchronising} is represented with the type \textsf{unlinked}. The type of the reference in between the end of \textit{synchronisation} and \textit{reclamation} is represented with the type \textsf{freeable}. 
+The semantics prevent the writer from reclaiming too soon by adding the heap location to the free list of the state, which is checked dynamically by the actual free operation.
+%Synchronisation action \textit{bounds} the mutator thread from reclaiming the \textit{unlinked} heap location immediately by adding it to the \textit{free-list}. 
+The denotation of \textsf{unlinked} asserts that if an \textsf{unlinked} heap location is in our logical \textit{free-list} then
+it is unreachable via the heap, but possibly accessible to other threads via local variables.
+ %there exists a subset of reader threads running simultaneously -- which we call \textit{bounding} threads -- referencing to the heap location.
+The denotation of \textsf{freeable} --- only possible after synchronizing --- requires that the object is not referenced from the heap or other threads.
+%A \textit{bounding-thread} can observe an \textsf{unlinked} heap location as \textsf{iterator} during its existence in the \textit{free-list}(Invariant \textsf{Iterators-Free-List} and Invariant \textsf{Readers-In-Free-List}).
+
+\mypar{Publish-Subscribe Guarantee} Concurrent reader threads must not be affected by a \textit{replacing-an-existing-node-with-a-fresh-one} or \textit{linking-a-single-node} action inserting a new node into the linked data structure in such a way that they cannot access to the fresh nodes until they are \textit{published/linked}. Unlike in the case of \textit{Grace-Period-Guarantee} where the reader threads can observe an unlinked heap node as \textsf{iterator} during the \textit{grace-period}, they cannot observe the fresh heap nodes until they are published. As we see in the operational semantics, once a new heap location is allocated it is in type \textsf{fresh}(observed as \textsf{fresh} by the mutator thread). The fresh heap location can only be allocated and referenced by the mutator thread(Invariant \textsf{Fresh-Writes}). The relation between a freshly allocated heap and the rest of the heap is established in such a way that there exists no heap node reaching to the freshly allocated one(Invariant \textsf{Fresh-Reachable}). Moreover, the freshly allocated heap locatation cannot be observed by the reader threads(preserves Invariant \textsf{Readers-Iterator-Only}) until it is published(Invariant \textsf{Fresh-Not-Reader}). Our system enforce \textit{locality} on the effects of inserting/replacing a new heap node which we have discussed through Figure \ref{fig:freshframeout} Section \ref{subsection:type-rules}. In the case of replacement the crucial assumption in the framing of the type rule \textsc{T-Replace} is to have the fields of the fresh node and replaced one pointing the same nodes(preserves Invariant \textsf{Fresh-Points-Iterator}).
+
+\mypar{Memory-Barrier Guarantee} RCU write-side critical section has to guarantee that none of the updates to the memory cause invalid memory accesses. If a heap location is observed as \textsf{iterator} by the mutator thread then it must be observed as \textsf{iterator} by other threads(Invariant \textsf{Writer-Unlink}) and all of the heap locations reaching to the node starting from root can be observed as \textsf{iterator} as well(denotation $\llbracket \mathsf{rcuItr}\,\rho \,\N \rrbracket_{tid}$). Reader threads can only have one type of observation \textsf{iterator}(Invariant \textsf{Readers-Iterator-Only}) for a heap location where this heap location can be updated by the mutator and reader threads referencing on this heap node become \textit{bounding-threads} for the reclamation of the heap location(Denotation $\llbracket \mathsf{rcuItr} \rrbracket_{tid}$ and Invariant \textsf{Readers-In-Free-List}). However, \textit{bounding-threads} are the only ones which can observe the \textsf{unlinked} heap location as \textsf{iterator}: new coming reader threads cannot access to the \textsf{unlinked} heap. There exists links to mutated heap nodes -- e.g. either \textsf{unlinked} or \textsf{freeable} -- only from the heap nodes that are already mutated(Invariant \textsf{Unlinked-Reachability} and Invariant \textsf{Free-List-Reachability}). To sum up, every heap node accessible via traversal starting from the unique root must be valid and observed as \textsf{iterator} both by reader threads and the mutator thread(Invariant \textsf{Readers-Iterator-Only}).
+
+\mypar{RCU Primitives Guaranteed to Execute Unconditionally} Uncoditional execution of RCU Primitives are provided by the definitions in our operational semantics for our RCU primitives(e.g. \lstinline|ReadBegin|, \lstinline|ReadEnd|, \lstinline|WriteBegin|, \lstinline|WriteEnd| and \lstinline|SyncStart;SyncStop|).
+
+\mypar{Guaranteed Read-to-Write Upgrade} Our system provides a clear separation of \textit{traverse-and-update} and \textit{traverse-only} intentions for \textsf{RCU} programming through the type system together with the programming primitives.
+
+\mypar{Tree Structure} Additionally, our system also ensures that none of the heap updates introduces \textit{cyclicity}; moreover, violates the \textit{tree} structure(Invariant \textsf{Unique-Reachable}, Invariant \textsf{Unique-Root} and Denotation $\llbracket \mathsf{rcuItr}\,\rho \,\N \rrbracket_{tid}$).
+\end{comment}
