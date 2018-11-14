@@ -49,9 +49,12 @@ The denotation of \textsf{freeable} --- only possible after synchronizing --- re
 \mypar{Tree Structure} Additionally, our system also ensures that none of the heap updates introduces \textit{cyclicity}; moreover, violates the \textit{tree} structure(Invariant \textsf{Unique-Reachable}, Invariant \textsf{Unique-Root} and Denotation $\llbracket \mathsf{rcuItr}\,\rho \,\N \rrbracket_{tid}$).
 \subsection{Proof}
 \label{sec:proof}
-The Views Framework takes a set of parameters satisfying some properties, and produces a soundness proof for a static reasoning system for a larger programming language.  Among other parameters, the most notable are the choice of machine state, semantics for \emph{atomic} actions (e.g., field writes, or \lstinline|WriteBegin|), and proofs that the reasoning (in our case, type rules) for the atomic actions are sound (in a way chosen by the framework).
-The other critical pieces are a choice for a partial \emph{view} of machine states --- usually an extended machine state with meta-information --- and a relation constraining how other parts of the program can interfere with a view (e.g., modifying a value in the heap, but not changing its type).
-Our type system will be related to the views by giving a denotation of type environments in terms of views, and then proving that for each atomic action shown in \ref{fig:operationalsemrcu} in Section \ref{sec:semantics} and type rule in Figure \ref{fig:tss} Section \ref{subsection:type-action}(also for type rules for \textit{structural} and \textit{reader critical section} in Figure \ref{fig:tssr} Appendix \ref{appendix:readtypes}), given a view in the denotation of the initial type environment of the rule, running the semantics for that action yields a local view in the denotation of the output type environment of the rule. The following works through this in more detail. We define logical states, $\textsf{LState}$ to be
+This section provides more details on how the Views Framework~\cite{views} is used to prove soundness, giving the majore parameters to the framework and outlining key lemmas.
+%The Views Framework takes a set of parameters satisfying some properties, and produces a soundness proof for a static reasoning system for a larger programming language.  Among other parameters, the most notable are the choice of machine state, semantics for \emph{atomic} actions (e.g., field writes, or \lstinline|WriteBegin|), and proofs that the reasoning (in our case, type rules) for the atomic actions are sound (in a way chosen by the framework).
+%The other critical pieces are a choice for a partial \emph{view} of machine states --- usually an extended machine state with meta-information --- and a relation constraining how other parts of the program can interfere with a view (e.g., modifying a value in the heap, but not changing its type).
+%Our type system will be related to the views by giving a denotation of type environments in terms of views, and then proving that for each atomic action shown in \ref{fig:operationalsemrcu} in Section \ref{sec:semantics} and type rule in Figure \ref{fig:tss} Section \ref{subsection:type-action}(also for type rules for \textit{structural} and \textit{reader critical section} in Figure \ref{fig:tssr} Appendix \ref{appendix:readtypes}), given a view in the denotation of the initial type environment of the rule, running the semantics for that action yields a local view in the denotation of the output type environment of the rule. The following works through this in more detail. We define logical states, $\textsf{LState}$ to be
+Section \ref{sec:semantics} defined what Views calls \emph{atomic actions} (the primitive operations) and their semantics of runtime \emph{machine states}.  The Views Framework uses a separate notion of instrumented (logical) state over which the logic is built, related by a concretization function $\lfloor-\rfloor$ taking an instrumented state to the machine states of Section \ref{sec:semantics}.  Most often --- including in our proof ---  the logical state adds useful auxilliary state to the machine state, and the concretization is simply projection.
+Thus we define our logical states \textsf{LState} as:
 \begin{itemize}
 \item A machine state, $\sigma=(s,h,l,rt,R,B)$;
 \item An observation map, O, of type $ \textsf{Loc} \to \mathcal{P}(\textsf{obs})$
@@ -59,19 +62,26 @@ Our type system will be related to the views by giving a denotation of type envi
 \item Set of threads, $T$, of type $\mathcal{P}(\textsf{TIDS})$
 \item A to-free map(or free list), $F$, of type $\textsf{Loc} \rightharpoonup \mathcal{P}(\textsf{TID})$
 \end{itemize}
+The thread ID set $T$ includes the thread ID of all running threads.
 The free map $F$ tracks which reader threads may hold references to each location. It is not required for execution of code, and for validating an implementation could be ignored, but we use it later with our type system to help prove that memory deallocation is safe.
+The (per-thread) variables in the undefined variable map $U$ are those that should not be accessed (e.g., dangling pointers).
 
-Each memory region can be observed in one of the following type states within a snapshot taken at any time
+The remaining component, the observation map $O$, requires some further explanation.
+Each memory allocation / object can be \emph{observed} in one of the following states by a variety of threads, depending on how it was used.
 \[\textsf{obs} := \texttt{iterator} \; \mathrm{tid} \mid \texttt{unlinked} \mid \texttt{fresh} \mid \texttt{freeable} \mid \texttt{root}\]
+An object can be observed as part of the structure (\texttt{iterator}), removed but possibly accessible to other threads, freshly allocated, safe to deallocate, or the root of the structure.
 
-We are interested in \textsf{RCU} typed of heap domain which we define as:
-\[\textsf{RCU} = \{ o \mid \textsf{FType}(f) = \textsf{RCU} \land \exists o' \ldotp h(o',f) = o \}\]
+%We are interested in \textsf{RCU} typed of heap domain which we define as:
+%\[\textsf{RCU} = \{ o \mid \textsf{FType}(f) = \textsf{RCU} \land \exists o' \ldotp h(o',f) = o \}\]
 
-A thread's (or scope's) \emph{view} of memory is a subset of the instrumented(logical states), which satisfy certain \textsf{WellFormed}ness criteria relating the physical state and the additional meta-data ($O$, $U$, $T$ and $F$)
+A view in the Views Framework --- the semantics of assertions in the Views logic --- is then a subset of the local states that satisfy a validity predicate \textsf{WellFormed}, outlined in Section \ref{sec:lemmas}:
+%A thread's (or scope's) \emph{view} of memory is a subset of the instrumented(logical states), which satisfy certain \textsf{WellFormed}ness criteria relating the physical state and the additional meta-data ($O$, $U$, $T$ and $F$)
 \[\mathcal{M} \stackrel{def}{=} \{ m \in (\textsf{MState} \times O \times U \times T \times F) \mid  \textsf{WellFormed}(m) \} \]
-We do our reasoning for soundness over instrumented states and define an erasure relation
-\[\lfloor - \rfloor :\mathsf{MState} \implies \textsf{LState}\]
-that projects instrumented states to the common components with \textsf{MState}.
+
+%We do our reasoning for soundness over instrumented states and define an erasure relation
+%\[\lfloor - \rfloor :\mathsf{MState} \implies \textsf{LState}\]
+%that projects instrumented states to the common components with \textsf{MState}.
+
 \begin{figure}[!t]\scriptsize
 \[
 \begin{array}{l@{\;\;=\;\;}l}
@@ -161,14 +171,30 @@ $
 
 Every type environment represents a set of possible views (\textsf{WellFormed} logical states) consistent with the types in the environment.  We make this precise with a denotation function
 \[\llbracket-\rrbracket\_ : \mathsf{TypeEnv}\rightarrow\mathsf{TID}\rightarrow\mathcal{P}(\mathcal{M})\]
-that yields the set of states corresponding to a given type environment. This is defined in terms of denotation of individual variable assertions
-\[\llbracket-:-\rrbracket_- : \mathsf{Var}\rightarrow\mathsf{Type}\rightarrow\mathsf{TID}\rightarrow\mathcal{P}(\mathcal{M})\]
+that yields the set of states corresponding to a given type environment. This is defined as the intersection of individual variables' types as in Figure \ref{fig:denotingtypeenviroment}.
+%\[\llbracket-:-\rrbracket_- : \mathsf{Var}\rightarrow\mathsf{Type}\rightarrow\mathsf{TID}\rightarrow\mathcal{P}(\mathcal{M})\]
+%
+%The latter is given in Figure \ref{fig:denotingtypeenviroment}.  To define the former, we first need to state what it means to combine logical machine states.
 
-The latter is given in Figure \ref{fig:denotingtypeenviroment}.  To define the former, we first need to state what it means to combine logical machine states.
+Individual variables' denotations are extended to context denotations slightly differently depending on whether the environment is a reader or writer thread context: writer threads own the global lock, while readers do not:
+\begin{itemize}
+\item For read-side as $\llbracket x_1 : T_1, \ldots x_n : T_n \rrbracket_{tid,\textsf{R}} = \llbracket x_1 : T_1 \rrbracket_{tid} \cap \ldots \cap \llbracket x_n : T_n \rrbracket_{tid} \cap \llbracket \textsf{R} \rrbracket_{tid}$ where
+$\llbracket \textsf{R} \rrbracket_{tid} = \{ (s,h,l,rt,R,B),O,U,T,F  \mid tid \in R \}$
 
-Composition of instrumented states is an operation
-\[\bullet : \mathcal{M} \longrightarrow \mathcal{M} \longrightarrow \mathcal{M}\]
-that is commutative and associative, and defined component-wise in terms of composing physical states, observation maps, undefined sets, and thread sets as shown in Figure \ref{fig:comp}
+\item For write-side as $\llbracket x_1 : T_1, \ldots x_n : T_n \rrbracket_{tid,\textsf{M}} = \llbracket x_1 : T_1 \rrbracket_{tid} \cap \ldots \cap \llbracket x_n : T_n \rrbracket_{tid} \cap \llbracket \textsf{M} \rrbracket_{tid}$ where
+$\llbracket \textsf{M} \rrbracket_{tid} = \{ (s,h,l,rt,R,B),O,U,T,F  \mid tid = l \}$
+%
+%\item $\llbracket x_1 : T_1, \ldots x_n : T_n \rrbracket_{tid,\textsf{O}} = \llbracket x_1 : T_1 \rrbracket_{tid} \cap \ldots \cap \llbracket x_n : T_n \rrbracket_{tid} \cap \llbracket \textsf{O} \rrbracket_{tid}$ where
+%$\llbracket \textsf{O} \rrbracket_{tid} = \{ (s,h,l,rt,R,B),O,U,T,F  \mid tid \neq l \land tid \notin R \}$.
+\end{itemize}
+
+To support framing (weakening), the Views Framework requires that views form a partial commutative monoid under an operation $\bullet : \mathcal{M} \longrightarrow \mathcal{M} \longrightarrow \mathcal{M}$, provided as a parameter to the framework.
+The framework also requires an interference relation $\mathcal{R}\subseteq\mathcal{M}\times\mathcal{M}$ between views to reason about local updates to one view preserving validity of adjacent views (akin to the small-footprint property of separation logic).
+Figure \ref{fig:comp} defines our composition operator and the core interference relation $\mathcal{R}_0$ --- the actual inferference between views (between threads, or between a local action and framed-away state) is the reflexive transitive closure of $\mathcal{R}_0$.
+Composition is mostly straightforward point-wise union of each component.
+Interference bounds the interference writers and readers may inflict on each other.  Notably, if a view contains the writer thread, other threads may not modify its portion of the heap, or release the writer lock.  Other aspects of interference are natural restrictions like that threads may not modify each others' local variables.
+\textsf{WellFormed} states are closed under both composition (with another \textsf{WellFormed} state) and interference ($\mathcal{R}$ relates \textsf{WellFormed} states only to other \textsf{WellFormed} states).
+
 \begin{figure}[!t]\scriptsize
     \begin{flalign*}
       \bullet \overset{\mathrm{def}}{=} (\bullet_{\sigma},\bullet_O,\cup,\cup) \;\; (F_1 \bullet_F F_2) \overset{\mathrm{def}}{=}  F_1  \cup F_2 \texttt{   when   } dom(F_1) \cap dom(F_2) = \emptyset \\
@@ -205,29 +231,23 @@ v & \textrm{if}~h_1(o,f)=v\land h_2(o,f)=\mathrm{undef}\\
 \label{fig:comp}
 \vspace{-2mm}
 \end{figure}
+
 %\emph{Separation algebra} is a model to define and axiomatize the \emph{join/composition} operation over a domain which is \emph{set of instrumented states} in our case.
-An important property of composition is that it preserves validity of logical states:
-\begin{lemma}[\textsf{WellFormed} Composition]
-\label{lem:wf-composition}
-Any successful composition of two \textsf{WellFormed} logical states is \textsf{WellFormed}:\[\forall_{x,y,z}\ldotp \mathsf{WellFormed}(x) \implies \mathsf{WellFormed}(y) \implies x\bullet y = z \implies \mathsf{WellFormed(z)}\]
-\end{lemma}
-\begin{proof}
-In Appendix \ref{sec:prooflemmas} Lemma \ref{lem:wf-compositionap}.
-  \end{proof}
-We define separation on elements of type contexts
-\begin{itemize}
-\item For read-side as $\llbracket x_1 : T_1, \ldots x_n : T_n \rrbracket_{tid,\textsf{R}} = \llbracket x_1 : T_1 \rrbracket_{tid} \cap \ldots \cap \llbracket x_n : T_n \rrbracket_{tid} \cap \llbracket \textsf{R} \rrbracket_{tid}$ where
-$\llbracket \textsf{R} \rrbracket_{tid} = \{ (s,h,l,rt,R,B),O,U,T,F  \mid tid \in R \}$
 
-\item For write-side as $\llbracket x_1 : T_1, \ldots x_n : T_n \rrbracket_{tid,\textsf{M}} = \llbracket x_1 : T_1 \rrbracket_{tid} \cap \ldots \cap \llbracket x_n : T_n \rrbracket_{tid} \cap \llbracket \textsf{M} \rrbracket_{tid}$ where
-$\llbracket \textsf{M} \rrbracket_{tid} = \{ (s,h,l,rt,R,B),O,U,T,F  \mid tid = l \}$
 
-\item $\llbracket x_1 : T_1, \ldots x_n : T_n \rrbracket_{tid,\textsf{O}} = \llbracket x_1 : T_1 \rrbracket_{tid} \cap \ldots \cap \llbracket x_n : T_n \rrbracket_{tid} \cap \llbracket \textsf{O} \rrbracket_{tid}$ where
-$\llbracket \textsf{O} \rrbracket_{tid} = \{ (s,h,l,rt,R,B),O,U,T,F  \mid tid \neq l \land tid \notin R \}$.
-\end{itemize}
+%An important property of composition is that it preserves validity of logical states:
+%\begin{lemma}[\textsf{WellFormed} Composition]
+%\label{lem:wf-composition}
+%Any successful composition of two \textsf{WellFormed} logical states is \textsf{WellFormed}:\[\forall_{x,y,z}\ldotp \mathsf{WellFormed}(x) \implies \mathsf{WellFormed}(y) \implies x\bullet y = z \implies \mathsf{WellFormed(z)}\]
+%\end{lemma}
+%\begin{proof}
+%In Appendix \ref{sec:prooflemmas} Lemma \ref{lem:wf-compositionap}.
+%  \end{proof}
 
-Partial separating conjunction then simply requires the existence of two states that compose:
+The framing/weakening type rule will be translated to a use of the frame rule in the Views Framework's logic.  There separating conjunction is simply the existence of two composable intrumented states:
+%Partial separating conjunction then simply requires the existence of two states that compose:
 \[ m \in P \ast Q   \stackrel{def}{=} \exists m' \ldotp \exists m'' \ldotp m' \in P \land m'' \in Q \land m \in m' \bullet m''\]
+\hrule
 Different threads' views of the state may overlap (e.g., on shared heap locations, or the reader thread set), but one thread may modify that shared state.  The Views Framework restricts its reasoning to subsets of the logical views that are \emph{stable} with respect to expected interference from other threads or contexts.  We define the interference as (the transitive reflexive closure of) a binary relation $\mathcal{R}$ on $\mathcal{M}$, and a \textsf{View} in the formal framework is then:
 \[\textsf{View}_{\mathcal{M}} \stackrel{def}{=} \{ M \in \mathcal{P}(\mathcal{M}) | \mathcal{R}(M) \subseteq M\}\]
 Thread interference relation
