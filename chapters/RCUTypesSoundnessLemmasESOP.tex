@@ -525,7 +525,7 @@ This follows from the fact that none of the possible $\alpha$s modifies the glob
 \caption{Fresh-Not-Reader}
 \label{fig:fnotreader}
   \end{figure}
-\item{Fresh-Points-Iterator} invariant in Figure \ref{fig:fsinglefield} states that any field of fresh allocated object can only be set to point heap node which can be observed as \textsf{iterator} (not \textsf{unlinked or freeable}).  This invariant captures the fact $\N = \N'$ asserted in the type rule for fresh node linking(\textsc{T-LinkF}). 
+\item{Fresh-Points-Iterator} invariant in Figure \ref{fig:fsinglefield} states that any field of fresh allocated object can only be set to point heap node which can be observed as \textsf{iterator} (not \textsf{unlinked or freeable}).  This invariant captures the fact $\N = \N'$ asserted in the type rule for fresh node linking(\textsc{T-Replace}). 
   \begin{figure}[!htb]
   \[
 \textbf{FPI}(\sigma,O,U,T,F) =
@@ -849,7 +849,7 @@ To show \ref{ahusig'} we consider two cases: $\sigma'_1.h \cap \sigma'_2.h = \em
 \textsf{WellFormed}(\sigma,O,U,T,F)
 \label{ahu2f}
 \end{gather}
-From assumptions in the type rule of \textsc{T-LinkF} we assume that
+From assumptions in the type rule of \textsc{T-Replace} we assume that
 \begin{gather}
 \textsf{FV}(\Gamma) \cap \{p,r,n\}  =\emptyset 
   \label{ahu3f} \\
@@ -1073,7 +1073,7 @@ To show \ref{ahusigf'} we consider two cases: $\sigma'_1 \cap \sigma'_2 = \empty
 \textsf{WellFormed}(\sigma,O,U,T,F)
 \label{ahu2flk}
 \end{gather}
-From assumptions in the type rule of \textsc{T-LinkFL} we assume that
+From assumptions in the type rule of \textsc{T-Insert} we assume that
 \begin{gather}
 \textsf{FV}(\Gamma) \cap \{p,r,n\}  =\emptyset 
   \label{ahu3flk} \\
