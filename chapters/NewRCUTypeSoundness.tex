@@ -32,7 +32,7 @@ In this section we summarize the important aspects of \textsf{WellFormed}ness co
 
 \mypar{Guaranteed Read-to-Write Upgrade} Our system provides a clear separation of \textit{traverse-and-update} and \textit{traverse-only} intentions for \textsf{RCU} programming through the type system together with the programming primitives.
 
-\mypar{Acyclic Tree Structure} Additionally, our system also ensures that none of the heap updates introduces \textit{cyclicity}; moreover, violates the \textit{tree} structure(Invariant \textsf{Unique-Reachable}, Invariant \textsf{Unique-Root} and Denotation $\llbracket \mathsf{rcuItr}\,\rho \,\N \rrbracket_{tid}$).
+\mypar{Tree Structure} Additionally, our system also ensures that none of the heap updates introduces \textit{cyclicity}; moreover, violates the \textit{tree} structure(Invariant \textsf{Unique-Reachable}, Invariant \textsf{Unique-Root} and Denotation $\llbracket \mathsf{rcuItr}\,\rho \,\N \rrbracket_{tid}$).
 \subsection{Proof}
 \label{sec:proof}
 The Views Framework takes a set of parameters satisfying some properties, and produces a soundness proof for a static reasoning system for a larger programming language.  Among other parameters, the most notable are the choice of machine state, semantics for \emph{atomic} actions (e.g., field writes, or \lstinline|WriteBegin|), and proofs that the reasoning (in our case, type rules) for the atomic actions are sound (in a way chosen by the framework).
@@ -157,7 +157,7 @@ Composition of instrumented states is an operation
 that is commutative and associative, and defined component-wise in terms of composing physical states, observation maps, undefined sets, and thread sets as shown in Figure \ref{fig:comp}
 \begin{figure}[!t]\scriptsize
     \begin{flalign*}
-      \bullet  = (\bullet_{\sigma},\bullet_O,\cup,\cup) \;\; (F_1 \bullet_F F_2) \overset{\mathrm{def}}{=}  F_1  \cup F_2 \texttt{   when   } dom(F_1) \cap dom(F_2) = \emptyset \\
+      \bullet \overset{\mathrm{def}}{=} (\bullet_{\sigma},\bullet_O,\cup,\cup) \;\; (F_1 \bullet_F F_2) \overset{\mathrm{def}}{=}  F_1  \cup F_2 \texttt{   when   } dom(F_1) \cap dom(F_2) = \emptyset \\
       O_{1} \bullet_O O_{2}(loc) \overset{\mathrm{def}}{=}  O_{1}(loc) \cup O_{2}(loc) \;\;   (s_1 \bullet_s s_2) \overset{\mathrm{def}}{=}  s_1 \cup s_2 \texttt{   when   } dom(s_1) \cap dom(s_2) = \emptyset    
       \end{flalign*}
 \[(h_1\bullet_h h_2)(o,f)\overset{\mathrm{def}}{=}\left\{
