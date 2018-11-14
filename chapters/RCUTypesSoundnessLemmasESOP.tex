@@ -829,7 +829,7 @@ Both together with \ref{ahu13} and \ref{phu5} proves \ref{phu7}.
 
 To show \ref{ahusig'} we consider two cases: $\sigma'_1.h \cap \sigma'_2.h = \emptyset$ and $\sigma'_1.h \cap \sigma'_2.h \neq \emptyset$. First is trivial. Second follows from \ref{phu10}.\textbf{OW}-\textbf{HD} and \ref{phu11}.\textbf{OW}-\textbf{HD}. \ref{phu8}, \ref{phu9} and \ref{phff} are trivial by choices on related maps and semantics of composition operations on them. All compositions shown let us to derive conclusion for $(\sigma'_1, O'_1, U'_1, T'_1,F'_1) \bullet (\sigma'_2, O'_2, U'_2, T'_2,F'_2) $.
    \end{proof}
- \begin{lemma}[\textsc{LinkFresh}]
+ \begin{lemma}[\textsc{Replace}]
    \label{lemma:linkf}
    \begin{align*}
   \llbracket p.f := n \rrbracket (\lfloor \llbracket \Gamma,\,
@@ -1053,7 +1053,7 @@ Both together with \ref{ahu13f} and \ref{phu5f} proves \ref{phu7f}.
 
 To show \ref{ahusigf'} we consider two cases: $\sigma'_1 \cap \sigma'_2 = \emptyset$ and $\sigma'_1 \cap \sigma'_2 \neq \emptyset$. First is trivial. Second follows from \ref{phu10f}.\textbf{OW}-\textbf{HD} and \ref{phu11f}.\textbf{OW}-\textbf{HD}. \ref{phu8f}, \ref{phufff} and \ref{phu9f} are trivial by choices on related maps and semantics of the composition operators for these maps. All compositions shown  let us to derive conclusion for $(\sigma'_1, O'_1, U'_1, T'_1,F'_1) \bullet (\sigma'_2, O'_2, U'_2, T'_2,F'_2) $.
  \end{proof}
- \begin{lemma}[\textsc{LinkFreshL}]
+ \begin{lemma}[\textsc{Insert}]
    \label{lemma:linkflk}
    \begin{align*}
   \llbracket p.f := n \rrbracket (\lfloor \llbracket \Gamma,\,
@@ -1079,7 +1079,7 @@ From assumptions in the type rule of \textsc{T-Insert} we assume that
   \label{ahu3flk} \\
 \rho.f  = \rho_1 \text{ and } \rho.f  = \rho_2 \text{ and } \N(f) = r
     \label{ahu4flk} \\
-\N = \N_1
+\N = \N_1 \text{ and } \forall_{f_2\in dom(\N)} \ldotp f\neq f_2 \implies \N(f_2)=\textsf{null}
 \label{ahu5flk} \\
 \begin{aligned}
   \forall_{x \in \Gamma, \N_3, \rho_3,f_1,y} \ldotp (x:\textsf{rcuItr}\,\rho_3\,\N_3([f_1\rightharpoonup y])) \implies(\forall_{\rho_4\neq \epsilon} \ldotp \neg\mathsf{MayAlias}(\rho_3, \rho.\rho_4) )

@@ -45,10 +45,8 @@ $\textrm{provided}~ \forall_{f,o'}\ldotp rt \neq s(x,tid) \textrm{ and } o' \neq
 (\textsc{SUpdt}) & \llbracket\texttt{y=x}\rrbracket     &(s,h,l,rt,R,B)& (s[(y,tid) \mapsto (x,tid)],h,l,rt,R,B) &\\
 (\textsc{HAlloc}) & \llbracket\texttt{y=new}\rrbracket &(s,h,l,rt,R,B)& (s,h[\ell\mapsto\mathsf{nullmap}],l,rt,R,B) & 
 \end{array}\]
-\begin{align*}
-  \textrm{provided}~ rt \neq s(y,tid) \textrm{ and } s[(y,tid) \mapsto \ell], \textrm{ and }\\
-  h[\ell \mapsto \mathsf{nullmap}] \overset{\mathrm{def}}{=} \lambda (o',f) . \textrm{ if } o=o' \textrm{ then } skip \textrm{ else } h(o',f)
-  \end{align*}
+$  \textrm{provided}~ rt \neq s(y,tid) \textrm{ and } s[(y,tid) \mapsto \ell], \textrm{ and }$
+$h[\ell \mapsto \mathsf{nullmap}] \overset{\mathrm{def}}{=} \lambda (o',f) . \textrm{ if } o=o' \textrm{ then } skip \textrm{ else } h(o',f)$
 \caption{Operational Semantics for \textsf{RCU}}
 \label{fig:operationalsemrcu}
 \vspace{-2mm}
