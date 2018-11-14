@@ -100,7 +100,7 @@ These six primitives together track a critical piece of information: which reade
 %When a reader thread executes \lstinline|ReadBegin|, some bookkeping data structures are updated to indicate that thread is an active reader; \lstinline|ReadEnd| atomically revokes that status.
 Implementing them efficiently is challenging~\cite{urcu_ieee}, but possible.
 The Linux kernel for example finds ways to reuse existing task switch mechanisms for this tracking, so readers incur no additional overhead.
-The reader primitives are semantically straightforward --- they atomically record the start, or completion, of a read-side critical section for that thread.
+The reader primitives are semantically straightforward -- they atomically record the start, or completion, of a read-side critical section for that thread.
 
 The more interesting primitives are the write-side primitives and memory reclamation.
 \lstinline|WriteBegin| performs a (semantically) standard mutual exclusion with regard to other writers, so only one writer thread may modifying the structure \emph{or the writer structures used for grace periods}. % It also initializes a
@@ -119,7 +119,7 @@ This makes actually freeing an unlinked node after a grace period safe.
 %is a blocking operation.  Intuitively, it waits for all readers whose critical sections overlapped with \lstinline|SyncStart-SyncStop| calls to finish their critical section.  Once those threads have finished, no other threads retain usable references to unlinked nodes, and the writer thread may continue.
 Note that \lstinline|SyncStop| does not wait for \emph{all} readers to finish, and does not wait for all overlapping readers to simultaneously be out of critical sections.
 
-To date, every description of RCU semantics, most centered around the notion of a grace period, has been given algorithmically, as a specific (efficient) implementation.  While the implementation aspects are essential to real use, the lack of an abstract characterization makes judging the correctness of these implementations --- or clients --- difficult in general. In Section \ref{sec:semantics} we give formal \emph{abstract} semantics for RCU implementations --- horrifically inefficient if implemented directly, but correct from a memory-safety and programming model perspective, and not tied to the low-level RCU implementation details.
+To date, every description of RCU semantics, most centered around the notion of a grace period, has been given algorithmically, as a specific (efficient) implementation.  While the implementation aspects are essential to real use, the lack of an abstract characterization makes judging the correctness of these implementations -- or clients -- difficult in general. In Section \ref{sec:semantics} we give formal \emph{abstract} semantics for RCU implementations -- inefficient if implemented directly, but correct from a memory-safety and programming model perspective, and not tied to the low-level RCU implementation details.
 %We handle the management of grace periods (and in particular, distinguishing multiple overlapping read-side critical sections by the same thread) in intuitive ways, which would be terribly inefficient to implement directly, but express the intended semantics of more sophisticated implementations.
 %For these semantics to correctly manage memory reclamation in an RCU data structure implementation, a number of assumptions must be satisfied:
 To use these semantics or a concrete implementation correctly, client code must ensure:

@@ -1,10 +1,10 @@
 \section{Soundness}
 \label{sec:soundness}
-This section outlines the proof of type soundness ---  our full proof appears in Appendices \ref{sec:prooflemmas}, \ref{sec:memaxioms}, \ref{lem:lematom} and \ref{lem:lemstructural}.
+This section outlines the proof of type soundness -- our full proof appears in Appendices \ref{sec:prooflemmas}, \ref{sec:memaxioms}, \ref{lem:lematom} and \ref{lem:lemstructural}.
 We prove type soundness by embedding the type system into an abstract concurrent separation logic called the Views Framework~\cite{views}, which when given certain information about proofs for a specific language (primitives and primitive typing) gives back a full program logic including choice and iteration.  As with other work taking this approach~\cite{oopsla12,toplas17}, this consists of several key steps:
 \begin{enumerate}
     \item Define runtime states and semantics for the atomic actions of the language.  These are exactly the semantics from Figure \ref{fig:operationalsemrcu} in Section \ref{sec:semantics}
-    \item Define a denotational interpretation $\db{-}$ of the types (Figure \ref{fig:denotingtypeenviroment}) in terms of an \emph{instrumented} execution state --- a runtime state (Section \ref{sec:semantics}) with additional bookkeeping to simplify proofs.  
+    \item Define a denotational interpretation $\db{-}$ of the types (Figure \ref{fig:denotingtypeenviroment}) in terms of an \emph{instrumented} execution state -- a runtime state (Section \ref{sec:semantics}) with additional bookkeeping to simplify proofs.  
     The denotation encodes invariants specific to each type, like the fact that \textsf{unlinked} references are unreachable from the heap. %, or that \textsf{freeable} references are unreachable from the heap as well as other threads' local variables.
     The instrumented execution states are also constrained by additional \textit{global invariants} (Appendix \ref{sec:memaxioms}) the type system is intended to maintain, such as acyclicity of the structure.
     \item Prove a lemma -- called \emph{Axiom Soundness} (Lemma \ref{lem:axmsoundness}) -- that the type rules for atomic actions are sound.  Specifically, that given a state in the denotation of the pre-type-environment of a primitive type rule, the operational semantics produce a state in the denotation of the post-type-environment.  This includes preservation of global invariants.
@@ -21,23 +21,10 @@ Because our denotation of types encodes the property that the post-environment o
 
 \subsection{Invariants of RCU Views and Denotations of Types}
 \label{sec:lemmas}
-In this section we summarize the important global invariants imposed on instrumented states in the proof.
- %RCU model which we introduce formally as a conjuction of \textit{global invariants} in 
-Full details appear in Appendix \ref{sec:memaxioms}.
-% and the type denotations. 
-We aim to convey an intiution that our system captures the requirements of RCU setting~\cite{abssem}.
+In this section we aim to convey an intiution of \textit{soundness} through informal a summarization of the global \textsf{WellFormed}ness invariants together with the denotations of the types encoding type-specific invariants imposed on the instrumented states in the proof. Full formal details of the global \textsf{WellFormed}ness appear in Appendix \ref{sec:memaxioms}.
 
-\mypar{Grace-Period Guarantee} To reclaim a heap location, a mutator thread must synchronize with all of the reader threads with overlapping read-side critical sections.
-The operational semantics enforce a \textit{protocol} on the mutator thread's actions. First it unlinks a node from the data structure; the local type for that reference becomes \textsf{unlinked}. Then it waits for current reader threads to exit, after which the local type is \textsf{freeable}. Finally, it may safely reclaim the memory, after which the local type is \textsf{undef}.
-%The mutator thread's reference to the heap location in between {unlinking} and {synchronising} is represented with the type \textsf{unlinked}. The type of the reference in between the end of \textit{synchronisation} and \textit{reclamation} is represented with the type \textsf{freeable}. 
-The semantics prevent the writer from reclaiming too soon by adding the heap location to the free list of the state, which is checked dynamically by the actual free operation.
-%Synchronisation action \textit{bounds} the mutator thread from reclaiming the \textit{unlinked} heap location immediately by adding it to the \textit{free-list}. 
-The denotation of \textsf{unlinked} asserts that if an \textsf{unlinked} heap location is in our logical \textit{free-list} then
-it is unreachable via the heap, but possibly accessible to other threads via local variables.
- %there exists a subset of reader threads running simultaneously -- which we call \textit{bounding} threads -- referencing to the heap location.
-The denotation of \textsf{freeable} --- only possible after synchronizing --- requires that the object is not referenced from the heap or other threads.
-%A \textit{bounding-thread} can observe an \textsf{unlinked} heap location as \textsf{iterator} during its existence in the \textit{free-list}(Invariant \textsf{Iterators-Free-List} and Invariant \textsf{Readers-In-Free-List}).
-
+\mypar{Invariants on Grace-Period} Our invariants related to the \textit{grace-period} enables reasoning over the logical \textit{free-list} of the instrumented state and the \textit{bounding-threads} of the concrete RCU state. We know that the reader threads become \textit{bounding-threads} once grace period starts. \textsf{Readers-In-Free-List} invariant ensures that if there exists a set of threads mapped referencing to a heap location in the free list then this set of threads is a subset of the \textit{bounding-threads}. We can also think of a \textit{bounding-thread} as the one grace is shown. If a thread observes a heap location in the \textit{free-list} as \textsf{iterator} then \textsf{Iterators-Free-List} invariant asserts that this thread is one of the \textit{bounding-threads} on this heap location. Our invariants are generalized to handle \textit{batched-deallocation}. \textsf{Free-List-Reachability} invariant ensures that any heap location which has an heap access to another heap location in the \textit{free-list} is also in the \textit{free-list}. The mutator thread can refer to a heap location in the \textit{free-list} either with refernce in type \textsf{freeable} or \textsf{unlinked}. The denotation of \textsf{freeable} type -- only possible after \textit{grace-period} ends -- ensures that there exists no \textit{bounding-thread} referencing to the referent of the \textsf{freeable}. Unlike the case in the denotation of \textsf{freeable}, the type environment of \textsf{unlinked} asserts that the referent is either in the \texit{free-list} with some \textit{bounding-threads} refering to it -- the \textit{grace-period} has not finished yet -- or is not in the \textit{free-list} --  the \textit{grace-period} has not started yet. 
+\begin{comment}
 \mypar{Publish-Subscribe Guarantee} Concurrent reader threads must not be affected by a \textit{replacing-an-existing-node-with-a-fresh-one} or \textit{linking-a-single-node} action inserting a new node into the linked data structure in such a way that they cannot access to the fresh nodes until they are \textit{published/linked}. Unlike in the case of \textit{Grace-Period-Guarantee} where the reader threads can observe an unlinked heap node as \textsf{iterator} during the \textit{grace-period}, they cannot observe the fresh heap nodes until they are published. As we see in the operational semantics, once a new heap location is allocated it is in type \textsf{fresh}(observed as \textsf{fresh} by the mutator thread). The fresh heap location can only be allocated and referenced by the mutator thread(Invariant \textsf{Fresh-Writes}). The relation between a freshly allocated heap and the rest of the heap is established in such a way that there exists no heap node reaching to the freshly allocated one(Invariant \textsf{Fresh-Reachable}). Moreover, the freshly allocated heap locatation cannot be observed by the reader threads(preserves Invariant \textsf{Readers-Iterator-Only}) until it is published(Invariant \textsf{Fresh-Not-Reader}). Our system enforce \textit{locality} on the effects of inserting/replacing a new heap node which we have discussed through Figure \ref{fig:freshframeout} Section \ref{subsection:type-rules}. In the case of replacement the crucial assumption in the framing of the type rule \textsc{T-Replace} is to have the fields of the fresh node and replaced one pointing the same nodes(preserves Invariant \textsf{Fresh-Points-Iterator}).
 
 \mypar{Memory-Barrier Guarantee} RCU write-side critical section has to guarantee that none of the updates to the memory cause invalid memory accesses. If a heap location is observed as \textsf{iterator} by the mutator thread then it must be observed as \textsf{iterator} by other threads(Invariant \textsf{Writer-Unlink}) and all of the heap locations reaching to the node starting from root can be observed as \textsf{iterator} as well(denotation $\llbracket \mathsf{rcuItr}\,\rho \,\N \rrbracket_{tid}$). Reader threads can only have one type of observation \textsf{iterator}(Invariant \textsf{Readers-Iterator-Only}) for a heap location where this heap location can be updated by the mutator and reader threads referencing on this heap node become \textit{bounding-threads} for the reclamation of the heap location(Denotation $\llbracket \mathsf{rcuItr} \rrbracket_{tid}$ and Invariant \textsf{Readers-In-Free-List}). However, \textit{bounding-threads} are the only ones which can observe the \textsf{unlinked} heap location as \textsf{iterator}: new coming reader threads cannot access to the \textsf{unlinked} heap. There exists links to mutated heap nodes -- e.g. either \textsf{unlinked} or \textsf{freeable} -- only from the heap nodes that are already mutated(Invariant \textsf{Unlinked-Reachability} and Invariant \textsf{Free-List-Reachability}). To sum up, every heap node accessible via traversal starting from the unique root must be valid and observed as \textsf{iterator} both by reader threads and the mutator thread(Invariant \textsf{Readers-Iterator-Only}).
@@ -47,6 +34,7 @@ The denotation of \textsf{freeable} --- only possible after synchronizing --- re
 \mypar{Guaranteed Read-to-Write Upgrade} Our system provides a clear separation of \textit{traverse-and-update} and \textit{traverse-only} intentions for \textsf{RCU} programming through the type system together with the programming primitives.
 
 \mypar{Tree Structure} Additionally, our system also ensures that none of the heap updates introduces \textit{cyclicity}; moreover, violates the \textit{tree} structure(Invariant \textsf{Unique-Reachable}, Invariant \textsf{Unique-Root} and Denotation $\llbracket \mathsf{rcuItr}\,\rho \,\N \rrbracket_{tid}$).
+\end{comment}
 \subsection{Proof}
 \label{sec:proof}
 The Views Framework takes a set of parameters satisfying some properties, and produces a soundness proof for a static reasoning system for a larger programming language.  Among other parameters, the most notable are the choice of machine state, semantics for \emph{atomic} actions (e.g., field writes, or \lstinline|WriteBegin|), and proofs that the reasoning (in our case, type rules) for the atomic actions are sound (in a way chosen by the framework).
@@ -105,7 +93,7 @@ m \in \mathcal{M}
 \begin{array}{l|l}
 m \in \mathcal{M}
 &(\textsf{unlinked}\in  O(.s(x,tid)) \land l = tid \land x \notin U) \land \\
-& (\exists_{T'\subseteq T}\ldotp \{s(x,tid) \mapsto T'\}\in F \implies T' \subseteq B \land tid \notin T' )
+& (\exists_{T'\subseteq T}\ldotp s(x,tid) \mapsto T' \in F \implies T' \subseteq B \land tid \notin T' )
 \end{array}
 \right\}
 \\
@@ -115,7 +103,7 @@ m \in \mathcal{M}
 \begin{array}{l|l}
 m \in \mathcal{M}
 &\begin{array}{l}\textsf{freeable}\in  O(s(x,tid)) \land l = tid \land x \notin U \land \\
-\{ s(x,tid) \mapsto \{\emptyset\}\} \in F \end{array}
+ s(x,tid) \mapsto \{\emptyset\} \in F \end{array}
 \end{array}
 \right\}
 \\
