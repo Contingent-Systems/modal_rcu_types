@@ -386,7 +386,7 @@ r\textsf{:rcuItr}  \rho_1  \N_2, \Gamma
 }
 \and
 {
-\inferrule[\scriptsize(T-LinkF)]
+\inferrule[\scriptsize(T-Replace)]
 {
 \N(f)=o \\ \N'=\N([f \rightharpoonup o\setminus n])\\ \rho.f  = \rho_1  \\
 \N_1 = \N_2 \and
@@ -405,7 +405,7 @@ r\textsf{:rcuItr}  \rho_1  \N_2, \Gamma
 }
 \and
 {
-\inferrule[\scriptsize(T-LinkFL)]
+\inferrule[\scriptsize(T-Insert)]
 {
 \N'=\N([f \rightharpoonup o\setminus n])\\ \rho.f  = \rho_1 \\ \rho_1.f = \rho_2 \\ \N = \N_1 \\ 
 \textsf{FV}(\Gamma) \cap \{p,o,n\}  =\emptyset \\
@@ -662,11 +662,11 @@ Otherwise another mechanism would be required to ensure that once a fresh refere
 
 The transition from the Figure \ref{fig:frframeout} to \ref{fig:freshframeout} illustrates the effects of the heap mutation (replacing with a fresh node). The reasoning in the type system for replacing with a fresh node is nearly the same as for unlinking an existing node, with one exception.
 In replacing with a fresh node, there is no need to consider the paths of nodes deeper in the tree than the point of mutation.  In the unlinking case, those nodes' static paths would become invalid.  In the case of linking a fresh node, those descendants' paths are preserved.
-Our type rule for ensuring safe linking (\textsc{T-LinkF}) prevents path aliasing (nonexistence of $a_0$ and $a_1$) by negating a \textsf{MayAlias} query and prevents field mapping aliasing (nonexistence of any object field from any other context pointing to $cr$) via asserting $(y\neq o)$. It is important to note that objects($H_4,H_2$) in the field mappings of the $cr$ whose referent is to be unlinked captured by the heap node's field mappings referenced by $cf$ in \textsf{rcuFresh}. This is part of enforcing locality on the heap mutation and captured by assertion $\N = \N'$ in the type rule(\textsc{T-LinkF}). 
+Our type rule for ensuring safe linking (\textsc{T-Replace}) prevents path aliasing (nonexistence of $a_0$ and $a_1$) by negating a \textsf{MayAlias} query and prevents field mapping aliasing (nonexistence of any object field from any other context pointing to $cr$) via asserting $(y\neq o)$. It is important to note that objects($H_4,H_2$) in the field mappings of the $cr$ whose referent is to be unlinked captured by the heap node's field mappings referenced by $cf$ in \textsf{rcuFresh}. This is part of enforcing locality on the heap mutation and captured by assertion $\N = \N'$ in the type rule(\textsc{T-Replace}). 
 %(\textit{\textbf{Mutation - Reclaiming a Heap Node after a Grace Period}}) - The reason why we have type \textsf{freeable} after the grace period is to prevent the ability to call \texttt{Free} before the grace period ends. This means that we cannot give ownership of a heap node to heap right after unlinking. Our type rule(\textsc{T-Sync}) ensures this via enforcing that we call \texttt{Free} only with a reference in type \textsf{freeable}. To get \textsf{freeable} reference, first we wait the grace period \texttt{SyncStart};\texttt{SyncStop} for unlinked heap nodes to end. The \texttt{SyncStart} does not have any effect on type of the variables.
 
-\mypar{Linking a Fresh Node}
-\textsc{T-LinkFL} type checks heap updates that links a fresh node without a replacement from the data structure-- direct linking. Direct linking a \textsf{rcuFresh} reference also faces some of the aliasing complications that we have already discussed for direct unlinking and replacing an existing node with a fresh one. Unlike in the case of replacing a node with a fresh one, the path reaching to the last heap node(the referent of $o$) from the root is extended with $f$ and this would violate the consistency of all path aliases of $o$ and its descendants. We prevent this inconsistency with
+\mypar{Inserting a Fresh Node}
+\textsc{T-Insert} type checks heap updates that links a fresh node without replacing a node from the data structure-- direct linking. Direct linking a \textsf{rcuFresh} reference also faces some of the aliasing complications that we have already discussed for direct unlinking and replacing a  node. Unlike in the case of replacing a node with a fresh one, the path reaching to the last heap node(the referent of $o$) from the root is extended with $f$ and this would violate the consistency of all path aliases of $o$ and its descendants. We prevent this inconsistency with
 \[
 \forall_{x \in \Gamma, \N_3, \rho_3,f_1,y} \ldotp (x:\textsf{rcuItr}\,\rho_3\,\N_3([f_1 \rightharpoonup y])) \implies
  (\forall_{\rho_4\neq \epsilon} \ldotp \neg\mathsf{MayAlias}(\rho_3, \rho.\rho_4) )
