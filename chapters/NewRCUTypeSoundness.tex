@@ -23,7 +23,7 @@ Because our denotation of types encodes the property that the post-environment o
 \label{sec:lemmas}
 In this section we aim to convey an intiution of \textit{soundness} through an informal summarization of the global \textsf{WellFormed}ness invariants together with the denotations of the types imposed on the instrumented states in the proof. Full formal details of the global \textsf{WellFormed}ness appear in Appendix \ref{sec:memaxioms}.
 
-\mypar{General Invariant for Read Threads} All reader threads have to access to a valid heap location even during the \textit{grace-period}. \textsf{Readers-Iterators-Only} invariant asserts that a heap location can only be observed as \textsf{iterator} by the reader threads.
+\mypar{A General Invariant for Read Traversal} All reader threads have to access to a valid heap location even during the \textit{grace-period}. \textsf{Readers-Iterators-Only} invariant asserts that a heap location can only be observed as \textsf{iterator} by the reader threads.
 
 \mypar{Invariants on Grace-Period} We provide invariants related to the \textit{grace-period} via reification of the logical \textit{free-list} in the instrumented state to the \textit{bounding-threads} in the concrete RCU state. \textsf{Readers-In-Free-List} invariant defines the set of \textit{bounding-threads} via asserting the existence of a set of threads referencing to a heap location in the free list. Likewise, we can also think of a \textit{bounding-thread} as the one to which the \textit{grace} is shown. If a reader thread observes a heap location in the \textit{free-list} as \textsf{iterator} then \textsf{Iterators-Free-List} invariant asserts that this thread is not a new comer but one of the \textit{bounding-threads}.
 
