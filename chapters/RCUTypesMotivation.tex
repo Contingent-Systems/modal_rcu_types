@@ -131,7 +131,7 @@ To use these semantics or a concrete implementation correctly, client code must 
 \end{itemize}
 In practice, RCU data structures typically ensure additional invariants to simplify the above, e.g.:
 \begin{itemize}
-\item The data structure is always an acyclic tree
+\item The data structure is always a tree
 \item A writer thread unlinks or replaces only one node at a time. 
 \end{itemize}
 and our type system in Section \ref{sec:tslbl} guarantees these invariants.
