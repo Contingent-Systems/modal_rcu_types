@@ -59,7 +59,7 @@ An object can be observed as part of the structure (\texttt{iterator}), removed 
 %We are interested in \textsf{RCU} typed of heap domain which we define as:
 %\[\textsf{RCU} = \{ o \mid \textsf{FType}(f) = \textsf{RCU} \land \exists o' \ldotp h(o',f) = o \}\]
 
-A view in the Views Framework --- the semantics of assertions in the Views logic --- is then a subset of the local states that satisfy a validity predicate \textsf{WellFormed}, outlined in Section \ref{sec:lemmas}:
+Assertions in the Views logic are (almost) sets of the logical states that satisfy a validity predicate \textsf{WellFormed}, outlined in Section \ref{sec:lemmas}:
 %A thread's (or scope's) \emph{view} of memory is a subset of the instrumented(logical states), which satisfy certain \textsf{WellFormed}ness criteria relating the physical state and the additional meta-data ($O$, $U$, $T$ and $F$)
 \[\mathcal{M} \stackrel{def}{=} \{ m \in (\textsf{MState} \times O \times U \times T \times F) \mid  \textsf{WellFormed}(m) \} \]
 
@@ -176,9 +176,11 @@ $\llbracket \textsf{M} \rrbracket_{tid} = \{ (s,h,l,rt,R,B),O,U,T,F  \mid tid = 
 To support framing (weakening), the Views Framework requires that views form a partial commutative monoid under an operation $\bullet : \mathcal{M} \longrightarrow \mathcal{M} \longrightarrow \mathcal{M}$, provided as a parameter to the framework.
 The framework also requires an interference relation $\mathcal{R}\subseteq\mathcal{M}\times\mathcal{M}$ between views to reason about local updates to one view preserving validity of adjacent views (akin to the small-footprint property of separation logic).
 Figure \ref{fig:comp} defines our composition operator and the core interference relation $\mathcal{R}_0$ --- the actual inferference between views (between threads, or between a local action and framed-away state) is the reflexive transitive closure of $\mathcal{R}_0$.
-Composition is mostly straightforward point-wise union of each component.
-Interference bounds the interference writers and readers may inflict on each other.  Notably, if a view contains the writer thread, other threads may not modify its portion of the heap, or release the writer lock.  Other aspects of interference are natural restrictions like that threads may not modify each others' local variables.
+Composition is mostly straightforward point-wise union (threads' views may overlap) of each component.
+Interference bounds the interference writers and readers may inflict on each other.  Notably, if a view contains the writer thread, other threads may not modify the shared portion of the heap, or release the writer lock.  Other aspects of interference are natural restrictions like that threads may not modify each others' local variables.
 \textsf{WellFormed} states are closed under both composition (with another \textsf{WellFormed} state) and interference ($\mathcal{R}$ relates \textsf{WellFormed} states only to other \textsf{WellFormed} states).
+
+
 
 \begin{figure}[!t]\scriptsize
     \begin{flalign*}
@@ -232,48 +234,58 @@ v & \textrm{if}~h_1(o,f)=v\land h_2(o,f)=\mathrm{undef}\\
 The framing/weakening type rule will be translated to a use of the frame rule in the Views Framework's logic.  There separating conjunction is simply the existence of two composable intrumented states:
 %Partial separating conjunction then simply requires the existence of two states that compose:
 \[ m \in P \ast Q   \stackrel{def}{=} \exists m' \ldotp \exists m'' \ldotp m' \in P \land m'' \in Q \land m \in m' \bullet m''\]
-\hrule
-Different threads' views of the state may overlap (e.g., on shared heap locations, or the reader thread set), but one thread may modify that shared state.  The Views Framework restricts its reasoning to subsets of the logical views that are \emph{stable} with respect to expected interference from other threads or contexts.  We define the interference as (the transitive reflexive closure of) a binary relation $\mathcal{R}$ on $\mathcal{M}$, and a \textsf{View} in the formal framework is then:
+%Different threads' views of the state may overlap (e.g., on shared heap locations, or the reader thread set), but one thread may modify that shared state.  
+In order to validate the frame rule in the Views Framework's logic, the assertions in its logic --- sets of well-formed instrumented states --- must be restricted to sets of logical states that are \emph{stable} with respect to expected interference from other threads or contexts, and interference must be compatible in some way with separating conjunction.
+Thus a \textsf{View} --- the actual base assertions in the Views logic --- are then:
 \[\textsf{View}_{\mathcal{M}} \stackrel{def}{=} \{ M \in \mathcal{P}(\mathcal{M}) | \mathcal{R}(M) \subseteq M\}\]
-Thread interference relation
-\[\mathcal{R} \subseteq \mathcal{M} \times \mathcal{M}\]  defines permissible interference on an instrumented state. The relation must distribute over composition:
+%Thread interference relation
+%\[\mathcal{R} \subseteq \mathcal{M} \times \mathcal{M}\]  defines permissible interference on an instrumented state. The relation must distribute over composition:
+Additionally, interference must distribute over composition:
 \[ \forall m_{1}, m_{2}, m\ldotp (m_{1} \bullet  m_{2})\mathcal{R}m \Longrightarrow \begin{array}{ll}  \exists  m'_{1} m'_{2} \ldotp m_{1} \mathcal{R} m'_{1} \land m_{2} \mathcal{R} m'_{2} \land  m \in m'_{1} \bullet m'_{2} \end{array}\]
-where $\mathcal{R}$ is transitive-reflexive closure of $\mathcal{R}_{0}$ shown at Figure \ref{fig:comp}. $\mathcal{R}_0$ (and therefore $\mathcal{R}$) also ``preserves'' validity:
-\begin{lemma}[Valid $\mathcal{R}_0$ Interference]\label{lem:inter}
-For any $m$ and $m'$, if $\mathsf{WellFormed}(m)$ and $m\mathcal{R}_0m'$, then $\mathsf{WellFormed}(m')$.
-\end{lemma}
-\begin{proof}
-In Appendix \ref{sec:prooflemmas} Lemma \ref{lem:interap}.
-\end{proof}
+%where $\mathcal{R}$ is transitive-reflexive closure of $\mathcal{R}_{0}$ shown at Figure \ref{fig:comp}. $\mathcal{R}_0$ (and therefore $\mathcal{R}$) also ``preserves'' validity:
+
+%\begin{lemma}[Valid $\mathcal{R}_0$ Interference]\label{lem:inter}
+%For any $m$ and $m'$, if $\mathsf{WellFormed}(m)$ and $m\mathcal{R}_0m'$, then $\mathsf{WellFormed}(m')$.
+%\end{lemma}
+%\begin{proof}
+%In Appendix \ref{sec:prooflemmas} Lemma \ref{lem:interap}.
+%\end{proof}
+
+Because we use this induced Views logic to prove soundness of our type system by translation, we must ensure any type environment denotes a valid view:
 \begin{lemma}[Stable Environment Denotation-M]\label{lemma:stblw}
 For any \emph{closed} environment $\Gamma$ (i.e., $\forall x\in\mathsf{dom}(\Gamma)\ldotp, \mathsf{FV}(\Gamma(x))\subseteq\mathsf{dom}(\Gamma)$):
-\[
+$
 \mathcal{R}(\llbracket\Gamma\rrbracket_{\mathsf{M},tid})\subseteq\llbracket\Gamma\rrbracket_{\mathsf{M},tid}
-\]
+$.
 Alternatively, we say that environment denotation is \emph{stable} (closed under $\mathcal{R}$).
 \end{lemma}
 \begin{proof}
 In Appendix \ref{sec:prooflemmas} Lemma \ref{lemma:stblwap}.
 \end{proof}
-\begin{lemma}[Stable Environment Denotation-R]
-For any \emph{closed} environment $\Gamma$ (i.e., $\forall x\in\mathsf{dom}(\Gamma)\ldotp, \mathsf{FV}(\Gamma(x))\subseteq\mathsf{dom}(\Gamma)$):
-\[
-\mathcal{R}(\llbracket\Gamma\rrbracket_{\mathsf{R},tid})\subseteq\llbracket\Gamma\rrbracket_{\mathsf{R},tid}
-\]
-Alternatively, we say that environment denotation is \emph{stable} (closed under $\mathcal{R}$).
-\end{lemma}
-\begin{proof}
-In Appendix \ref{sec:prooflemmas} Lemma \ref{lem:stblRap}.
-\end{proof}
+We ellide the statement of the analagous result for the read-side critical section, available in Appendix \ref{sec:prooflemmas}.
+%\begin{lemma}[Stable Environment Denotation-R]
+%For any \emph{closed} environment $\Gamma$ (i.e., $\forall x\in\mathsf{dom}(\Gamma)\ldotp, \mathsf{FV}(\Gamma(x))\subseteq\mathsf{dom}(\Gamma)$):
+%\[
+%\mathcal{R}(\llbracket\Gamma\rrbracket_{\mathsf{R},tid})\subseteq\llbracket\Gamma\rrbracket_{\mathsf{R},tid}
+%\]
+%Alternatively, we say that environment denotation is \emph{stable} (closed under $\mathcal{R}$).
+%\end{lemma}
+%\begin{proof}
+%In Appendix \ref{sec:prooflemmas} Lemma \ref{lem:stblRap}.
+%\end{proof}
 
-The Views Framework defines a program logic (Hoare logic) with judgments of the form $\{ p \} C \{ q \}$ for views p and q and commands $C$. Commands include atomic actions, and soundness of such judgments for atomic actions is a parameter to the framework. The framework itself provides for soundness of rules for sequencing, fork-join parallelism, and other general rules.
-To prove type soundness for our system, we define a denotation of \emph{type judgments} in terms of the Views logic, and show that every valid typing derivation translates to a valid derivation in the Views logic:
-\[\forall\Gamma,C,\Gamma',\mathit{tid}\ldotp\Gamma\vdash_{M,R} C\dashv \Gamma' \Rightarrow \{\llbracket\Gamma\rrbracket_\mathit{tid}\} \llbracket C\rrbracket_\mathit{tid}\{\llbracket\Gamma'\rrbracket_\mathit{tid}\}\]
-The antecedent of the implication is a type judgment(shown in Figure \ref{fig:tss} Section \ref{subsection:type-rules}, Figure \ref{fig:type-judgements-for-cf} Section \ref{subsection:typwrt} and Figure \ref{fig:tssr} Appendix \ref{appendix:readtypes}) and the conclusion is a judgment in the Views logic. The environments are translated to views ($\mathsf{View}_\mathcal{M}$) as previously described. Commands $C$ also require translation, because the Views logic is defined for a language with non-deterministic branches and loops, so the standard versions from our core language must be encoded.  The approach to this is based on a standard idea in verification, which we show here for conditionals as shown in Figure \ref{fig:asm}. $\textsf{assume}(b)$ is a standard construct in verification semantics~\cite{Barnett:2005:BMR:2090458.2090481} ~\cite{Muller:2016:VVI:2963187.2963190}, which ``does nothing'' (freezes) if the condition $b$ is false, so its postcondition in the Views logic can reflect the truth of $b$.  This is also the approach used in previous applications of the Views Framework~\cite{oopsla12,toplas17}.
-\begin{figure}\scriptsize
+With this setup done, we we can state the connection between the Views Framework logic induced by earlier parameters, and the type system from Section \ref{sec:tslbl}.
+The induced Views logic has a familiar notion of Hoare triple --- $\{ p \} C \{ q \}$ where $p$ and $q$ are elements of $\mathsf{View}_\mathcal{M}$ --- with the usual rules for non-deterministic choice, non-deterministic iteration, sequential composition, and parallel composition, sound given the proof obligations just described above.  It is parameterized by a rule for atomic commands that requires a specification of the triples for primitive operations, and their soundness (an obligation we must prove).  This can then be used to prove that every typing derivation embeds to a valid derivation in the Views Logic, roughly:
+
+%The Views Framework defines a program logic (Hoare logic) with judgments of the form $\{ p \} C \{ q \}$ for views p and q and commands $C$. Commands include atomic actions, and soundness of such judgments for atomic actions is a parameter to the framework. The framework itself provides for soundness of rules for sequencing, fork-join parallelism, and other general rules.
+%To prove type soundness for our system, we define a denotation of \emph{type judgments} in terms of the Views logic, and show that every valid typing derivation translates to a valid derivation in the Views logic:
+\[\forall\Gamma,C,\Gamma',\mathit{tid}\ldotp\Gamma\vdash C\dashv \Gamma' \Rightarrow \{\llbracket\Gamma\rrbracket_\mathit{tid}\} \llbracket C\rrbracket_\mathit{tid}\{\llbracket\Gamma'\rrbracket_\mathit{tid}\}\]
+once for the writer type system, once for the readers.
+%The antecedent of the implication is a type judgment(shown in Figure \ref{fig:tss} Section \ref{subsection:type-rules}, Figure \ref{fig:type-judgements-for-cf} Section \ref{subsection:typwrt} and Figure \ref{fig:tssr} Appendix \ref{appendix:readtypes}) and the conclusion is a judgment in the Views logic. The environments are translated to views ($\mathsf{View}_\mathcal{M}$) as previously described. 
+\begin{figure}[t]\scriptsize
 $
 \begin{array}{l}
-\llbracket{\mathsf{if}\;(x.f==y)\;C_1\;C_2}\rrbracket_\mathit{tid} \overset{\mathrm{def}}{=} z=x.f;((\mathsf{assume}(z=y);C_1)+(\mathsf{assume}(z\neq y);C_2))
+\downarrow{\mathsf{if}\;(x.f==y)\;C_1\;C_2}\downarrow\mathit{tid} \overset{\mathrm{def}}{=} z=x.f;((\mathsf{assume}(z=y);C_1)+(\mathsf{assume}(z\neq y);C_2))
 \end{array}
 $
 $
@@ -285,7 +297,7 @@ $
 \right.
 $
 $
-\llbracket{\mathsf{while}\;(e)\;C}\rrbracket \overset{\mathrm{def}}{=} \left(\mathsf{assume}(e);C\right)^{*};(\mathsf{assume}(\lnot e ));
+\downarrow{\mathsf{while}\;(e)\;C}\downarrow \overset{\mathrm{def}}{=} \left(\mathsf{assume}(e);C\right)^{*};(\mathsf{assume}(\lnot e ));
 $
 $
 \inferrule
@@ -293,41 +305,57 @@ $
 \{P\} \cap \{\lceil\mathcal{S} \rceil \}  \sqsubseteq \{Q\}
 }
 {
- \{P\} \texttt{assume}\left(b\right)\{Q\}
+ \{P\} \texttt{assume}\left(\mathcal{S}\right)\{Q\}
 }
 $
 \textsf{ where } $\lceil \mathcal{S} \rceil = \{m | \lfloor m \rfloor \cap \mathcal{S} \neq \emptyset \}
 $
-\caption{Encoding of \textsf{assume}(b)}
+\caption{Encoding branch conditions with \textsf{assume}(b)}
 \label{fig:asm}
 \end{figure}
-The framework also describes a useful concept called the view shift operator $\subseteq$, that describes a way to reinterpret a set of instrumented states as a new set of instrumented states. This operator enables us to define an abstract notion of executing a small step of the program. We express the step from $p$ to $q$ with action $\alpha$ ensuring that the operation interpretation of the action satisfies the specification:$ p \sqsubseteq q \stackrel{def}{=} \forall m\in\mathcal{M} \ldotp \lfloor p * \{ m \} \rfloor \subseteq \lfloor q* \mathcal{R}(\{m\})\rfloor$. Because the Views framework handles soundness for the structural rules (sequencing, parallel composition, etc.), there are really only three types of proof obligations for us to prove.  First, we must prove that the non-trivial command translations (i.e., for conditionals and while loops) embed correctly in the Views logic, which is straightforward.  Second, we must show that for our environment subtyping, if $\Gamma<:\Gamma'$, then $\llbracket{\Gamma}\rrbracket\sqsubseteq\llbracket\Gamma'\rrbracket$.  And finally, we must prove that each atomic action's type rule corresponds to a valid semantic judgment in the Views Framework:
-\[
-\forall m\ldotp   \llbracket \alpha \rrbracket ( \lfloor \llbracket \Gamma_{1} \rrbracket_{tid}  * \{m\} \rfloor) \subseteq
-  \lfloor \llbracket \Gamma_{2} \rrbracket_{tid} * \mathcal{R}(\{m\}) \rfloor
-  \]
-The use of $*$ validates the frame rule and makes this obligation akin to an interference-tolerant version of the small footprint property from traditional separation logics~\cite{Reynolds:2002:SLL:645683.664578,Calcagno:2007:LAA:1270399.1271718}.
-\begin{lemma}[Axiom of Soundness for Atoms]
+
+There are, however, two remaining subtleties to address.  First,
+commands $C$ also require translation: the Views Framework has only non-deterministic branches and loops, so the standard versions from our core language must be encoded.  The approach to this is based on a standard idea in verification, which we show here for conditionals as shown in Figure \ref{fig:asm}. $\textsf{assume}(b)$ is a standard idea in verification semantics~\cite{Barnett:2005:BMR:2090458.2090481,Muller:2016:VVI:2963187.2963190}, which ``does nothing'' (freezes) if the condition $b$ is false, so its postcondition in the Views logic can reflect the truth of $b$.  \textsf{assume} in Figure \ref{fig:asm} adapts this for the Views Framework as in other Views-based proofs~\cite{oopsla12,toplas17}, specifying sets of machine states as a predicate. We write boolean expressions as shorthand for the set of machine states making that expression true.  
+
+Second, we have not addressed a way to encode subtyping.  One might hope this corresponds to a kind of implication, and therefore subtyping corresponds to consequence.  Indeed, this is how we (and prior work~\cite{oopsla12,toplas17}) address subtyping in a Views-based proof.
+Views defines the notion of \emph{view shift}\footnote{This is the same notion present in later program logics like Iris~\cite{krebbers2017essence}, though more recent variants are more powerful.} ($\sqsubseteq$) as a way to reinterpret a set of instrumented states as a new (compatible) set of instrumented states, offering a kind of logical consequence, used in a rule of consequence in the Views logic:
+\[ p \sqsubseteq q \stackrel{def}{=} \forall m\in\mathcal{M} \ldotp \lfloor p * \{ m \} \rfloor \subseteq \lfloor q* \mathcal{R}(\{m\})\rfloor\]
+
+We are now finally ready to prove the key lemmas of the soundness proof, relating subtying to view shifts, proving soundness of the primitive actions, and finally for the full type system.  These proofs occur once for the writer type system, and once for the reader; we show here only the (more complex) writer obligations:
+
+%We express the reinterpretation of $p$ as $q$ with action $\alpha$ ensuring that the operation interpretation of the action satisfies the specification:$ p \sqsubseteq q \stackrel{def}{=} \forall m\in\mathcal{M} \ldotp \lfloor p * \{ m \} \rfloor \subseteq \lfloor q* \mathcal{R}(\{m\})\rfloor$. Because the Views framework handles soundness for the structural rules (sequencing, parallel composition, etc.), there are really only three types of proof obligations for us to prove.  First, we must prove that the non-trivial command translations (i.e., for conditionals and while loops) embed correctly in the Views logic, which is straightforward.  Second, we must show that for our environment subtyping, if $\Gamma<:\Gamma'$, then $\llbracket{\Gamma}\rrbracket\sqsubseteq\llbracket\Gamma'\rrbracket$.  And finally, we must prove that each atomic action's type rule corresponds to a valid semantic judgment in the Views Framework:
+%\[
+%\forall m\ldotp   \llbracket \alpha \rrbracket ( \lfloor \llbracket \Gamma_{1} \rrbracket_{tid}  * \{m\} \rfloor) \subseteq
+%  \lfloor \llbracket \Gamma_{2} \rrbracket_{tid} * \mathcal{R}(\{m\}) \rfloor
+%  \]
+%The use of $*$ validates the frame rule and makes this obligation akin to an interference-tolerant version of the small footprint property from traditional separation logics~\cite{Reynolds:2002:SLL:645683.664578,Calcagno:2007:LAA:1270399.1271718}.
+\begin{lemma}[Axiom of Soundness for Atomic Commands]
   \label{lem:axmsoundness}
-For each axiom, $\Gamma_{1} \vdash_{\textsf{RMO}} \alpha \dashv \Gamma_{2}$, we must show
+For each axiom, $\Gamma_{1} \vdash_{\textsf{M}} \alpha \dashv \Gamma_{2}$, we must show
 \[
 \forall m\ldotp   \llbracket \alpha \rrbracket  (\lfloor \llbracket \Gamma_{1} \rrbracket_{tid}  * \{m\} \rfloor )\subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{tid} * \mathcal{R}(\{m\}) \rfloor
 \]
 \end{lemma}
 \begin{proof}
-In Appendix \ref{sec:prooflemmas} Lemma \ref{lem:axmsoundnessap}
+By case analysis on $\alpha$. Details in Appendix \ref{sec:prooflemmas}. % Lemma \ref{lem:axmsoundnessap}
 \end{proof}
-
-Type soundness proceeds according to the requirements of the Views Framework, primarily embedding each type judgment into the Views logic:
-\begin{lemma}[Views Embedding for Read-Side]
-  \label{lemma:embedr}
-\[  \forall\Gamma,C,\Gamma',\mathit{t}\ldotp\Gamma\vdash_R C\dashv \Gamma' \Rightarrow
-\llbracket\Gamma\rrbracket_\mathit{t}\cap\llbracket{R}\rrbracket_t\vdash \llbracket C\rrbracket_\mathit{t}\dashv\llbracket\Gamma'\rrbracket_\mathit{t}\cap\llbracket{R}\rrbracket_t
-\]
+\begin{lemma}[Context-SubTyping-M]\label{lem:cntxsubt-m}
+\[ \Gamma \subt \Gamma'  \implies \llbracket \Gamma \rrbracket_{M,tid} \sqsubseteq \llbracket  \Gamma' \rrbracket_{M,tid} \]
 \end{lemma}
 \begin{proof}
-In Appendix \ref{sec:prooflemmas} Lemma \ref{lemma:embedrap}.
-  \end{proof}
+Induction on the subtyping derivation, then inducting on the single-type subtype relaion for the first variable in the non-empty context case.
+\end{proof}
+
+%Type soundness proceeds according to the requirements of the Views Framework, primarily embedding each type judgment into the Views logic:
+%\begin{lemma}[Views Embedding for Read-Side]
+%  \label{lemma:embedr}
+%\[  \forall\Gamma,C,\Gamma',\mathit{t}\ldotp\Gamma\vdash_R C\dashv \Gamma' \Rightarrow
+%\llbracket\Gamma\rrbracket_\mathit{t}\cap\llbracket{R}\rrbracket_t\vdash \llbracket C\rrbracket_\mathit{t}\dashv\llbracket\Gamma'\rrbracket_\mathit{t}\cap\llbracket{R}\rrbracket_t
+%\]
+%\end{lemma}
+%\begin{proof}
+%In Appendix \ref{sec:prooflemmas} Lemma \ref{lemma:embedrap}.
+%  \end{proof}
 \begin{lemma}[Views Embedding for Write-Side]
   \label{lemma:embedw}
   \[
@@ -336,21 +364,24 @@ In Appendix \ref{sec:prooflemmas} Lemma \ref{lemma:embedrap}.
 \]
 \end{lemma}
 \begin{proof}
-In Appendix \ref{sec:prooflemmas} Lemma \ref{lemma:embedwap}.
+By induction on the typing derivation, appealing to Lemma \ref{lem:axmsoundness} for primitives, Lemma \ref{lem:cntxsubt-m} and consequence for subtyping, and otherwise appealing to structural rules of the Views logic and inductive hypotheses.
+Full details in Appendix \ref{sec:prooflemmas}. %Lemma \ref{lemma:embedwap}.
   \end{proof}
-Because the intersection of the environment denotation with the denotations for the different critical sections remains a valid view, the Views Framework provides most of this proof for free, given corresponding lemmas for the \emph{atomic actions} $\alpha$:
-\[\begin{array}{l}
-\forall \alpha,\Gamma_1,\Gamma_2\ldotp \Gamma_1\vdash_R\alpha\dashv\Gamma_2 \Rightarrow
-\\
-\quad\forall m\ldotp   \llbracket \alpha \rrbracket  (\lfloor \llbracket \Gamma_{1} \rrbracket_{\textsf{R},tid}  * \{m\} \rfloor )\subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{\textsf{R},tid} * \mathcal{R}(\{m\}) \rfloor
-\end{array}\]
-\[
-\begin{array}{l}
-\forall \alpha,\Gamma_1,\Gamma_2\ldotp \Gamma_1\vdash_M\alpha\dashv\Gamma_2 \Rightarrow
-\\
-\quad\forall m\ldotp   \llbracket \alpha \rrbracket  (\lfloor \llbracket \Gamma_{1} \rrbracket_{\textsf{M},tid}  * \{m\} \rfloor )\subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{\textsf{M},tid} * \mathcal{R}(\{m\}) \rfloor
-\end{array}
-\]
+
+The corresponding obligations and proofs for the read-side critical section type system are similar in statement and proof approach, just for the read-side type judgments and environment denotations.
+%Because the intersection of the environment denotation with the denotations for the different critical sections remains a valid view, the Views Framework provides most of this proof for free, given corresponding lemmas for the \emph{atomic actions} $\alpha$:
+%\[\begin{array}{l}
+%\forall \alpha,\Gamma_1,\Gamma_2\ldotp \Gamma_1\vdash_R\alpha\dashv\Gamma_2 \Rightarrow
+%\\
+%\quad\forall m\ldotp   \llbracket \alpha \rrbracket  (\lfloor \llbracket \Gamma_{1} \rrbracket_{\textsf{R},tid}  * \{m\} \rfloor )\subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{\textsf{R},tid} * \mathcal{R}(\{m\}) \rfloor
+%\end{array}\]
+%\[
+%\begin{array}{l}
+%\forall \alpha,\Gamma_1,\Gamma_2\ldotp \Gamma_1\vdash_M\alpha\dashv\Gamma_2 \Rightarrow
+%\\
+%\quad\forall m\ldotp   \llbracket \alpha \rrbracket  (\lfloor \llbracket \Gamma_{1} \rrbracket_{\textsf{M},tid}  * \{m\} \rfloor )\subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{\textsf{M},tid} * \mathcal{R}(\{m\}) \rfloor
+%\end{array}
+%\]
 % \[
 % \forall\Gamma,\alpha,\Gamma',\mathit{t}\ldotp\Gamma\vdash_R \alpha\dashv \Gamma' \Rightarrow
 %     \llbracket\Gamma\rrbracket_\mathit{t}\cap\llbracket{R}\rrbracket_t\vdash \llbracket \alpha\rrbracket_\mathit{t}\dashv\llbracket\Gamma'\rrbracket_\mathit{t}\cap\llbracket{R}\rrbracket_t
@@ -359,9 +390,9 @@ Because the intersection of the environment denotation with the denotations for 
 % \forall\Gamma,\alpha,\Gamma',\mathit{t}\ldotp\Gamma\vdash_M \alpha\dashv \Gamma' \Rightarrow
 %     \llbracket\Gamma\rrbracket_\mathit{t}\cap\llbracket{M}\rrbracket_t\vdash \llbracket \alpha\rrbracket_\mathit{t}\dashv\llbracket\Gamma'\rrbracket_\mathit{t}\cap\llbracket{M}\rrbracket_t
 % \]
-$\alpha$ ranges over any atomic command, such as a field access or variable assignment.
+%$\alpha$ ranges over any atomic command, such as a field access or variable assignment.
 %%%A number of rules in the formal system (Section \todo{ref}) are present in \emph{both} systems, and we would like to reuse their proofs.  To support this, we prove the following lemma, which permits us to ignore which critical section such rules are considered in, and lift that ``ignorant'' proof to either critical section:
-Denoting a type environment $\llbracket\Gamma\rrbracket_{\mathsf{M},tid}$, unfolding the definition one step, is merely $\llbracket\Gamma\rrbracket_{tid}\cap\llbracket\mathsf{M}\rrbracket_{tid}$.
+%Denoting a type environment $\llbracket\Gamma\rrbracket_{\mathsf{M},tid}$, unfolding the definition one step, is merely $\llbracket\Gamma\rrbracket_{tid}\cap\llbracket\mathsf{M}\rrbracket_{tid}$.
 %n the type system for write-side critical sections, this introduces extra boilerplate reasoning to prove that each action preserves lock ownership.  To simplify later cases of the proof, we first prove this convenient lemma.
 %begin{lemma}[Write-Side Critical Section Lifting]
 %label{lem:crit-lifting}
