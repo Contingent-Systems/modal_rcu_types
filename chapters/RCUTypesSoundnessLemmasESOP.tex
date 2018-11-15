@@ -61,7 +61,7 @@ m\in \mathcal{M}
 \begin{array}{l|l}
 m\in \mathcal{M}
 &(\textsf{unlinked}\in  O(.s(x,tid)) \land l = tid \land x \notin U) \land \\
-& (\exists_{T'\subseteq T}\ldotp \{s(x,tid) \mapsto T'\}\in F \implies T' \subseteq B \land tid \notin T' )
+& (\exists_{T'\subseteq T}\ldotp s(x,tid) \mapsto T'\in F \implies T' \subseteq B \land tid \notin T' )
 \end{array}
 \right\}
 \\
@@ -71,7 +71,7 @@ m\in \mathcal{M}
 \begin{array}{l|l}
 m\in \mathcal{M}
 &\begin{array}{l}\textsf{freeable}\in  O(s(x,tid)) \land l = tid \land x \notin U \land \\
-\{ s(x,tid) \mapsto \{\emptyset\}\} \in F \end{array}
+ s(x,tid) \mapsto \{\emptyset\} \in F \end{array}
 \end{array}
 \right\}
 \\
@@ -482,7 +482,7 @@ This follows from the fact that none of the possible $\alpha$s modifies the glob
 \textbf{WULK}(\sigma,O,U,T,F) =
 \left\{
 \begin{array}{ll}
-\forall o \ldotp \textsf{iterator} \, \sigma.l \in O(o)  \implies \textsf{unlinked} \notin O(o)
+\forall o \ldotp \textsf{iterator} \, \sigma.l \in O(o)  \implies \textsf{unlinked} \notin O(o)  \land \textsf{freeable} \notin O(o)  \land \textsf{undef} \notin O(o)
 \end{array}
 \right.%\}
 \]
