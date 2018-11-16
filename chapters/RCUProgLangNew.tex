@@ -3,8 +3,9 @@
 \makeatother
 \section{Type System \& Programming Language}
 \label{sec:tslbl}
-In this section, we present a simple object oriented programming language with two block constructs for modelling \textsf{RCU}, and a type system that ensures proper (memory-safe) use of the language.
-To ensure memory safety, we must show how our type system makes programs preserve the following properties:
+In this section, we present a simple imperative programming language with two block constructs for modelling \textsf{RCU}, and a type system that ensures proper (memory-safe) use of the language.
+The type system ensures memory safety by enforcing these sufficient conditions:
+%To ensure memory safety, we must show how our type system makes programs preserve the following properties:
 \begin{itemize}
 \item A heap node can only be freed if it is no longer accessible from an RCU data structure or from local variables of other threads. To achieve this we ensure the reachability and access which can be suitably restricted. We explain how our types support a delayed ownership transfer for the deallocation.
 \item Local variables may not point inside an RCU data structure unless they are inside an \textsf{RCU} read or write block.
