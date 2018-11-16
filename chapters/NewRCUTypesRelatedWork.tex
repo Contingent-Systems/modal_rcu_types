@@ -2,7 +2,7 @@
 \label{sec:relatedwork}
 Our type system work builds on a great deal of related work on RCU implementations and models; and general concurrent program verification (via program logics, model checking, and type systems).
 
-\mypar{Modeling RCU and Memory Model}
+\mypar{Modeling RCU and Memory Models}
 Alglave et al.~\cite{Alglave:2018:FSC:3173162.3177156} propose a memory model to be assumed by the platform-independent parts of the Linux kernel, regardless of the underlying hardware's memory model.
 As part of this, they give the first formalization of what it means for an RCU implementation to be correct (previously this was difficult to state, as the guarantees in principle could vary by underlying CPU architecture). Essentially, that reader critical sections do not span grace periods. They prove by hand that the Linux kernel RCU implementation~\cite{DBLP:conf/cav/AlglaveKT13,abssem} satisfies this property. According to the definition of \textsf{RCU} ~\cite{abssem,Alglave:2018:FSC:3173162.3177156}, our model in Section \ref{sec:semantics} is a valid RCU implementation (assuming sequential consistency):
 \begin{itemize}
