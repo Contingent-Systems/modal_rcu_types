@@ -77,7 +77,7 @@ bounded by \lstinline|ReadBegin| and \lstinline|ReadEnd|.  \lstinline|ReadBegin|
 %(\textbf{\textit{Implementing Grace Periods}}) - 
 Grace periods are implemented by the combination of \lstinline|ReadBegin|, \lstinline|ReadEnd|, \lstinline|SyncStart|, and \lstinline|SyncStop|.
 % work together to implement grace periods.  
-\lstinline|ReadBegin| ensures the set of active readers is known.  When a grace period is required, \lstinline|SyncStart;SyncStop;| will store (in $B$) the active readers (which may have observed nodes to free before they were unlinked), and wait for reader threads to record when they have completed their critical section (and implicitly, dropped any references to nodes the writer wants to free) via \lstinline|ReadEnd|.
+\lstinline|ReadBegin| ensures the set of active readers is known.  When a grace period is required, \lstinline|SyncStart;SyncStop;| will store (in $B$) the active readers (which may have observed nodes before they were unlinked), and wait for reader threads to record when they have completed their critical section (and implicitly, dropped any references to nodes the writer wants to free) via \lstinline|ReadEnd|.
  %of threads the writer waits for to the set of active readers when \lstinline|SyncStart| is executed (recording the readers that may have observed any nodes unlinked by the writer), and \lstinline|SyncStop| waits for that set of threads to become empty.
 %\lstinline|ReadEnd| ``informs'' the writer thread of its exit from the critical section by removing itself from $B$, and once every reader that overlapped the \lstinline|SyncStart| has completed its critical section, the blocking set will be empty and the writer will resume.
 

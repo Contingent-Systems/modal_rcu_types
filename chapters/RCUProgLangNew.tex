@@ -155,7 +155,8 @@ It is sometimes necessary to use imprecise types --- mostly for control flow joi
 
 Figure \ref{fig:sub-typing} includes four judgments for subtyping.  The first two --- $\vdash\N\prec:\N'$ and $\vdash\rho\prec:\rho'$ --- describe relaxations of field maps and paths respectively.  $\vdash\N\prec:\N'$ is read as ``the field map $\N$ is more precise than $\N'$'' and similarly for paths.
 The third judgment $\vdash T\prec:T'$ uses path and field map subtyping to give subtyping among \textsf{rcuItr} types --- one \textsf{rcuItr} is a subtype of another if its paths and field maps are similarly more precise --- and to allow \textsf{rcuItr} references to be ``forgotten'' --- this is occasionally needed to satisfy non-interference checks in the type rules.
-The final judgment $\vdash\Gamma\prec:\Gamma'$ extends subtyping to all assumptions in a type context, allowing any or all types in the context to be relaxed to a supertype.
+The final judgment $\vdash\Gamma\prec:\Gamma'$ extends subtyping to all assumptions in a type context.
+
 \begin{figure}[!t]\scriptsize
 \begin{mathpar}
 \fbox{$\Gamma \vdash_{M,R} C \dashv \Gamma'$} \;\;\;\;\;\;
@@ -304,7 +305,9 @@ The type system checks that this unlink disconnects only one node: note how the 
 \mypar{Grace and Reclamation}
 After the referent of \texttt{cur} is unlinked, concurrent readers traversing the list may still hold references.  So it is not safe to actually reclaim the memory until after a grace period.
 Lines 28--29 of \lstinline|remove| initiate a grace period and wait for its completion.  At the type level, this is reflected by the change of \lstinline|cur|'s type from \textsf{unlinked} to \textsf{freeable}, reflecting the fact that the grace period extends until any reader critical sections that might have observed the node in the structure have completed.
-This matches the precondition required by our rules for calling \lstinline|Free|, which further changes the type of \lstinline|cur| to \textsf{undef} reflecting that \lstinline|cur| is no longer a valid reference. The type system also ensures no local (writer) aliases exist to the freed node and understanding this enforcement is twofold: 1-type system requires that only \textsf{unlinked} heap nodes can be freed 2-\textit{framing} relations in the related type rules(\textsc{T-UnlinkH}, \textsc{T-Replace} and \textsc{T-Insert}) enforce \textit{locality} on the effects of the heap update -- only one node becomes \textsf{unlinked}.
+This matches the precondition required by our rules for calling \lstinline|Free|, which further changes the type of \lstinline|cur| to \textsf{undef} reflecting that \lstinline|cur| is no longer a valid reference. The type system also ensures no local (writer) aliases exist to the freed node and understanding this enforcement is twofold. First, the type system requires that only \textsf{unlinked} heap nodes can be freed. Second, framing relations in related rules (\textsc{T-UnlinkH}, \textsc{T-Replace} and \textsc{T-Insert}) 
+ensure no local aliases still consider the node linked.
+%enforce \textit{locality} on the effects of the heap update -- only one node becomes \textsf{unlinked}.
 
 \mypar{Fresh Nodes}
 Some code must also allocate new nodes, and the type system must reason about how they are incorporated into the shared data structure.
@@ -465,7 +468,7 @@ As suggested earlier, this rule updates the post-environment to reflect that the
 The remaining rules are a bit more involved, and form the heart of the type system.
 
 \mypar{Grace Periods}
-\textsc{T-Sync} gives pre- and post-environments to the compound statement \lstinline|SyncStart;SyncStop|, which implements a grace period.  As mentioned earlier, this works in any type environment, and updates the environment afterwards to reflect that any nodes \textsf{unlinked} before the wait become \textsf{freeable} after the wait.
+\textsc{T-Sync} gives pre- and post-environments to the compound statement \lstinline|SyncStart;SyncStop| implementing grace periods.  As mentioned earlier, this updates the environment afterwards to reflect that any nodes \textsf{unlinked} before the wait become \textsf{freeable} afterwards.
 
 \mypar{Unlinking}
 \textsc{T-UnlinkH} type checks heap updates that remove a node from the data structure.  The rule assumes three objects $x$, $z$, and $r$, whose identities we will conflate with the local variable names in the type rule.  The rule checks the case where $x.f_1==z$ and $z.f_2==r$ initially (reflected in the path and field map components, and a write $x.f_1=r$ removes $z$ from the data structure (we assume, and ensure, the structure is a tree).
