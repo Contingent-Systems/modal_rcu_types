@@ -207,11 +207,25 @@ The final judgment $\vdash\Gamma\prec:\Gamma'$ extends subtyping to all assumpti
 
 It is often necessary to abstract the contents of field maps or paths, without simply forgetting the contents entirely.  In a binary search tree, for example, it may be the case that one node is a child of another, but \emph{which} parent field points to the child depends on which branch was followed in an earlier conditional (consider the lookup in a BST, which alternates between following left and right children).
 %Since our list based bag example's objects have single field($Next$), we take small code snippet from our \textsf{BST} type checking effort in Appendix \ref{appendix:bst_del} in which objects have two fields $Left$ and $Right$. Field mappings take field names to local variable names. They are added to the field map, $\N$, when the object's fields are read. 
-In Listing \ref{lst:altfield}, we see that \texttt{cur} aliases different fields of \texttt{par} --- either $Left$ or $Right$ --- in different branches of the conditional.
+In Figure \ref{fig:altfield}, we see that \texttt{cur} aliases different fields of \texttt{par} --- either $Left$ or $Right$ --- in different branches of the conditional.
 %We see the join of the type assertions in lines 6 and 11 to the one in the line 12. 
 The types after the conditional must overapproximate this, here as $Left|Right\mapsto cur$ in \texttt{par}'s field map, and a similar path disjunction in \texttt{cur}'s path.
 This is reflected in Figure \ref{fig:sub-typing}'s \textsc{T-NSub1-5} and \textsc{T-PSub1-2} --- within each branch, each type is coerced to a supertype to validate the control flow join.
-\begin{lstlisting}[caption={Choosing fields to read},label={lst:altfield},numbersep=1pt,xrightmargin=-1cm,xleftmargin=0.1\textwidth, numbers=left, numbersep=5pt,basicstyle=\scriptsize\ttfamily]
+
+Another type of control flow join is handling loop invariants --- where paths entering the loop meet the back-edge from the end of a loop back to the start for repetition.
+Because our types include paths describing how they are reachable from the root, some abstraction is required to give loop invariants that work for any number of iterations --- in a loop traversing a linked list, the iterator pointer would na\"ively have different paths from the root on each iteration, so the exact path is not loop invariant.  However, the paths explored by a loop are regular, so we can abstract the paths by permitting (implicitly) existentially quantified indexes on path fragments, which express the existence of \emph{some} path, without saying \emph{which} path.  The use of an explicit abstract repetition allows the type system to preserve the fact that different references have common path prefixes, even after a loop.
+
+Assertions for the \texttt{add} function in lines 19 and 20 of Figure \ref{fig:rculist} show the \textit{loop}'s effects on paths of iterator references used inside the loop, \texttt{cur} and \texttt{par}. 
+On line 20, \texttt{par}'s path contains has $(Next)^{k}$.
+The $k$ in the $(Next)^{k}$ abstracts the number of loop iterations run, implicitly assumed to be non-negative.
+The trailing $Next$ in \texttt{cur}'s path on line 19 --- $(Next)^{k}.Next$ --- expresses the relationship between \texttt{cur} and \texttt{par}: \texttt{par} is reachable from the root by following $Next$ $k$ times, and \texttt{cur} is reachable via one additional $Next$.
+The types of 19 and 20, however, are not the same as lines 23 and 24, so an additional adjustment is needed for the types to become loop-invariant.
+\emph{Reindexing} (\textsc{T-ReIndex} in Figure \ref{fig:type-judgements-for-cf}) effectively increments an abstract loop counter, contracting $(Next)^k.Next$ to $Next^k$ everywhere in a type environment.  This expresses the same relationship between \texttt{par} and \texttt{cur} as before the loop, but the choice of $k$ to make these paths accurate after each iteration would be one larger than the choice before.
+Reindexing the type environment of lines 23--24 yields the type environment of lines 19--20, making the types loop invariant. The choice of $k$ does not violate the \textit{soundness} of the type rules because the \textit{framing} relations in \textsc{T-UnlinkH}, \textsc{T-Replace} and \textsc{T-Insert} consider all uses of $k$ stick together by treating $f^{k}$ as $f$.
+\looseness=-1
+
+\begin{figure}
+\begin{lstlisting}[numbersep=1pt,xrightmargin=-1cm,xleftmargin=0.1\textwidth, numbers=left, numbersep=5pt,basicstyle=\scriptsize\ttfamily]
 $\assert{cur:\mathsf{rcuItr}\; Left|Right \;\{\},\;\;par:\mathsf{rcuItr}\;  \epsilon \;\{Left|Right\mapsto cur\}}$
 if(par.Left == cur){
   $\assert{cur:\mathsf{rcuItr}\; Left \;\{\} ,\;\; par:\mathsf{rcuItr}\;  \epsilon \;\{Left\mapsto cur\}}$
@@ -226,22 +240,16 @@ if(par.Left == cur){
 }
 $\assert{cur:\mathsf{rcuItr}\; Left|Right.Left|Right \;\{\}, \;\; par:\mathsf{rcuItr}\;  Left|Right \;\{Left|Right\mapsto cur\}}$
 \end{lstlisting}
+\vspace{-1em}
+\caption{Choosing fields to read}
+\label{fig:altfield}
+\end{figure}
 
-Another type of control flow join is handling loop invariants --- where paths entering the loop meet the back-edge from the end of a loop back to the start for repetition.
-Because our types include paths describing how they are reachable from the root, some abstraction is required to give loop invariants that work for any number of iterations --- in a loop traversing a linked list, the iterator pointer would na\"ively have different paths from the root on each iteration, so the exact path is not loop invariant.  However, the paths explored by a loop are regular, so we can abstract the paths by permitting (implicitly) existentially quantified indexes on path fragments, which express the existence of \emph{some} path, without saying \emph{which} path.  The use of an explicit abstract repetition allows the type system to preserve the fact that different references have common path prefixes, even after a loop.
-
-Assertions for the \texttt{add} function in lines 19 and 20 of Figure \ref{fig:rculist} show the \textit{loop}'s effects on paths of iterator references used inside the loop, \texttt{cur} and \texttt{par}. 
-On line 20, \texttt{par}'s path contains has $(Next)^{k}$.
-The $k$ in the $(Next)^{k}$ abstracts the number of loop iterations run, implicitly assumed to be non-negative.
-The trailing $Next$ in \texttt{cur}'s path on line 19 --- $(Next)^{k}.Next$ --- expresses the relationship between \texttt{cur} and \texttt{par}: \texttt{par} is reachable from the root by following $Next$ $k$ times, and \texttt{cur} is reachable via one additional $Next$.
-The types of 19 and 20, however, are not the same as lines 23 and 24, so an additional adjustment is needed for the types to become loop-invariant.
-\emph{Reindexing} (\textsc{T-ReIndex} in Figure \ref{fig:type-judgements-for-cf}) effectively increments an abstract loop counter, contracting $(Next)^k.Next$ to $Next^k$ everywhere in a type environment.  This expresses the same relationship between \texttt{par} and \texttt{cur} as before the loop, but the choice of $k$ to make these paths accurate after each iteration would be one larger than the choice before.
-Reindexing the type environment of lines 23--24 yields the type environment of lines 19--20, making the types loop invariant. The choice of $k$ does not violate the \textit{soundness} of the type rules because the \textit{framing} relations in \textsc{T-UnlinkH}, \textsc{T-Replace} and \textsc{T-Insert} consider all uses of $k$ stick together by treating $f^{k}$ as $f$.
 
 While abstraction is required to deal with control flow joins, reasoning about whether and which nodes are unlinked or replaced, and whether cycles are created, requires precision.  Thus the type system also includes means (Figure \ref{fig:type-judgements-for-cf}) to refine imprecise paths and field maps.
 %
 %We should also note that being precise in the field names is so crucial for mutation actions. This means we need to know which fields are used to replace/unlink a heap node. Then, what is the mechanism to become more/less precise in the fields used in both path and field mappings of the \textsf{rcuItr} type? 
-In Listing \ref{lst:altfield}, we see a conditional with the condition $par.Left == cur$. The type system matches this condition to the imprecise types in line 1's typing assertion, and refines the initial type assumptions in each branch accordingly (lines 2 and 7) based on whether execution reflects the truth or falsity of that check.
+In Figure \ref{fig:altfield}, we see a conditional with the condition $par.Left == cur$. The type system matches this condition to the imprecise types in line 1's typing assertion, and refines the initial type assumptions in each branch accordingly (lines 2 and 7) based on whether execution reflects the truth or falsity of that check.
 Similarly, it is sometimes required to check --- and later remember --- whether  a field is null, and the type system supports this.
 %refines the assertions in Listing \ref{lst:altfield} line 1 to the one in the line 3 for the \textit{then} branch and to the one in the line 8 for the \textit{else} branch via making types more precise on the object fields(\textsc{T-Branch1} shown in Figure \ref{fig:type-judgements-for-cf}).
 %(\textit{\textbf{Points to }}\textsf{null}) - Typing rules(\textsc{T-Branch3} and \textsc{T-Loop2}) in Figure \ref{fig:type-judgements-for-cf} refine field mappings with respect to \texttt{null} value in control flow statements.

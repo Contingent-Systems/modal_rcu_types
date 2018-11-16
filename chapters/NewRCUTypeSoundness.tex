@@ -279,13 +279,10 @@ We ellide the statement of the analagous result for the read-side critical secti
 %\end{proof}
 
 With this setup done, we we can state the connection between the Views Framework logic induced by earlier parameters, and the type system from Section \ref{sec:tslbl}.
-The induced Views logic has a familiar notion of Hoare triple --- $\{ p \} C \{ q \}$ where $p$ and $q$ are elements of $\mathsf{View}_\mathcal{M}$ --- with the usual rules for non-deterministic choice, non-deterministic iteration, sequential composition, and parallel composition, sound given the proof obligations just described above.  It is parameterized by a rule for atomic commands that requires a specification of the triples for primitive operations, and their soundness (an obligation we must prove).  This can then be used to prove that every typing derivation embeds to a valid derivation in the Views Logic, roughly:
-
-%The Views Framework defines a program logic (Hoare logic) with judgments of the form $\{ p \} C \{ q \}$ for views p and q and commands $C$. Commands include atomic actions, and soundness of such judgments for atomic actions is a parameter to the framework. The framework itself provides for soundness of rules for sequencing, fork-join parallelism, and other general rules.
-%To prove type soundness for our system, we define a denotation of \emph{type judgments} in terms of the Views logic, and show that every valid typing derivation translates to a valid derivation in the Views logic:
-\[\forall\Gamma,C,\Gamma',\mathit{tid}\ldotp\Gamma\vdash C\dashv \Gamma' \Rightarrow \{\llbracket\Gamma\rrbracket_\mathit{tid}\} \llbracket C\rrbracket_\mathit{tid}\{\llbracket\Gamma'\rrbracket_\mathit{tid}\}\]
+The induced Views logic has a familiar notion of Hoare triple --- $\{ p \} C \{ q \}$ where $p$ and $q$ are elements of $\mathsf{View}_\mathcal{M}$ --- with the usual rules for non-deterministic choice, non-deterministic iteration, sequential composition, and parallel composition, sound given the proof obligations just described above.  It is parameterized by a rule for atomic commands that requires a specification of the triples for primitive operations, and their soundness (an obligation we must prove).  This can then be used to prove that every typing derivation embeds to a valid derivation in the Views Logic, roughly
+$\forall\Gamma,C,\Gamma',\mathit{tid}\ldotp\Gamma\vdash C\dashv \Gamma' \Rightarrow \{\llbracket\Gamma\rrbracket_\mathit{tid}\} \llbracket C\rrbracket_\mathit{tid}\{\llbracket\Gamma'\rrbracket_\mathit{tid}\}$
 once for the writer type system, once for the readers.
-%The antecedent of the implication is a type judgment(shown in Figure \ref{fig:tss} Section \ref{subsection:type-rules}, Figure \ref{fig:type-judgements-for-cf} Section \ref{subsection:typwrt} and Figure \ref{fig:tssr} Appendix \ref{appendix:readtypes}) and the conclusion is a judgment in the Views logic. The environments are translated to views ($\mathsf{View}_\mathcal{M}$) as previously described. 
+
 \begin{figure}[t]\scriptsize
 $
 \begin{array}{l}
@@ -318,7 +315,7 @@ $
 \label{fig:asm}
 \end{figure}
 
-There are, however, two remaining subtleties to address.  First,
+There are two remaining subtleties to address.  First,
 commands $C$ also require translation: the Views Framework has only non-deterministic branches and loops, so the standard versions from our core language must be encoded.  The approach to this is based on a standard idea in verification, which we show here for conditionals as shown in Figure \ref{fig:asm}. $\textsf{assume}(b)$ is a standard idea in verification semantics~\cite{Barnett:2005:BMR:2090458.2090481,Muller:2016:VVI:2963187.2963190}, which ``does nothing'' (freezes) if the condition $b$ is false, so its postcondition in the Views logic can reflect the truth of $b$.  \textsf{assume} in Figure \ref{fig:asm} adapts this for the Views Framework as in other Views-based proofs~\cite{oopsla12,toplas17}, specifying sets of machine states as a predicate. We write boolean expressions as shorthand for the set of machine states making that expression true.  
 
 Second, we have not addressed a way to encode subtyping.  One might hope this corresponds to a kind of implication, and therefore subtyping corresponds to consequence.  Indeed, this is how we (and prior work~\cite{oopsla12,toplas17}) address subtyping in a Views-based proof.
@@ -335,19 +332,19 @@ We are now finally ready to prove the key lemmas of the soundness proof, relatin
 %The use of $*$ validates the frame rule and makes this obligation akin to an interference-tolerant version of the small footprint property from traditional separation logics~\cite{Reynolds:2002:SLL:645683.664578,Calcagno:2007:LAA:1270399.1271718}.
 \begin{lemma}[Axiom of Soundness for Atomic Commands]
   \label{lem:axmsoundness}
-For each axiom, $\Gamma_{1} \vdash_{\textsf{M}} \alpha \dashv \Gamma_{2}$, we must show
-\[
+For each axiom, $\Gamma_{1} \vdash_{\textsf{M}} \alpha \dashv \Gamma_{2}$, we show
+$
 \forall m\ldotp   \llbracket \alpha \rrbracket  (\lfloor \llbracket \Gamma_{1} \rrbracket_{tid}  * \{m\} \rfloor )\subseteq  \lfloor \llbracket \Gamma_{2} \rrbracket_{tid} * \mathcal{R}(\{m\}) \rfloor
-\]
+$
 \end{lemma}
 \begin{proof}
 By case analysis on $\alpha$. Details in Appendix \ref{sec:prooflemmas}. % Lemma \ref{lem:axmsoundnessap}
 \end{proof}
 \begin{lemma}[Context-SubTyping-M]\label{lem:cntxsubt-mcln}
-\[ \Gamma \subt \Gamma'  \implies \llbracket \Gamma \rrbracket_{M,tid} \sqsubseteq \llbracket  \Gamma' \rrbracket_{M,tid} \]
+$ \Gamma \subt \Gamma'  \implies \llbracket \Gamma \rrbracket_{M,tid} \sqsubseteq \llbracket  \Gamma' \rrbracket_{M,tid} $
 \end{lemma}
 \begin{proof}
-Induction on the subtyping derivation, then inducting on the single-type subtype relaion for the first variable in the non-empty context case.
+Induction on the subtyping derivation, then inducting on the single-type subtype relation for the first variable in the non-empty context case.
 \end{proof}
 
 %Type soundness proceeds according to the requirements of the Views Framework, primarily embedding each type judgment into the Views logic:
@@ -362,10 +359,10 @@ Induction on the subtyping derivation, then inducting on the single-type subtype
 %  \end{proof}
 \begin{lemma}[Views Embedding for Write-Side]
   \label{lemma:embedw}
-  \[
+\\\mbox{$\qquad
 \forall\Gamma,C,\Gamma',\mathit{t}\ldotp\Gamma\vdash_M C\dashv \Gamma' \Rightarrow
 \llbracket\Gamma\rrbracket_\mathit{t}\cap\llbracket{M}\rrbracket_t\vdash \llbracket C\rrbracket_\mathit{t}\dashv\llbracket\Gamma'\rrbracket_\mathit{t}\cap\llbracket{M}\rrbracket_t
-\]
+$}
 \end{lemma}
 \begin{proof}
 By induction on the typing derivation, appealing to Lemma \ref{lem:axmsoundness} for primitives, Lemma \ref{lem:cntxsubt-mcln} and consequence for subtyping, and otherwise appealing to structural rules of the Views logic and inductive hypotheses.
