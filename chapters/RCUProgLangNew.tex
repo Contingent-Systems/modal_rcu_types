@@ -427,8 +427,8 @@ r\textsf{:rcuItr}  \rho_1  \N_2, \Gamma
 {
 \inferrule[\scriptsize(T-Insert)]
 {
-\N'=\N([f \rightharpoonup o\setminus n])\\ \rho.f  = \rho_1 \\ \rho_1.f = \rho_2 \\ \N = \N_1 \\
-\forall_{f_2\in dom(\N)} \ldotp f\neq f_2 \implies \N(f_2)=\textsf{null} \\
+\N'=\N([f \rightharpoonup o\setminus n])\\ \rho.f  = \rho_1 \\ \rho_1.f = \rho_2 \\ \N(f) = \N_1(f) \\
+\forall_{f_2\in dom(\N)} \ldotp f\neq f_2 \implies \N_1(f_2)=\textsf{null} \\
 \textsf{FV}(\Gamma) \cap \{p,o,n\}  =\emptyset \\
 \forall_{x \in \Gamma, \N_3, \rho_3,f_1,y} \ldotp (x:\textsf{rcuItr}\,\rho_3\,\N_3([f_1 \rightharpoonup y])) \implies
  (\forall_{\rho_4\neq \epsilon} \ldotp \neg\mathsf{MayAlias}(\rho_3, \rho.\rho_4) )
