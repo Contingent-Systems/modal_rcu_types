@@ -8,6 +8,11 @@ Require Import MySetoids.
 Require Import Tactics.
 Require Import Bool.
 
+Module RCUTypes
+  
+
+
+
 
 (*RCU Types*)
 Inductive RCUTypes:=
