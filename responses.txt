@@ -1,0 +1,45 @@
+We thank the reviewers for their time and feedback. We would like to
+address the comments and questions raised by the reviewers.
+
+##Common Issue-0: Reviewer A: Introduction of the Invariants Paper: We can change the place where we introduce informal invariants Section 6.1. We can put it after intorducing logical state before the set M in page 19 introduced.
+##Common Issue-1: Clarifying Replacement/Insertion and Figure 7 - Reviewer A -: Page-10 refers to the name of the type rules. We don't need to mention these three names there,so we can remove them and refer in more general fashion. We refer to Hoare-Style in Section 4.2 to guide reading the type rules in Figure 6 and their application on linked-list(Figure 1) in pre/post-condition style. We agree that the caption of Figure 7 does not distinguish "inserting" and "replacing" a node clearly, we will change it. Replacing a node means we replace an existing node -- H1 with Hf in Figure 7. Figure 7 represents  only framing in T-Replace, not the one for T-Insert, so "o" is not represented in Figure 7. T-Insert is simpler version of T-Replace, ruling the insertion of a new node without unlinking any existing one.
+
+As we state in paper page 15, we need framing out the H6 referenced by a6 -- (y is a6 \neq o is cr) in T-Replace -- to prevent any object field from any other context pointing to the unlinked node.
+
+
+## Common Issue-1: Rearranging the Sections and Saving Space for Type-System: 
+
+## Common Issue-2: Proof Intuition for Delayed Ownership Transfer:
+
+## Common Issue-3: Grammar including Sync and RCURead-RCUWrite:
+
+## Common Issue-4: Syntax/Grammar for \rho - Existential Quantification in Subtyping - Clarification on k: [Colin Help] k does not interact with subtyping at all. 
+
+## Common Issue-5: RCU Requirements - Unconditional RCU Primitives and Non-Memory-Safety-Centric Requirement: Point out operationa semantics
+
+##Common Issue-6: Robustness against weak models w.r.t certain  programming pattern: 
+
+##Common Issue-7: How is the "that nodes removed from a data structure are always scheduled for subsequent deallocation" part of the correctness notion achieved?
+not permitting multiple reclamation, careless wording not prove liveness if the critical section completes after the critical section. if it completes critical section. Point to the rule. Freeable is linear, no drop etc.
+
+##Common Issue-8: Can automation be achieved? Automation and decidability, we are not concernede with undecicability. Automation, we think it is def. workhwhile. This paper is about reasoning principles.
+
+##Common Issue-9: Inserted code in between SyncStart;SyncStop? These are concepptuall one views requires us to split it into two atomics.
+
+
+##Common Issue-10: Even for this limited case, however, the type system is quite complex. I am concerned about how it
+can be extended to additional language features. For instance, there are several custom rules for
+handling `if` to properly refine the types. Does each additional language construct need a similar
+host of rules? Similarly, I wonder if this rules are indeed enough? Other language decisions seem
+unmotivated; for instance, there is no rule which allows code to be inserted between a `SyncStart`
+and `SyncStop`, is this never a desirable move?
+
+-- DUplicates, we capture all heap updates within the rcu critical sections. There is a bound in making control flow decisions -- There is some duplication with this and that but ....
+-- Heap choice etc. 
+
+
+The complexity also means that I'm not sure that the simplicity of using the system is
+obvious. If indeed this type system is not decidable a user must hand-check the side conditions of
+all the rules. The annotations in the proof sketches do not do this and these annotations are
+complex. I would expect checking them would be nearly as error-prone as a derivation in a program
+logic.

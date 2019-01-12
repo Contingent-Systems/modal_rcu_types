@@ -1,0 +1,295 @@
+
+----------------------- REVIEW 1 ---------------------
+PAPER: 16
+TITLE: Safe Deferred Memory Reclamation with Types
+AUTHORS: Ismail Kuru and Colin S. Gordon
+
+Overall evaluation: 2 (accept)
+
+----------- Overall evaluation -----------
+The paper proposes a type system ensuring memory safety of programs doing memory
+relcamation via RCU. The type system codifies the typical pattern of using RCU
+for memory reclamation, ensuring that a node is unlinked from the data strcture
+and then disposed after doing an RCU sync operation. The method requires the
+data structure protected by RCU to be a tree. The authors have proved the
+soundness of the type system by compiling it into Views framework, essentially
+constructing the proof in a rely-guarantee logic corresponding to a typing
+derivation. They have applied the type system to two examples, a list and a
+tree, and the latter is nontrivial.
+
+Pros:
+
+I think the contribution of the paper is very interesting. While there have been
+several proposals of logics for reasoning about programs with RCU, RCU is
+typically used according to a very rigid pattern; it is thus natural to try to
+codify this pattern into a type system instead of using the more complex logical
+reasoning. Furthermore, data structures protected by RCU are always acyclic,
+which gets rid of the usual complications of using type systems to reason about
+heap-manipulating programs. The authors also design the type system carefully,
+by adding just enough reachability information to be able to verify typical RCU
+patterns.
+
+Cons:
+
+As usual with type systems for heap-manipulating programs, the proposed type
+system requires uniqueness of certain references. While this is not a problem
+for the code inside RCU critical sections, because of the rigid pattern it
+follows, it does mean that some local variables will have to be explicitly
+nullified when you exit that code. This is more a problem when integrating
+RCU-protected code with the rest of the program code that may not follow unique
+reference conventions. The authors should acknowledge this limitation.
+
+Another weak point of the paper is presentation. First, the paper is full of
+uses of concepts before they are defined (examples below); in some places it
+looks like somebody deliberately rearranged the sections of the paper to confuse
+the reader. Second, the paper is very dense and full of complex figures with
+typing rules and the like that are not well-explained in the text. To add insult
+to injury, the authors overdid it with space hacks in the figures, typesetting
+them in \footnotesize. I think the authors should concentrate on explaining (and
+typesetting) their type system better. To make space, they could remove parts of
+the Section 6.2, a lot of which is Views boilerplate. If one knows Views, it
+doesn't tell them much new; if one doesn't, they aren't going to understanding
+Views from your description anyway.
+
+Additional comments:
+
+Section 4.1, definition of \tau: synatx for \rho not introduced.
+
+p10 the uses of framing in the type system (T-UnlinkH, T-Replace and
+T-Insert)... - which you haven't introcued.
+
+Section 4.2. It's weird that you explain the proof (referring to typing rules!)
+before explaining the typing rules used. Furthermore, you previously used the
+Hoare-like notation of the type system, but explain it only here.
+
+You're missing spaces in Fig 6, which makes it even worse to read.
+
+Section 4.3. "Replacing with a Fresh Node". - Replacing what with what? I didn't
+understand what this was about until I read the description of your tree
+example. Also, Fig 7 is too cluttered to follow. Why do you need H5, H6, etc?
+
+"Inserting a freash node" - what does "o" correspond to in Figure 7?
+
+It becomes clear only in Section 4.3 why you had to track paths. You should
+motivate the design of your type system earlier.
+
+Section 5. The explanation of the tree example is too dense to be under
+
+Section 6.1. This is ridiculous: you're describing invariants before describing
+the domain over which they are defined and referring to concepts (like
+observations) that you've never mentioned.
+
+Section 7. "which is important in practice but not memory-safety centric:" - I
+couldn't understand what the following items refer to.
+
+It would be interesting to see if your work can be generalised to handle RCU
+over weak memory. In weak memory there's a notion of robustness, i.e., a program
+does not produce weak behaviours when it follows a certain pattern. Perhaps the
+patterns of placing fences in RCU programs that ensure robustness could also be
+codified into a type system.
+
+There are lots of typos in words throughout the paper, you forgot to run
+ispell.
+
+----------------------- REVIEW 2 ---------------------
+PAPER: 16
+TITLE: Safe Deferred Memory Reclamation with Types
+AUTHORS: Ismail Kuru and Colin S. Gordon
+
+Overall evaluation: 0 (borderline paper)
+
+----------- Overall evaluation -----------
+## Summary
+
+The authors present a type system for reasoning about memory reclamation/safety in a system with
+primitives for RCU operations. This type system allows a separation of concerns, rather than proving
+a program to be memory safe while proving it to be correct this type system allows the user to focus
+on the former. The authors argue that this reduces the complexity of proofs.
+
+They provide a specification of their RCU primitives independent of implementation, a collection of
+rules for typing them, and a proof that these rules are sound and, in particular, that well-typed
+programs do not contain memory errors. They demonstrate the utility of these rules by proving the
+memory safety of two programs:
+
+ 1. A concurrent linked list
+ 2. A concurrent binary search tree
+
+The authors thus present the first modular proofs of RCU based data structures; their proofs make no
+reference to the implementation of the RCU primitives.
+
+## Feedback
+
+### Overall Feedback
+
+To start with, this paper defines a *type system*. This leads to a natural question: is the type
+system decidable? This question is not addressed, though it appears the answer is no. This means the
+type system behaves as a sort of specialized program logic rather than something that one would
+expect to be checked automatically. This is still a useful tool, provided that the type
+system/program logic is general enough to capture interesting programs and simple to use. I wish
+this point was explicitly stated and argued.
+
+The examples show that the type system is indeed general enough to capture interesting examples of
+tree-like data structures. In general it seems this type system is sufficient for data structures
+formed by finitely-branching trees of structs where there exactly one distinguished RCU data
+structure in the program. The paper states that it is doable, if tedious, to extend this type system
+to multiple such data structures.
+
+Even for this limited case, however, the type system is quite complex. I am concerned about how it
+can be extended to additional language features. For instance, there are several custom rules for
+handling `if` to properly refine the types. Does each additional language construct need a similar
+host of rules? Similarly, I wonder if this rules are indeed enough? Other language decisions seem
+unmotivated; for instance, there is no rule which allows code to be inserted between a `SyncStart`
+and `SyncStop`, is this never a desirable move?
+
+The complexity also means that I'm not sure that the simplicity of using the system is
+obvious. If indeed this type system is not decidable a user must hand-check the side conditions of
+all the rules. The annotations in the proof sketches do not do this and these annotations are
+complex. I would expect checking them would be nearly as error-prone as a derivation in a program
+logic.
+
+### Point by point feedback
+
+I have compiled some more detailed feedback section by section.
+
+#### Section 2
+
+Typo page 4, literatur instead of literature and critial instead of critical
+
+I found Figure 1 difficult to read. None of the types or annotations had been introduced at this
+point and it is hard to read the code surrounded by all of this.  The lack of indentation in some
+instances is also an obstacle. Additionally, the different fonts and spacing used throughout the
+paper for in mathematical expressions was distracting.  If such a figure is to be presented so early
+in the paper I would suggest that it not contain annotations at all and instead just contain the
+code so that a reader may see how the RCU primitives are used without seeing the details of the type
+system.
+
+There is a typo in this figure on the left line 3 as well, BagNode<rcu> should be BagNode<rcuIter>
+presumably.
+
+I found the explanation of the RCU primitives on pages 3 and 4 well written and easy to follow. The
+explanation of the assumptions and the code was very helpful.
+
+#### Section 3
+
+FName is never defined. Presumably it stands for field names? Is there a reason that structures are
+not considered values? I presume that [Val] contains essentially just integers and booleans?
+
+As mentioned above, the decomposition of `Sync` into two primitives seems convenient for the
+semantics but does it simplify any examples?
+
+The operational semantics seem helpful but I find the precise definitions to be lacking in some
+necessary details. The grammar given for alpha includes `Sync` which is never used in the examples,
+and does not include `RCUWrite` nor `RCURead` which are used immediately below. In general, a
+precise grammar of commands and alphas as well as a mention of their differences would be helpful.
+It is never specified what the \Downarrow_{tid} notation means, presumably tid refers to the thread
+id of the current thread but this should be defined somewhere. There is a typo in the rule for
+`WriteBegin`, `l` only occurs to the right of the arrow. There also isn't any mention of how these
+rules might apply to a whole collection of program. This would be helpful to see how threads blocked
+on other threads are updated. Finally, the definition a heap extended with a nullmap is confusing as
+it seems to indicate that `skip` is a value.
+
+The semantics do a good job of conveying the meaning of the new primitives, once these ambiguities
+are removed I think it will be much easier to follow.
+
+#### Section 4
+
+The comment in the first bullet point on "a delayed ownership transfer" for deallocation is
+particularly interesting. It would seem that this would be the most difficult part of the proof. I
+would like to see this point elaborated on further in the paper, perhaps in Section 6?
+
+The grammar given for types on page 7 seems incomplete. It is missing the base types but more
+importantly it's missing `rcuItr` without any parameters?
+
+The typing rules given seem to indicate that once something has been moved out of the tree (becoming
+unlinked) one loses all information about the fields it contains. Can these structs still be used
+after being unlinked but prior to being freed in the writer thread?
+
+There is no grammar given for paths but the subtyping rules do not seem to specify how "implicit
+existential quantification" is handled in subtyping. Are there any applicable rules to paths of this
+form? These implicit existentials are confusing to me; where is the "k" mentioned in them bound? Is
+it bound at the level of the context so that two paths can be viewed as having the same length or is
+it bound per path so that it functions like a Kleene star? The paragraph on page 10 about reindexing
+seems to indicate that it the first?
+
+I found the English explanation of these rules invaluable as many of these rules are quite
+complex.
+
+One minor point of confusion, throughout the rules the authors refer to the judgments subscripted
+with either M or R but neither M nor R annotate any of the actual inference rules. It would help for
+consistency, I think, if these subscripts were listed int he relevant places.
+
+#### Section 5
+
+Typo in the middle of page 14, wih instead of with.
+
+The point at the end of section 5 is particularly crucial, would it be possible to emphasize the
+modularity of this approach further by contrasting such a proof with how such a proof might proceed
+in a program logic for instance?
+
+#### Section 6
+
+The proof, despite being quite sophisticated and relying on the Views framework, is well explained
+and digestible.
+
+The explanation of the Views framework is very helpful for making this Section self contained and
+the appendix is very useful for double checking details.
+
+#### Section 7
+
+A minor point but the phrase "RCU Primitives Guaranteed to Execute Conditionally" is confusing as
+some primitives will potentially block. It seems this terminology is adapted from a reference and
+standard but a footnote might help nonexperts avoid confusion.
+
+----------------------- REVIEW 3 ---------------------
+PAPER: 16
+TITLE: Safe Deferred Memory Reclamation with Types
+AUTHORS: Ismail Kuru and Colin S. Gordon
+
+Overall evaluation: 1 (weak accept)
+
+----------- Overall evaluation -----------
+The paper introduces an operational semantics and a type system for RCU. 
+The goal of the type system is to prove data structure implementations using RCU correct 
+(not proving RCU implementations correct).
+Correctness here means that nodes, which are physically removed from the data structure (unlinked), 
+are definitely reclaimed (freed).
+
+Compared to related approaches, the type system yields simpler correctness proofs, for two reasons.
+The RCU semantics is built into the type system, not added on top of a general purpose framework.
+The reasoning is tailored towards usage patterns of RCU. 
+To demonstrate the usefulness, the authors have verified a complex binary search tree (applying types manually). 
+
+The approach is appealing because:
+(1) It verifies data structures relative to an RCU specification.
+This means correctness will carry over to any implementation of RCU that satisfies the spec.
+(2) It can be done statically (in particular without a state space exploration).
+(3) It focuses on the RCU user (not on the RCU implementor).
+The main issue is:
+(1) Can automation be achieved? The manual proofs seem intuitive, however, some type rules are quite involved.
+
+Issues
+======
+
+* How is the "that nodes removed from a data structure are always scheduled for subsequent deallocation" part of the correctness notion achieved?
+  Since this is mentioned in the abstract (and an appealing property of the type system) I would have liked this to be discussed/noted somewhere.
+  I do see how this is implemented by rule (ToRCUWrite), so adding a note at the beginning of Sect. 4 and Sect. 4.3, paragraph "Entering a Critical Section", would be nice.
+
+* Fig. 2 apparently introduces a shorthand "RCURead/RCUWrite x.f as y in C".
+  I would expect it to reduce to "ReadBegin/WriteBegin; y = x.f; C; ReadEnd/WriteEnd".
+
+* How does the type system prevent using pointers, which were read inside a critical section and are pointing into the data structure, from being used outside a critical section?
+  I guess that this could be checked using simple data flow analysis to compute the variables that may have been written in a critical section and may be read afterwards and ensure that they do not intersect. 
+  However, the paper reads as if this is judged by the presented type system.
+  I do not see where this is done.
+  In remove from Figure 1, for example, "par" is still pointing into the data structure between lines 33 and 34.
+
+
+Minor Issues
+============
+
+* Sect. 4, page 7, first item in itemize: I do not understand the second sentence.
+
+* Sect. 4 (and throughout the paper): italic versions of "Left" and "Right" are used; typographically, it seems as if "Left" is missing some \mathit or the like.
+
+* Sect. 8: fix "which which" and "opoerational"
+
