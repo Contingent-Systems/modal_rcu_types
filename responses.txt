@@ -1,60 +1,63 @@
-We graciously thank the reviewers for their careful attention and feedback. The results presented in this paper involve a novel memory safety reasoning principle for non-trivial RCU clients, and we will take into consideration the reviewers' remarks concerning the presentation. If the paper gets accepted, [ASK Colin].
-##Issue0: Introduction of the Invariants - Reviewer A -: We can introduce the informal invariants --current Section 6.1-- after introducing the logical state before the set M in page 19 introduced in Section 6.2.
+We graciously thank the reviewers for their careful attention and feedback.
+The results presented in this paper involve a novel reasoning principle for non-trivial RCU clients,
+and we will take into consideration the reviewers' remarks concerning the presentation.
 
-##Issue1: Clarifying Replacement/Insertion and Figure 7 - Reviewer A -:
- * Instead of refering to the specific type rule names at page 10, we can refer them in more general way.
- 
- * We refer to Hoare-Style in Section 4.2 to guide reading the type rules in Figure 6 and their application on linked-list(Figure 1) in pre/post-condition style.
- 
- * We agree that the caption of Figure 7 does not distinguish "inserting" and "replacing" a node clearly, we have to change it.
- 
- * Replacing a node means we replace an existing node -- H1 -- with a fresh one -- Hf -- in Figure 7. We chose to put the figure of framing for T-Replace
-   because we replace a heap node in typing BST-delete, so it does not quiter represent T-Insert, so "o" in T-Replace is "cr" in Figure 7.
+##Issue0: Introduction of the Invariants - Reviewer 1 -:
+ * We can introduce the informal invariants --current Section 6.1-- after introducing the logical state before the set M in page 19 introduced in Section 6.2.
 
-   Insertion of a new node does no replacement with any existing one. T-Insert would have a simpler and similar figure. A fresh node can be linked via using a single field, meaning that
-   path to the "o" in T-Insert can be extended with a single field, and rest of the fields has to point null for not leaking memory. Other corner-cases are mentioned in the paper.
+##Issue1: Clarifying Replacement/Insertion and Figure 7 - Reviewer 1 -:
+ * Instead of refering to the specific typerule names at page 10, we can refer them in more general way.
+ 
+ * We refer to Hoare-Style in Section 4.2 to guide reading the typerules in Figure 6 and their application on linked-list(Figure 1) in pre/post-condition style.
+ 
+ * We agree that the caption of Figure 7 does not distinguish "inserting" and "replacing" a node clearly, we have to make it clear.
+ 
+ * We chose Figure 7 to represent T-Replace(not T-Insert) which we use in BST-Delete. We replace an existing node -- H1 -- with a fresh one -- Hf. "o" in T-Replace is "cr" in Figure 7.
+
+ * Insertion of a new node(no replacement with an existsing node) is typed with T-Insert. A fresh node can be linked via using a single field, meaning that
+   path to the "o" in T-Insert can be extended with a single field, and rest of the fields has to point nulls for preventing memory leakage. Corner-cases are in the paper.
    
- * To preserve unique reachability H5 has to be framed-out.
-   Similary, there cannot be H6, meaning that there cannot be any field access to "cr"  we need framing out the H6 referenced by "a6" -- ("y" is "a6" \neq "o" is "cr") in T-Replace --
-   to prevent any object field from any other context pointing to the unlinked node. This is crucial regarding soundness
-   because all the object field mappings -- l->cr -- from any context -- y:rcuItr.\rho.N[l->cr] -- refer to an valid heap node -- where "cr" is now referencing to an unlinked node.
-   It is important to note that ensuring non-existence of H6 is also a part of unique reachability. We agree with reviewer A that representing H6 and H5 make Figure 7 look more complicated than
-   actually it is.
-   Regarding path aliases, "a0" and "a1", as we show in the paper, "a1" refers to H1 --  a1:rcuItr \rho N[r->lm, l->crl] -- but unlinking H1 makes "a1" invalid as an alias of cr:unlinked.
+ * "H"s are heap nodes and circles are local references of the writer thread. To preserve unique reachability H5,H6 has to be framed-out. Any type of aliases for cr
+   * Field mapping aliases a6:rcuItr\rhoN[l->cr]
+   * Path alias a1 has same type with cr before unlinking
+     will be invalid after unlinking as cr becomes unlinked.
 
-
-##Issue3:RCU Requirements - Reviewers A,B-:
- * "Guaranteed Read-to-Write Upgrade" is a performance optimization lifting readers to register for becoming a writer thread after a long traversal,
-    not directly related to ensuring memory safety as other 3examples. We haven't seen any RCU client benefiting from this optimization.
+##Issue2:RCU Requirements - Reviewers 1,2-:
+ * "Guaranteed ReadToWrite Upgrade" is a performance optimization lifting readers to register for becoming a writer thread after a long traversal,
+    not directly related to ensuring memory safety as other requirements do. We haven't seen any RCU client benefits from this optimization(https://github.com/urcu),
+    and this was event not a part of the fundamental requirements in early designs(https://lwn.net/Articles/262464/).
     
- *"Unconditional Execution of RCU Primitives" [Ask Colin].
+ * We can make "Unconditional Execution Of RCU Primitives" with a footnote.
 
-##Issue4: Complexity. Reusable Type Assertions. Abstract Invariants . Automation/Decidability- Reviewers B,c:
- * As reviewer B mentions raises an important point on Section 5 and raise this compare our work with Tassarotti's RCU-logic briefly in Related Work.
-   Our invariants are abstract so that we can reuse our assertions for different tree-like data-structures.
-   On the other hand, you have to come up with different revise/rewrite the invariants for different datas when using Tassarotti's RCU logic.
+##Issue3: Complexity. Reusable Type Assertions. Abstract Invariants . Automation/Decidability- Reviewers 1,2,3:
+ * To address the Reviewer 2's comment on Section 5, we would like to point out the comparison of our work with Tassarotti's logic[34] briefly in Related-Work.
+ * We can reuse our abstract invariants for different tree-like data-structures. However, Tassarotti's logic requires you to rewrite the many of the linked-list invariants for arbitrary data structures.
    
- * Yes, our system is not decidable. As Reviewer A mentions this paper is about reasoning principles and we are not concerned with decidability.
+ * We are not concerned with decidability in this paper. However, as Reviewer 1 mentions, this paper is about reasoning principles.
  
- * In aligned with decidability, reviewers B and C raise an important point about inferring the framing conditions which introduces complexity to the type rules.
+ * In aligned with decidability, reviewers 2 and 3 raise an important point about inferring the framing conditions which is the main source of the complexity in the typerules.
    But, we find this issue very important to investigate as a future work.
 
-##Issue5:Correctness Argument for Delayed Ownership Transfer/Subsequent Deallocation. Reusing Pointers. - Reviewers B,C: [TODO]
- * not permitting multiple reclamation, careless wording not prove liveness if the critical section completes after the critical section. if it completes critical section. Point to the rule. Freeable is linear, no drop etc.
- *
- *
- *
-##Issue6: Sync. RCURead-RCUWrite. Grammar for Atoms- Reviewers B,C -:
- * Clarification on Sync: SyncStart;SyncStop is confusing in Figure 1 is confusing and has to be replaced by one Sync because Sync is a conceptual construct and can be thought as one action.
+##Issue4: Sync. Grammar for Atoms- Reviewers 2,3 -:
+ * SyncStartSyncStop is confusing in Figure 1 and has to be replaced by Sync because Sync is a conceptual construct and can be thought as one action.
    We split it into two as Views considers only atoms in operational semantics -- Grammar for atoms include Sync.
    
  * The usage of "skip" in nullmap leads to having "skip" both as value and atom, we will fix it.
 
-##Issue7: Syntax/Grammar for \rho - Existential Quantification in Subtyping - Clarification on k - Reviewer B: [Colin Help] 
+##Issue5:Correctness Argument for Subsequent Deallocation. RCURead-RCUWrite. Reusing Pointers. - Reviewer 2,3:
+ * Reaching from rcuItr to unlinked and finally freeable is linear(not permitting multiple reclamation)
+ * ToRCUWrite rule asserts non-existence of references leaking memory when mutator exist
+ * Reusing pointers:[Talk with Colin]
 
-##Common Issue-8: Application of Rules to whole program does not exist - 
+##Issue6: Grammar of \rho. Clarification/Quantification of "k" in Subtyping. Type Grammar - Reviewer 2:
+ * Since grammar at page7 includes types for the write critical section, M, and "rcuItr" belongs to the read critical section, we don't skip it in the grammar at page7. 
+ * [Colin Help] on arguing "k" and grammar for path etc.
 
-##Issue11: Refining Types for Language Constructs - Reviewer B -:  
- * Yes there seems to be some duplicates in our type-rules for control flows and mutations. However, we capture typing all possible heap mutation actions.
-   Moreover, there is a bound on control flow decisions and we already have enough for  heap choice etc.[TODO]
+##Issue7: Correctness Argument for Delayed Ownership Transfer - Reviewer 2-: [Colin Help]
+
+##Issue8: Application of Rules in Section 3 to a Whole Program - Reviewer 2-: We, as Meyer and Wolf[29], have a very intuitive abstract operational semantics which provides pretty much sequential reasoning for the global state, so we think that an application of the operational semantic rules on a program wouldn't be much interesting to show.
+
+##Issue9: Refining Types for Language Constructs - Reviewer 2 -:  
+ * There exist duplicates in our typerules for control flows and mutations. However, we can type all possible heap mutation actions.
+ * There is a bound on control-flow decisions and traversals in tree-like data structures are almost based on field access which our system  already captures.
 
