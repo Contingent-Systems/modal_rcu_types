@@ -14,7 +14,7 @@ We graciously thank the reviewers for their careful attention and feedback. The 
    Insertion of a new node does no replacement with any existing one. T-Insert would have a simpler and similar figure. A fresh node can be linked via using a single field, meaning that
    path to the "o" in T-Insert can be extended with a single field, and rest of the fields has to point null for not leaking memory. Other corner-cases are mentioned in the paper.
    
- * Unique reachability is an invariant of our type system so H5 has to be framed-out as there already exists a path reaching to it from the root R.
+ * To preserve unique reachability H5 has to be framed-out.
    Similary, there cannot be H6, meaning that there cannot be any field access to "cr"  we need framing out the H6 referenced by "a6" -- ("y" is "a6" \neq "o" is "cr") in T-Replace --
    to prevent any object field from any other context pointing to the unlinked node. This is crucial regarding soundness
    because all the object field mappings -- l->cr -- from any context -- y:rcuItr.\rho.N[l->cr] -- refer to an valid heap node -- where "cr" is now referencing to an unlinked node.
@@ -22,20 +22,39 @@ We graciously thank the reviewers for their careful attention and feedback. The 
    actually it is.
    Regarding path aliases, "a0" and "a1", as we show in the paper, "a1" refers to H1 --  a1:rcuItr \rho N[r->lm, l->crl] -- but unlinking H1 makes "a1" invalid as an alias of cr:unlinked.
 
-##Issue2: Considering Weak Memory - Reviewer A -: Thanks for raising this point. We have already start working on understanding the had the informal understanding that RCU-like pattern is kind of agnostic to the underlying memory model when comparing our methodology with Tassarotti's RCU logic[]. We want to formalize the relation between robustness and staleness(offered by RCU-like programming pattern), and show clients behavior under different memory models.
 
-##Common Issue-3: Fundamental RCU Requirements - Reviewers A,B-: "Guaranteed Read-to-Write Upgrade" is a performance optimization lifting readers to register for becoming a writer thread. This is not directly related to ensuring memory safety but for utilizing long reader traversals. We haven't seen any RCU client benefiting from this optimization. "Unconditional Execution of RCU Primitives" [TODO]
+##Issue3:RCU Requirements - Reviewers A,B-:
+ * "Guaranteed Read-to-Write Upgrade" is a performance optimization lifting readers to register for becoming a writer thread after a long traversal,
+    not directly related to ensuring memory safety as other 3examples. We haven't seen any RCU client benefiting from this optimization.
+    
+ *"Unconditional Execution of RCU Primitives" [Ask Colin].
 
-##Common Issue-4: Complexity. Simplicity. Reusable Modular Proofs. Automation/Decidability: Reviewer B raises an important point on Section 5. Yes we agree and compare our work with Tassarotti's RCU-logic briefly in Related Work. Our invariants are abstract so that we can reuse our assertions for different tree-like data-structures. On the other hand, you have to come up with different revise/rewrite the invariants for different datas when using Tassarotti's RCU logic. Reviewer B raises a point about decidability, yes, our system is not decidable. As Reviewer A mentions this paper is about reasoning principles and we are not concerned with decidability. In aligned with decidability, reviewers B and C raises an important point about inferring the framing conditions which introduces complexity to the type rules. Although our paper focuses on reasoning principles, we find this issue very important to experiment as a future work.
+##Issue4: Complexity. Reusable Type Assertions. Abstract Invariants . Automation/Decidability- Reviewers B,c:
+ * As reviewer B mentions raises an important point on Section 5 and raise this compare our work with Tassarotti's RCU-logic briefly in Related Work.
+   Our invariants are abstract so that we can reuse our assertions for different tree-like data-structures.
+   On the other hand, you have to come up with different revise/rewrite the invariants for different datas when using Tassarotti's RCU logic.
+   
+ * Yes, our system is not decidable. As Reviewer A mentions this paper is about reasoning principles and we are not concerned with decidability.
+ 
+ * In aligned with decidability, reviewers B and C raise an important point about inferring the framing conditions which introduces complexity to the type rules.
+   But, we find this issue very important to investigate as a future work.
 
-## Common Issue-5: Proof Intuition for Delayed Ownership Transfer. Subsequent Deallocation. Reusing Pointers. - Reviewers B,C:   not permitting multiple reclamation, careless wording not prove liveness if the critical section completes after the critical section. if it completes critical section. Point to the rule. Freeable is linear, no drop etc.
+##Issue5:Correctness Argument for Delayed Ownership Transfer/Subsequent Deallocation. Reusing Pointers. - Reviewers B,C: [TODO]
+ * not permitting multiple reclamation, careless wording not prove liveness if the critical section completes after the critical section. if it completes critical section. Point to the rule. Freeable is linear, no drop etc.
+ *
+ *
+ *
+##Issue6: Sync. RCURead-RCUWrite. Grammar for Atoms- Reviewers B,C -:
+ * Clarification on Sync: SyncStart;SyncStop is confusing in Figure 1 is confusing and has to be replaced by one Sync because Sync is a conceptual construct and can be thought as one action.
+   We split it into two as Views considers only atoms in operational semantics -- Grammar for atoms include Sync.
+   
+ * The usage of "skip" in nullmap leads to having "skip" both as value and atom, we will fix it.
 
-## Common Issue-6: Sync and RCURead-RCUWrite - Reviewers B,C: Thank you so much for asking clarification on Sync. SyncStart;SyncStop is confusing and it has to be replaced one Sync because Sync is a conceptual construct and can be thought as one action. We split it into two as Views considers only atoms in operational semantics -- Grammar for atoms include Sync. Reviewer B captures the usage of "skip" as both value and atom, we will fix it.
+##Issue7: Syntax/Grammar for \rho - Existential Quantification in Subtyping - Clarification on k - Reviewer B: [Colin Help] 
 
-## Common Issue-7: Syntax/Grammar for \rho - Existential Quantification in Subtyping - Clarification on k - Reviewer B: [Colin Help] k does not interact with subtyping at all. 
+##Common Issue-8: Application of Rules to whole program does not exist - 
 
-##Common Issue-8: Application of Rules to whole program does not exist
+##Issue11: Refining Types for Language Constructs - Reviewer B -:  
+ * Yes there seems to be some duplicates in our type-rules for control flows and mutations. However, we capture typing all possible heap mutation actions.
+   Moreover, there is a bound on control flow decisions and we already have enough for  heap choice etc.[TODO]
 
-##Common Issue-11: Refining Types for Language Constructs - Reviewer B -:  
--- DUplicates, we capture all heap updates within the rcu critical sections. There is a bound in making control flow decisions -- There is some duplication with this and that but ....
--- Heap choice etc. 
