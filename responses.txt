@@ -1,13 +1,28 @@
-We thank the reviewers for their time and feedback. We would like to
-address the comments and questions raised by the reviewers.
-##Common Issue-0: Introduction of the Invariants - Reviewer A -: We can change the place where we introduce informal invariants Section 6.1. We can put it after intorducing logical state before the set M in page 19 introduced.
-##Common Issue-1: Clarifying Replacement/Insertion and Figure 7 - Reviewer A -: Page-10 refers to the name of the type rules. We don't need to mention these three names there,so we can remove them and refer in more general fashion. We refer to Hoare-Style in Section 4.2 to guide reading the type rules in Figure 6 and their application on linked-list(Figure 1) in pre/post-condition style. We agree that the caption of Figure 7 does not distinguish "inserting" and "replacing" a node clearly, we will change it. Replacing a node means we replace an existing node -- H1 with Hf in Figure 7. Figure 7 represents  only framing in T-Replace, not the one for T-Insert, so "o" is not represented in Figure 7. T-Insert is simpler version of T-Replace, ruling the insertion of a new node without unlinking any existing one.
+We graciously thank the reviewers for their careful attention and feedback. The results presented in this paper involve a novel memory safety reasoning principle for non-trivial RCU clients, and we will take into consideration the reviewers' remarks concerning the presentation. If the paper gets accepted, [ASK Colin].
+##Issue0: Introduction of the Invariants - Reviewer A -: We can introduce the informal invariants --current Section 6.1-- after introducing the logical state before the set M in page 19 introduced in Section 6.2.
 
-Unique reachability is an invariant of our type system so H5 has to be framed-out as there already exists a path reaching to it from the root R. Similary, there cannot be H6, meaning that there cannot be any field access to cr  we need framing out the H6 referenced by a6 -- (y is a6 \neq o is cr) in T-Replace -- to prevent any object field from any other context pointing to the unlinked node. This is crucial regarding soundness because all the object field mappings -- l->cr -- in any context y:rcuItr.\rho.N[l->cr] -- refer to an valid heap node -- where cr is now referencing to an unlinked node. It is important to note that ensuring non-existence of H6 is also a part of unique reachability. We agree with reviewer A that representing H6 and H5 make Figure 7 look more complicated than actually it is and we can refine it.
+##Issue1: Clarifying Replacement/Insertion and Figure 7 - Reviewer A -:
+ * Instead of refering to the specific type rule names at page 10, we can refer them in more general way.
+ 
+ * We refer to Hoare-Style in Section 4.2 to guide reading the type rules in Figure 6 and their application on linked-list(Figure 1) in pre/post-condition style.
+ 
+ * We agree that the caption of Figure 7 does not distinguish "inserting" and "replacing" a node clearly, we have to change it.
+ 
+ * Replacing a node means we replace an existing node -- H1 -- with a fresh one -- Hf -- in Figure 7. We chose to put the figure of framing for T-Replace
+   because we replace a heap node in typing BST-delete, so it does not quiter represent T-Insert, so "o" in T-Replace is "cr" in Figure 7.
 
-Regarding path aliases, a0 and a1, as we show in the paper, a1 refers to H1 --  a1:rcuItr \rho N[r->lm, l->crl] -- but unlinking H1 makes a1 invalid as an alias of cr:unlinked.
+   Insertion of a new node does no replacement with any existing one. T-Insert would have a simpler and similar figure. A fresh node can be linked via using a single field, meaning that
+   path to the "o" in T-Insert can be extended with a single field, and rest of the fields has to point null for not leaking memory. Other corner-cases are mentioned in the paper.
+   
+ * Unique reachability is an invariant of our type system so H5 has to be framed-out as there already exists a path reaching to it from the root R.
+   Similary, there cannot be H6, meaning that there cannot be any field access to "cr"  we need framing out the H6 referenced by "a6" -- ("y" is "a6" \neq "o" is "cr") in T-Replace --
+   to prevent any object field from any other context pointing to the unlinked node. This is crucial regarding soundness
+   because all the object field mappings -- l->cr -- from any context -- y:rcuItr.\rho.N[l->cr] -- refer to an valid heap node -- where "cr" is now referencing to an unlinked node.
+   It is important to note that ensuring non-existence of H6 is also a part of unique reachability. We agree with reviewer A that representing H6 and H5 make Figure 7 look more complicated than
+   actually it is.
+   Regarding path aliases, "a0" and "a1", as we show in the paper, "a1" refers to H1 --  a1:rcuItr \rho N[r->lm, l->crl] -- but unlinking H1 makes "a1" invalid as an alias of cr:unlinked.
 
-## Common Issue-2: Considering Weak Memory - Reviewer A -: Thanks for raising this issue, actually this shows how valid our next step is. We already had the informal understanding that RCU-like pattern is kind of agnostic to the underlying memory model when comparing our methodology with Tassarotti's full-blown RCU logic. We are now investigating methodological analysis of how agnostic RCU-like programming pattern is against underlying memory model. We want formalize the relation between robustness and staleness(offered by RCU-like programming pattern), and show clients behavior under different memory models.
+##Issue2: Considering Weak Memory - Reviewer A -: Thanks for raising this point. We have already start working on understanding the had the informal understanding that RCU-like pattern is kind of agnostic to the underlying memory model when comparing our methodology with Tassarotti's RCU logic[]. We want to formalize the relation between robustness and staleness(offered by RCU-like programming pattern), and show clients behavior under different memory models.
 
 ##Common Issue-3: Fundamental RCU Requirements - Reviewers A,B-: "Guaranteed Read-to-Write Upgrade" is a performance optimization lifting readers to register for becoming a writer thread. This is not directly related to ensuring memory safety but for utilizing long reader traversals. We haven't seen any RCU client benefiting from this optimization. "Unconditional Execution of RCU Primitives" [TODO]
 
@@ -19,6 +34,7 @@ Regarding path aliases, a0 and a1, as we show in the paper, a1 refers to H1 --  
 
 ## Common Issue-7: Syntax/Grammar for \rho - Existential Quantification in Subtyping - Clarification on k - Reviewer B: [Colin Help] k does not interact with subtyping at all. 
 
+##Common Issue-8: Application of Rules to whole program does not exist
 
 ##Common Issue-11: Refining Types for Language Constructs - Reviewer B -:  
 -- DUplicates, we capture all heap updates within the rcu critical sections. There is a bound in making control flow decisions -- There is some duplication with this and that but ....
