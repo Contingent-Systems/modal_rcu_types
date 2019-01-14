@@ -1,7 +1,4 @@
-We thank the reviewers for their careful attention and feedback.
-We will take into consideration all of your comments when we revise the paper, including some minor
-but embarrassing oversights, small omissions, and typos.
-For brevity, we focus on what seem to concern the reviewers most.
+We thank the reviewers for their careful attention and feedback. We will take into consideration all of your comments when we revise the paper, including some minor but embarrassing oversights, small omissions, and typos. For brevity, we focus on what seem to concern the reviewers most.
 
 > R1: Introduction of the invariants
 
@@ -10,15 +7,13 @@ state as we currently do in Section 6.2 (before introducing M on page 19).
 
 > R1: Clarifying Figure 7 and Replacement/Insertion
 
-Figure 7 represents T-Replace (not T-Insert) which we use in BST-Delete. We replace an existing node -- H1 -- with a fresh one -- Hf. "o" in T-Replace is "cr" in Figure 7.
-We agree that the caption of Figure 7 does not distinguish "inserting" and "replacing" a node clearly, we have to make it clear.
+Figure 7 represents T-Replace (not T-Insert) which we use in BST-Delete. We replace an existing node -- H1 -- with a fresh one -- Hf. "o" in T-Replace is "cr" in Figure 7. We agree that the caption of Figure 7 does not distinguish "inserting" and "replacing" a node clearly, we have to make it clear.
 
 * Instead of referring to the specific typerule names at page 10, we can refer them in more general way.
  
  * We refer to Hoare-Style in Section 4.2 to guide reading the typerules in Figure 6 and their application on linked-list(Figure 1) in pre/post-condition style.
 
- * Insertion of a new node(no replacement with an existing node) is typed with T-Insert. A fresh node can be linked via using a single field, meaning that
-   path to the "o" in T-Insert can be extended with a single field, and rest of the fields has to point nulls for preventing memory leakage. Corner-cases are in the paper.
+ * Insertion of a new node(no replacement with an existing node) is typed with T-Insert. A fresh node can be linked via using a single field, meaning that path to the "o" in T-Insert can be extended with a single field, and rest of the fields has to point nulls for preventing memory leakage. Corner-cases are in the paper.
    
  * "H"s are heap nodes and circles are local references of the writer thread. To preserve unique reachability H5,H6 has to be framed-out. Any type of aliases for cr
    * Field mapping aliases a6:rcuItr\rhoN[l->cr]
@@ -34,34 +29,19 @@ exposing implementation details is discussed for Tassarotti et al.'s system [34]
 
 > All reviewers: Concerns about complexity, decidability, automation
 
-Our focus in this paper, as Reviewer 1 noted, is the core reasoning principles, which in principle
-could be realized a number of different ways.  We chose a type system to focus on articulating
-those principles, under a belief well-stated by Reviewer 2: that this type system should be general
-enough to capture interesting programs, and likely requires less knowledge of advanced logical concepts to
-apply than e.g., an Iris-based logic.
+Our focus in this paper, as Reviewer 1 noted, is the core reasoning principles, which in principle could be realized a number of different ways.  We chose a type system to focus on articulating those principles, under a belief well-stated by Reviewer 2: that this type system should be general enough to capture interesting programs, and likely requires less knowledge of advanced logical concepts to apply than e.g., an Iris-based logic.
 
 Like Reviewer 2, we strongly suspect the system is currently undecidable.  As reviewer 3 intuits,
-while type checking the
-list and tree we found the choice of which rule to apply relatively straightforward, and the
-bookkeeping for the rules mostly tedious; so we are optimistic that *effective* automation is
-possible, but certainly future work.  We will be more explicit about this.
+while type checking the list and tree we found the choice of which rule to apply relatively straightforward, and the bookkeeping for the rules mostly tedious; so we are optimistic that *effective* automation is possible, but certainly future work.  We will be more explicit about this.
 
 > R2&R3: Decomposition of Sync.
 
-The Views Framework allows convenient use of only single-step *atomic* primitives.  Decomposing
-Sync into SyncStart and SyncStop is therefore required for our proof, because the synchronization
-involves two steps: book-keeping, then waiting.  Client programs would always execute both,
-together, without intervening local actions.
+The Views Framework allows convenient use of only single-step *atomic* primitives.  Decomposing Sync into SyncStart and SyncStop is therefore required for our proof, because the synchronization involves two steps: book-keeping, then waiting.  Client programs would always execute both, together, without intervening local actions.
 
 
 > R2&R3: Interactions between critical sections and non-critical-section code
 
-The type system ensures unlinked and freeable references are handled *linearly*, as they cannot be
-dropped (coerced to undef). The top-level rule ToRCUWrite does ensure unlinked references have been
-freed, by forbidding them in the critical section's post-type-environment, as Reviewer 3 noticed.
-Preventing reuse of rcuItr references across critical sections is subtler: the non-critical section
-system is *not* flow-sensitive, and does not include rcuItr.  So the initial environment lacks
-rcuItr, and "trailing" rcuItr may not escape.
+The type system ensures unlinked and freeable references are handled *linearly*, as they cannot be dropped (coerced to undef). The top-level rule ToRCUWrite does ensure unlinked references have been freed, by forbidding them in the critical section's post-type-environment, as Reviewer 3 noticed. Preventing reuse of rcuItr references across critical sections is subtler: the non-critical section system is *not* flow-sensitive, and does not include rcuItr.  So the initial environment lacks rcuItr, and "trailing" rcuItr may not escape.
 
 > R2: Clarification/Quantification of "k" in Subtyping.
 
@@ -79,8 +59,7 @@ We do have multiple type rules for many language constructs. However, the growth
 bounded:
 
 - Any control flow construct can be used to distinguish field contents, and therefore paths; so
-  these rules each require some rule to reflect those distinctions into types: one field-refining rule per control flow
-  construct, along with one general rule.
+  these rules each require some rule to reflect those distinctions into types: one field-refining rule per control flow construct, along with one general rule.
 - We have all the heap mutation rules we would need for a larger language: one per conceptual
   update (linking fresh, replacing, or simply unlinking a node)
 
