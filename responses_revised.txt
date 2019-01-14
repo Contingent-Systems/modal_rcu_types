@@ -47,7 +47,8 @@ The type system ensures unlinked and freeable references are handled *linearly*,
 
 
 The k representing existentially-quantified finite path repetition is implicitly quantified at the
-environment level, and therefore does not interact with the subtyping judgment 
+full context level so different paths can be related, as you noticed, and therefore does not
+interact with the subtyping judgment.  We can and should make this more explicit.
 
 
 > R2: Delayed Ownership Transfer
