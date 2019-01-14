@@ -1,25 +1,19 @@
-﻿We thank the reviewers for their careful attention and feedback. We will take into consideration all of your comments when we revise the paper, including some minor but embarrassing oversights, small omissions and typos. For brevity, we focus on what seem to concern the reviewers most.
+We thank the reviewers for their careful attention and feedback. We will take into consideration all of your comments about the presentation when we revise the paper.
 
+> R1: Presentation 
+Thanks for pointing out the detailed presentation issues. We have early versions which capture many those, but we will consider binding T-Replace to Figure 7, the introduction of invariants after the logical state in Section 6.2 carefully.
 
-> R1: Presentation
-
-
-We agree on almost all of the refinements proposed but especially:
-- Rearrangements e.g., introducing invariant after defining logical state in Section 6.2.
-- Making Figure 7 represent only *replacing* H1 with Hf  (T-Replace), not unique reachability (framing-out H5) and have a definite caption distinguishing  *insertion* (T-Insert) from *replacement*.
     
 > R2: Emphasis on not appealing to implementation details 
 
 
-We can try to make this clearer earlier.  Some of the requested comparison to a program logic
-exposing implementation details is discussed for Tassarotti et al.'s system [34] in Related Work
-(p.24).
+We can make this clearer earlier, some comparisons to Tassarotti et al.'s program logic [34] can be found in p.24. We want to emphasize that there exists no clean separation between RCU primitive and linked-list specifications as their RCU primitives are linked-list dependent.
 
 
 > All reviewers: Concerns about complexity, decidability, automation
 
 
-Our focus in this paper, as Reviewer 1 noted, is the core reasoning principles, which in principle could be realized a number of different ways.  We chose a type system to focus on articulating those principles, under a belief well-stated by Reviewer 2: that this type system should be general enough to capture interesting programs, and likely requires less knowledge of advanced logical concepts to apply than e.g., an Iris-based logic.
+Our focus in this paper, as Reviewer 1 noted, is the core reasoning principles where we chose a type system to focus on articulating those principles. As well-stated by Reviewer 2: this type system should be general enough to capture interesting programs, and likely requires less knowledge of advanced logical concepts to apply than e.g., an Iris-based logic.
 
 
 Like Reviewer 2, we suspect the system is currently undecidable.  As reviewer 3 intuits,
@@ -29,10 +23,10 @@ while type checking the list and tree we found the choice of which rule to apply
 > R2&R3: Decomposition of Sync, RCUWrite/Begin.
 
 
-As Reviewer 2 and Reviewer 3 pointed out, there are semantically misleading typos (ex: wrong brackets [|, missing y =x.f;C) in Figure 2 for desugaring these constructs, we will fix them. 
+As Reviewer 2 and Reviewer 3 pointed out, there are semantically misleading typos (ex: wrong brackets [|, missing y =x.f;C) in Figure 2 in desugaring, we will fix them. 
 
 
-The Views Framework allows convenient use of only single-step *atomic* primitives.  Decomposing Sync into SyncStart and SyncStop is therefore required for our proof, because the synchronization involves two steps: book-keeping, then waiting. Client programs would always execute both, together, without intervening local actions.
+The Views Framework allows convenient use of only single-step *atomic* primitives.  Decomposing Sync into SyncStart and SyncStop is therefore required for our proof because the synchronization involves two steps: book-keeping, then waiting. Client programs would always execute both, together, without intervening local actions.
 
 
 
@@ -40,7 +34,7 @@ The Views Framework allows convenient use of only single-step *atomic* primitive
 > R2&R3: Interactions between critical sections and non-critical-section code
 
 
-The type system ensures unlinked and freeable references are handled *linearly*, as they cannot be dropped (coerced to undef). The top-level rule ToRCUWrite does ensure unlinked references have been freed, by forbidding them in the critical section's post-type-environment, as Reviewer 3 noticed. Preventing reuse of rcuItr references across critical sections is subtler: the non-critical section system is *not* flow-sensitive, and does not include rcuItr.  So the initial environment lacks rcuItr, and "trailing" rcuItr may not escape.
+The type system ensures unlinked and freeable references are handled *linearly*, as they cannot be dropped (coerced to undef). The top-level rule ToRCUWrite does ensure unlinked references have been freed, by forbidding them in the critical section's post-type-environment, as Reviewer 3 noticed. Preventing the reuse of rcuItr references across critical sections is subtler: the non-critical section system is *not* flow-sensitive, and does not include rcuItr.  So the initial environment lacks rcuItr, and "trailing" rcuItr may not escape.
 
 
 > R2: Clarification/Quantification of "k" in Subtyping.
@@ -54,7 +48,7 @@ interact with the subtyping judgment.  We can and should make this more explicit
 > R2: Delayed Ownership Transfer
 
 
-We can expand on this in Section 6: An object *observed* as *unlinked* by the writer cannot be reclaimed until no readers *observe* it as *iterator* -- when the writer observes it as *freeable*.
+We can expand on this in Section 6.1: Once an object is observed as *unlinked* by the writer in the *observation-map* of the logical state, it waits for all other threads’ mappings to *iterator* observation dropped (object is mapped to *freeable* for the writer), and reclaim it.
 
 
 
@@ -70,3 +64,6 @@ bounded:
   these rules each require some rule to reflect those distinctions into types: one field-refining rule per control flow construct, along with one general rule.
 - We have all the heap mutation rules we would need for a larger language: one per conceptual
   update (linking fresh, replacing, or simply unlinking a node)
+
+
+
