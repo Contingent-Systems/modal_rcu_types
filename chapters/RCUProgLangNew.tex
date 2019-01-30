@@ -534,20 +534,20 @@ checks that for every \textsf{rcuItr} reference $n$ in $\Gamma$, it is not a pat
        \node[fresh node] (2) [above of=1] {$H_f$};
        \node[solid node] (3) [right of=1] {$H_2$};
        \node[solid node] (4) [above  of=3] {$H_4$};
-              \node[solid node] (5) [above left of=0] {$H_5$};
-       \node[solid node] (6) [above left of = 1]{$H_6$};
+     %         \node[solid node] (5) [above left of=0] {$H_5$};
+     %  \node[solid node] (6) [above left of = 1]{$H_6$};
       
 
        \node[redreader node] (r0) [below  of= 0]  {$pr$};
        \node[redreader node] (r1) [below  of= 1]  {$cr$};
-       \node[freshollow node] (f)  [above  of= 2] {$cf$};
+       \node[freshollow node] (f)  [left  of= 2] {$cf$};
         \node[reader node] (crl)  [right  of= 3] {$crl$};
        \node[reader node] (lm) [right  of= 4]  {$lm$};
        \node[readerr node] (r1a) [below   of= R]  {$a_0$};
        \node[readerr node] (r2a)  [below of= 3] {$a_1$};
 
-       \node[reader node] (r1f) [above  of= 5]  {$a_5$};
-       \node[reader node] (r2f)  [above  of= 6] {$a_6$};
+     %  \node[reader node] (r1f) [above  of= 5]  {$a_5$};
+     %  \node[reader node] (r2f)  [above  of= 6] {$a_6$};
 
      \path[->]  (R) edge node[below] {$l$} (0);
      \path[draw=red,->]  (0) edge node[below] {$l$} (1);
@@ -557,8 +557,8 @@ checks that for every \textsf{rcuItr} reference $n$ in $\Gamma$, it is not a pat
      \path[dashed,draw=green,->]  (2) edge node {$l$} (3);
 
 
-     \path[dashed,->]  (5) edge node {$l$} (0);
-     \path[dashed,->]  (6) edge node {$l$} (1);
+    % \path[dashed,->]  (5) edge node {$l$} (0);
+    % \path[dashed,->]  (6) edge node {$l$} (1);
 
 
      \path[draw=red,->]  (1) edge node {$r$} (4);
@@ -571,15 +571,15 @@ checks that for every \textsf{rcuItr} reference $n$ in $\Gamma$, it is not a pat
      \path[dashed,->]  (r1a) edge node {} (0);
      \path[dashed,->]  (r2a) edge node  {}  (1);
      
-     \path[->]  (r1f) edge  node  {}   (5);
-     \path[->]  (r2f) edge  node  {}   (6);
+    % \path[->]  (r1f) edge  node  {}   (5);
+    % \path[->]  (r2f) edge  node  {}   (6);
 
 
      %\path[draw=red, ->] (2) edge node[below] {$r$} (nl);
  ;
  \end{tikzpicture}
 
- \caption{Safe linking of the \textit{fresh} heap node pointed by \texttt{curF}-$cf$}
+ \caption{\textit{Freshly} allocated heap node pointed by \texttt{curF}-$cf$}
  \label{fig:frframeout}
  \end{subfigure} \quad\quad
  \begin{subfigure}[b]{.4\linewidth}
@@ -611,19 +611,19 @@ checks that for every \textsf{rcuItr} reference $n$ in $\Gamma$, it is not a pat
        \node[solid node] (2) [above of=1] {$H_f$};
        \node[solid node] (3) [right of=1] {$H_2$};
        \node[solid node] (4) [above  of=3] {$H_4$};
-       \node[solid node] (5) [above of=R] {$H_5$};
-       \node[solid node] (6) [above of = 0]{$H_6$};
+       %\node[solid node] (5) [above of=R] {$H_5$};
+       %\node[solid node] (6) [above of = 0]{$H_6$};
 
        \node[redreader node] (r0) [below  of= 0]  {$pr$};
        \node[rredreader node] (r1) [below  of= 1]  {$cr$};
-       \node[reader node] (f)  [above  of= 2] {$cf$};
+       \node[reader node] (f)  [left  of= 2] {$cf$};
         \node[reader node] (crl)  [ right  of= 3] {$crl$};
        \node[reader node] (lm) [right  of= 4]  {$lm$};
        \node[readerr node] (r1a) [below   of= R]  {$a_0$};
        \node[readerr node] (r2a)  [below of= 3] {$a_1$};
 
-      \node[reader node] (r1f) [above  of= 5]  {$a_5$};
-      \node[reader node] (r2f)  [above  of= 6] {$a_6$};
+      %\node[reader node] (r1f) [above  of= 5]  {$a_5$};
+      %\node[reader node] (r2f)  [above  of= 6] {$a_6$};
 
      \path[->]  (R) edge node[below] {$l$} (0);
     % \path[draw=red,->]  (0) edge node[below] {$l$} (1);
@@ -643,8 +643,8 @@ checks that for every \textsf{rcuItr} reference $n$ in $\Gamma$, it is not a pat
 
      \path[dashed,->]  (r1a) edge node {} (0);
      \path[dashed,->]  (r2a) edge node  {}  (1);
-          \path[dashed,->]  (5) edge node {$l$} (0);
-     \path[dashed,->]  (6) edge node {$l$} (1);
+     %     \path[dashed,->]  (5) edge node {$l$} (0);
+     %\path[dashed,->]  (6) edge node {$l$} (1);
 
 
      %\path[dashed,->]  (r2a) edge  node  {}   (4);
@@ -652,17 +652,17 @@ checks that for every \textsf{rcuItr} reference $n$ in $\Gamma$, it is not a pat
      \path[draw=red,->]  (0) edge node  {$l$}  (2);
 
 
-     \path[->]  (r1f) edge  node  {}   (5);
-     \path[->]  (r2f) edge  node  {}   (6);
+    % \path[->]  (r1f) edge  node  {}   (5);
+    % \path[->]  (r2f) edge  node  {}   (6);
 
 
  ;
  \end{tikzpicture}
 
- \caption{Safe replacement of the heap node pointed by \texttt{cur}-$cr$ with the \textit{fresh} heap node pointed by \texttt{curF}-$cf$}
+ \caption{Safe replacement of the heap node pointed by \texttt{cur}-$cr$ with the \textit{fresh} heap node pointed by \texttt{curF}-$cf$.}
  \label{fig:freshframeout}
  \end{subfigure}
- \caption{Linking/Replacing Heap Nodes}
+ \caption{Replacing \textit{existing} heap nodes with \textit{fresh} ones. Type rule \textsc{T-Replace}.}
  \label{fig:alloc}\vspace{-2mm}
  \end{figure}
 %\textit{\textbf{Creating a Fresh Node}} - We deffered answering the question: "Why do we need a separate type \textsf{rcuFresh} instead of using \textsf{rcuItr} for typing a freshly allocated heap node in \textsf{Write} critical section ?". To understand and answer the question easily, we illustrate the setting for creating a fresh \textsf{BST} heap node and linking it in Figures \ref{fig:frframeout} and \ref{fig:freshframeout}.
