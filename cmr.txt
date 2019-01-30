@@ -9,3 +9,6 @@ make sure that we remove the h5 h6
 Figure 3 semantics do have the proper desugaring syntax, especially brackets
 
 Introduce invariant after logical state
+
+
+footnote for the RCU requirements.
