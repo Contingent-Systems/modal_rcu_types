@@ -109,7 +109,7 @@ The more interesting primitives are the write-side primitives and memory reclama
 \lstinline|SyncStart| and \lstinline|SyncStop| implement \emph{grace periods}~\cite{grc}: a mechanism to wait for readers to finish with any nodes the writer may have unlinked.  A grace period begins when a writer requests one, and finishes when all reader threads active \emph{at the start of the grace period} have finished their current critical section.
 Any nodes a writer unlinks before a grace period are physically unlinked, but not logically unlinked until after one grace period.
 
-An attentive reader might already realize that our usage of logical/physical unlinking is different than the one used in data-structures literatur where typically a \textit{logical deletion} (marking/unlinking) is followed by a \textit{physical deletion} (free).
+An attentive reader might already realize that our usage of logical/physical unlinking is different than the one used in data-structures literature where typically a \textit{logical deletion} (marking/unlinking) is followed by a \textit{physical deletion} (free).
 Because all threads are forbidden from holding an interior reference into the data structure after leaving their critical sections, waiting for active readers to finish their critical sections ensures they are no longer using any nodes the writer unlinked prior to the grace period.
 This makes actually freeing an unlinked node after a grace period safe.
 %a period of time where the writer waits for all readers active at the that after a node is logically removed from a data structure, the freeing thread must wait for some time to ensure threads that may have read the pointer before it was unlinked are done using the reference.  Typically, the notion of a reader thread being ``done'' with a reference is tied to its read-side critical section: reader threads are forbidden to use interior pointers to inside an RCU structure after leaving their critical section --- even if the use would occur in a subsequent critical section, since the referenced memory may have been reclaimed.
@@ -125,7 +125,7 @@ To date, every description of RCU semantics, most centered around the notion of 
 To use these semantics or a concrete implementation correctly, client code must ensure:
 \begin{itemize}
 \item Reader threads never modify the structure
-\item No thread holds an interior pointer into the RCU structure across critial sections
+\item No thread holds an interior pointer into the RCU structure across critical sections
 \item Unlinked nodes are always freed by the unlinking thread \emph{after} the unlinking, \emph{after} a grace period, and \emph{inside} the critical section
 \item Nodes are freed at most once
 \end{itemize}
