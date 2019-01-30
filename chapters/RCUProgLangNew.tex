@@ -149,7 +149,7 @@ It is sometimes necessary to use imprecise types --- mostly for control flow joi
 }
 \end{mathpar}
 \vspace{-2em}
-\caption{Sub-Typing Rules}
+\caption{Subtyping rules.}
 \label{fig:sub-typing}
 \end{figure}
 
@@ -211,7 +211,7 @@ The final judgment $\vdash\Gamma\prec:\Gamma'$ extends subtyping to all assumpti
 }
 \end{mathpar}
 \vspace{-2em}
-\caption{Type Rules for Control-Flow.}
+\caption{Type rules for control-flow.}
 \label{fig:type-judgements-for-cf}
 \end{figure}
 
@@ -251,7 +251,7 @@ if(par.Left == cur){
 $\assert{cur:\mathsf{rcuItr}\; Left|Right.Left|Right \;\{\}, \;\; par:\mathsf{rcuItr}\;  Left|Right \;\{Left|Right\mapsto cur\}}$
 \end{lstlisting}
 \vspace{-1em}
-\caption{Choosing fields to read}
+\caption{Choosing fields to read.}
 \label{fig:altfield}
 \end{figure}
 
@@ -305,7 +305,7 @@ The type system checks that this unlink disconnects only one node: note how the 
 \mypar{Grace and Reclamation}
 After the referent of \texttt{cur} is unlinked, concurrent readers traversing the list may still hold references.  So it is not safe to actually reclaim the memory until after a grace period.
 Lines 28--29 of \lstinline|remove| initiate a grace period and wait for its completion.  At the type level, this is reflected by the change of \lstinline|cur|'s type from \textsf{unlinked} to \textsf{freeable}, reflecting the fact that the grace period extends until any reader critical sections that might have observed the node in the structure have completed.
-This matches the precondition required by our rules for calling \lstinline|Free|, which further changes the type of \lstinline|cur| to \textsf{undef} reflecting that \lstinline|cur| is no longer a valid reference. The type system also ensures no local (writer) aliases exist to the freed node and understanding this enforcement is twofold. First, the type system requires that only \textsf{unlinked} heap nodes can be freed. Second, framing relations in related rules (\textsc{T-UnlinkH}, \textsc{T-Replace} and \textsc{T-Insert}) 
+This matches the precondition required by our rules for calling \lstinline|Free|, which further changes the type of \lstinline|cur| to \textsf{undef} reflecting that \lstinline|cur| is no longer a valid reference. The type system also ensures no local (writer) aliases exist to the freed node and understanding this enforcement is twofold. First, the type system requires that only \textsf{unlinked} heap nodes can be freed. Second, framing relations in related rules (\textsc{T-UnlinkH}, \textsc{T-Replace} and \textsc{T-Insert} in Figure \ref{fig:tss}) 
 ensure no local aliases still consider the node linked.
 %enforce \textit{locality} on the effects of the heap update -- only one node becomes \textsf{unlinked}.
 
@@ -454,7 +454,7 @@ r\textsf{:rcuItr}  \rho_1  \N_2, \Gamma
 \Gamma \vdash \textsf{RCUWrite}\, x.f \textsf{ as }y\textsf{ in } \{ C \}
 }
 \end{mathpar}
-\caption{Type Rules for \textsf{Write} side critical section}
+\caption{Type rules for \textsf{write} side critical section.}
 \label{fig:tss}
 \end{figure}
 Figure \ref{fig:tss} gives the primary type rules used in checking write-side critical section code as in Figure \ref{fig:rculist}.
