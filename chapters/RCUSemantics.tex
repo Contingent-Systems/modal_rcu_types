@@ -25,10 +25,9 @@ The root location $rt$ is the root of  an \textsf{RCU} data structure. We model 
 The reader set $R$ tracks the thread IDs (TIDs) of all threads currently executing a read block. 
 The bounding set $B$ tracks which threads the writer is \emph{actively} waiting for during a grace period --- it is empty if the writer is not waiting.
 \begin{figure*}\scriptsize%%%%%%%%%%%%OPdERATIONAL SEMANTICS%%%%%%%%%%%%%%
-  \grammar
-   $\desugarsync$ \\
-  $\desugarwrite$\\
-  $\desugarread$
+  \grammar $\desugarsync$ %\\
+%  $\desugarwrite$\\
+%  $\desugarread$
 \[\begin{array}{c@{\;}rl@{\Downarrow_{\mathit{tid}}}ll} 
 (\textsc{RCU-WBegin}) & \llbracket\texttt{WriteBegin}\rrbracket & (s,h,\mathsf{unlocked},rt,R,B) &(s,h,l,rt,R,B) & \\
 (\textsc{RCU-WEnd}) & \llbracket\texttt{WriteEnd}\rrbracket & (s,h,l,rt,R,B) & (s,h,\mathsf{unlocked},rt,R,B) & \\

@@ -1,12 +1,12 @@
-run ispell checker
+run ispell checker -- done
 
-make sure that inserting/replacing a node are different actions
-  - this is going to be done in both text
-  - Figure 7 and its captions
+make sure that inserting/replacing a node are different actions -- done
+  - this is going to be done in both text -- done 
+  - Figure 7 and its captions -- done 
 
-make sure that we remove the h5 h6
+make sure that we remove the h5 h6 -- done
 
-Figure 3 semantics do have the proper desugaring syntax, especially brackets
+Figure 3 desugaring syntax, especially brackets -- done
 
 Introduce invariant after logical state
 

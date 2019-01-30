@@ -139,9 +139,9 @@
 \newcommand{\atomeval}{\db{-}:\atom}
 \newcommand{\rcuwrite}{\textsf{RCUWrite} \text{ x.f as y in }\, \{ C \}}
 \newcommand{\rcuread}{\textsf{RCURead} \text{ x.f as y in }\, \{ C \}}
-  \newcommand{\desugarread}{ \db{\rcuread}_{\;\;\Downarrow_{\mathrm{tid}}\;\;} \overset{\Delta}{=} \texttt{\textsf{ReadBegin}}; \{C\}  ;\textsf{ReadEnd} }
-  \newcommand{\desugarwrite}{\db{\rcuwrite}_{\;\;\Downarrow_{\mathrm{tid}}\;\;} \overset{\Delta}{=} \texttt{\textsf{WriteBegin}} ; \{C\}  ;\textsf{WriteEnd}}
-    \newcommand{\desugarsync}{\db{\textsf{Sync}}_{\;\;\Downarrow_{\mathrm{tid}}\;\;} \overset{\Delta}{=} \texttt{\textsf{SyncStart};\textsf{SyncStop}}}
+  \newcommand{\desugarread}{ \rcuread \overset{\Delta}{=} \texttt{\textsf{ReadBegin}}; y = x.f;\{C'\}  ;\textsf{ReadEnd} }
+  \newcommand{\desugarwrite}{\rcuwrite \overset{\Delta}{=} \texttt{\textsf{WriteBegin}} ; y = x.f ; \{C'\}  ;\textsf{WriteEnd}}
+    \newcommand{\desugarsync}{\textsf{Sync} \overset{\Delta}{=} \texttt{\textsf{SyncStart};\textsf{SyncStop}}}
   %\newcommand{\boundpath}{\bar f_{i}^{k} = \forall_{k \in \mathbb{N},i \in \fnameenum} \ldotp  \underbrace{f_{i}^{0} \ldots f_{i}^{k}}_\text{$\mid$ $f_{i}^{0}$ \ldots $f_{i}^{k}$ $\mid$ = k} }
 \newcommand{\subt}{\prec:}
 %typing rules
