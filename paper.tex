@@ -1,7 +1,7 @@
 %\documentclass[a4paper,UKenglish]{lipics-v2016}
 % For two-column layout for PPoPP, change 'acmsmall' to 'sigplan'.  Probably also turn on the
 % 'review' option, and the 'anonymous' option if it's DBR
-\documentclass[runningheads,a4paper]{llncs}
+\documentclass[runningheads]{llncs}
 %This is a template for producing LIPIcs articles.
 %See lipics-manual.pdf for further information.
 %for A4 paper format use option "a4paper", for US-letter use option "letterpaper"
@@ -1191,19 +1191,17 @@ sn & \textsf{struct name}   & &  i,j & \mathsf{nat (indices)}  \\
 % If the paper title is too long for the running head, you can set
 % an abbreviated paper title here
 %
-\author{Ismail Kuru\and
-  Colin S. Gordon}
-%\orcidID{0000-0002-5796-2150}
-%colin's \orcidID{0000-0002-9012-4490}
+\author{Ismail Kuru \inst{1}\orcidID{0000-0002-5796-2150} \and
+Colin S. Gordon\inst{1}\orcidID{0000-0002-9012-4490}}
 %%%Third Author\inst{3}\orcidID{2222--3333-4444-5555}}
 %
 \authorrunning{I. Kuru et al.}
 % First names are abbreviated in the running head.
 % If there are more than two authors, 'et al.' is used.
 %
-\institute{Drexel University, Philadelphia PA 19104, USA %\and
+\institute{Drexel University \\ %\and
 %%%Springer Heidelberg, Tiergartenstr. 17, 69121 Heidelberg, Germany
-\email{ik335@drexel.edu,csgordon@drexel.edu}}%\\
+\email{\{ik335,csgordon\}@drexel.edu}}%\\
 %%%\url{http://www.springer.com/gp/computer-science/lncs} \and
 %%%ABC Institute, Rupert-Karls-University Heidelberg, Heidelberg, Germany\\
 %%%\email{\{abc,lncs\}@uni-heidelberg.de}}
@@ -1222,6 +1220,7 @@ Our type system allows us to give the first proofs of memory safety for RCU link
 %In this paper we focus on RCU which is based on the notion called grace period which means objects are not freed up until all pre-existing read operations on them are complete. Based on this guarantee provided by RCU semantics, a thread can access shared memory locations without holding any responsibility of being aware that they get deallocated. This optimistic memory access makes memory management one of the most complex aspects of the algorithms, because it makes hard to decide when memory reclamation is safe.
 
 %We propose a flow-sensitive type system ~\cite{Foster:2002:FTQ:512529.512531} based on Ownership Types ~\cite{Clarke:2007:ACO:1787553.1787559} which enforces correct usage of RCU to provide memory safety for data structures which are clients of RCU.
+\keywords{Deferred Memory Reclamation \and Grace Period \and Read-Copy-Update Programming \and Memory Safety \and Type System \and Views Framework.}
  \end{abstract}\raggedbottom
 \input{chapters/RCUTypesIntro.tex}\raggedbottom
 \input{chapters/RCUTypesMotivation.tex}\raggedbottom
