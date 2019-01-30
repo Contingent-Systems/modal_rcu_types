@@ -7,7 +7,7 @@ We use the RCU linked-list-based bag~\cite{McKenney2015SomeEO} from Figure \ref{
 \begin{lstlisting}[basicstyle=\scriptsize\ttfamily]
 struct BagNode{
   int data;
-  BagNode<rcu> Next;
+  BagNode<rcuItr> Next;
 }
 BagNode<rcuRoot> head;
 void add(int toAdd){
