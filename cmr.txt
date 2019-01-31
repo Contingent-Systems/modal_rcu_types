@@ -8,7 +8,14 @@ make sure that we remove the h5 h6 -- done
 
 Figure 3 desugaring syntax, especially brackets -- done
 
+----------------------------------------------------------------------------
+
 Introduce invariant after logical state
+
+
+There should be more explanation on the enter/exit critical sections.
+
+Make Appendix referces proper
 
 
 footnote for the RCU requirements.
