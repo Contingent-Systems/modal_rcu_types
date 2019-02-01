@@ -689,6 +689,6 @@ There is also another rule, \textsc{T-LinkF-Null}, not shown in Figure \ref{fig:
 
 \mypar{Entering a Critical Section}
 (\textit{\textbf{Referencing inside \textsf{RCU} Blocks}})
-There are two rules(\textsc{ToRCURead} in Figure \ref{fig:tssr} Appendix \ref{appendix:readtypes} and \textsc{ToRCUWrite} in Figure \ref{fig:tss}) for moving to \textsf{RCU} typing: one for entering a write region, and one for a read region.
+The type system ensures \textsf{unlinked} and \textsf{freeable} references are handled linearly, as they cannot be dropped -- coerced to \textsf{undef}. The top-level rule \textsc{ToRCUWrite} in Figure \ref{fig:tss} ensures \textsf{unlinked} references have been freed by forbidding them in the critical section's post-type environment. You can find analogous rule \textsc{ToRCURead} for the read critical section in our technical report Appendix \ref{appendix:readtypes} Figure \ref{fig:tssr}.
 
-The type system ensures unlinked and freeable references are handled *linearly*, as they cannot be dropped (coerced to undef). The top-level rule ToRCUWrite ensures unlinked references have been freed, by forbidding them in the critical section's post-type-environment, as Reviewer 3 noticed. Preventing the reuse of rcuItr references across critical sections is subtler: the non-critical section system is *not* flow-sensitive, and does not include rcuItr.  So the initial environment lacks rcuItr, and "trailing" rcuItr may not escape.
+Preventing the reuse of \textsf{rcuItr} references across critical sections is subtler: the non-critical section system is not flow-sensitive, and does not include \textsf{rcuItr}. So the initial environment lacks \textsf{rcuItr} references, and trailing \textsf{rcuItr} references may not escape.
