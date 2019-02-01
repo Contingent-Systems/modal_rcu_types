@@ -90,7 +90,7 @@ As with concrete RCU implementations, we assume threads operating on a structure
 
 This distinction, and some runtime bookkeeping associated with the read- and write-side critical sections, allow this model to determine at modest cost when a node unlinked by the writer can safely be reclaimed.
 
-Figure \ref{fig:rculist} gives the code for adding and removing nodes from a bag. Type checking for all code, including membership queries for bag, can be found in Appendix \ref{appendix:bag_paul}. Algorithmically, this code is nearly the same as any sequential implementation. There are only two differences.
+Figure \ref{fig:rculist} gives the code for adding and removing nodes from a bag. Type checking for all code, including membership queries for bag, can be found in our technical report~\cite{isotek} Appendix \ref{appendix:bag_paul}. Algorithmically, this code is nearly the same as any sequential implementation. There are only two differences.
 First, the read-side critical section in \texttt{member} is indicated by the use of \lstinline|ReadBegin| and \lstinline|ReadEnd|; the write-side critical section is between \lstinline|WriteBegin| and \lstinline|WriteEnd|.
 Second, rather than immediately reclaiming the memory for the unlinked node, \texttt{remove} calls \lstinline|SyncStart| to begin a \emph{grace period} --- a wait for reader threads that may still hold references to unlinked nodes to finish their critical sections.
  %with saving the readers on the detached node as bounding readers. 

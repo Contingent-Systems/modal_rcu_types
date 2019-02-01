@@ -15,12 +15,12 @@ The type system ensures memory safety by enforcing these sufficient conditions:
 
 We also demonstrate that the type system is not only sound, but useful:
 we show how it types Figure \ref{fig:rculist}'s list-based bag implementation~\cite{McKenney2015SomeEO}.
-We also give type checked fragments of a binary search tree to motivate advanced features of the type system; the full typing derivation can be found in Appendix \ref{appendix:bst_del}. The BST requires type narrowing operations that refine a type based on dynamic checks (e.g., determining which of several fields links to a node).
+We also give type checked fragments of a binary search tree to motivate advanced features of the type system; the full typing derivation can be found our technical report~\cite{isotek} Appendix \ref{appendix:bst_del}. The BST requires type narrowing operations that refine a type based on dynamic checks (e.g., determining which of several fields links to a node).
 In our system, we presume all objects contain all fields, but the number of fields is finite (and in our examples, small). This avoids additional overhead from tracking well-established aspects of the type system --- class and field types and presence, for example --- and focus on checking correct use of RCU primitives.  Essentially, we assume the code our type system applies to is already type-correct for a system like C or Java's type system.
 \subsection{\textsf{RCU} Type System for \textsf{Write} Critical Section}
 \label{subsection:rcu-typing}
 Section \ref{subsection:rcu-typing} introduces \textsf{RCU} types and the need for subtyping. Section \ref{subsection:type-action}, shows how types describe program states, through code for Figure \ref{fig:rculist}'s list-based bag example. Section \ref{subsection:type-rules} introduces the type system itself.
-
+\paragraph{}
 \mypar{\textsf{RCU} Types}
 \label{subsection:typwrt}
 There are six types used in \textsf{Write} critical sections
@@ -34,21 +34,15 @@ The field map and path components track reachability from the root, and local re
 
 Read-side critical sections use \textsf{rcuItr} without path or field map components.  These components are both unnecessary for readers (who perform no updates) and would be invalidated by writer threads anyways.
 %Similar to the ones in \textsf{Write} critical section, they  point into a shared RCU data structure. 
-Under the assumption that reader threads do not hold references across critical sections, the read-side rules essentially only ensure the reader performs no writes, so
-we omit the reader critical section type rules.  They may be found in 
-Appendix \ref{appendix:readtypes}.
+Under the assumption that reader threads do not hold references across critical sections, the read-side rules essentially only ensure the reader performs no writes, so we omit the reader critical section type rules. They can be found in our technical report~\cite{isotek} Appendix \ref{appendix:readtypes}.
  %together with the other standard rules (\textsc{T-Exchange}, \textsc{T-Par}, \textsc{T-Seq}, \textsc{T-Conseq} and \textsc{T-Skip}).
-\paragraph{unlinked} is the type given to references to unlinked heap locations --- objects previously part of the structure, but now unreachable via the heap. A heap location referenced by an unlinked reference may still be accessed by reader threads, which may have acquired their own references before the node became unreachable.  Newly-arrived readers, however, will be unable to gain access to these referents.
+\paragraph{unlinked} is the type given to references to unlinked heap locations --- objects previously part of the structure, but now unreachable via the heap. A heap location referenced by an unlinked reference may still be accessed by reader threads, which may have acquired their own references before the node became unreachable. Newly-arrived readers, however, will be unable to gain access to these referents.
 \paragraph{freeable} is the type given to references to an unlinked heap location that is safe to reclaim because it is known that no concurrent readers hold references to it.
 Unlinked references become freeable after a writer has waited for a full grace period.
-
-\paragraph{undef} is the type given to references where the content of the referenced location is inaccessible.
-A local variable of type \textsf{freeable} becomes \textsf{undef} after reclaiming that variable's referent.
-
+\paragraph{undef} is the type given to references where the content of the referenced location is inaccessible. A local variable of type \textsf{freeable} becomes \textsf{undef} after reclaiming that variable's referent.
 \paragraph{rcuFresh} is the type given to references to freshly allocated heap locations. Similar to \textsf{rcuItr} type, it has field mappings set $\N$. We set the field mappings in the set of an existing \textsf{rcuFresh} reference to be the same as field mappings in the set of \textsf{rcuItr} reference when we replace the heap referenced by \textsf{rcuItr} with the heap referenced by \textsf{rcuFresh} for memory safe replacement.
 \paragraph{rcuRoot} is the type given to the fixed reference to the root of the RCU data structure.  It may not be overwritten.
 %An undefined reference can be loaded with a value -- it becomes \textsf{rcuItr} -- once we read the global unique root to it.
-
 \paragraph{}
 \mypar{Subtyping}
 It is sometimes necessary to use imprecise types --- mostly for control flow joins.  Our type system performs these abstractions via subtyping on individual types and full contexts, as in Figure \ref{fig:sub-typing}.
@@ -668,7 +662,7 @@ checks that for every \textsf{rcuItr} reference $n$ in $\Gamma$, it is not a pat
 
 \mypar{Replacing with a Fresh Node}
 Replacing with a \textsf{rcuFresh} reference faces the same aliasing complications as direct unlinking.
-We illustrate these challenges in Figures \ref{fig:frframeout} and \ref{fig:freshframeout}(Figures \ref{fig:bframeout} and \ref{fig:bunlinkframeout} in Appendix \ref{appendix:rcuunlink} illustrating complexities in unlinking).
+We illustrate these challenges in Figures \ref{fig:frframeout} and \ref{fig:freshframeout}(Figures \ref{fig:bframeout} and \ref{fig:bunlinkframeout} in our technical report~\cite{isotek} Appendix \ref{appendix:rcuunlink} illustrating complexities in unlinking).
 The square $R$ nodes are root nodes, and $H$ nodes are general heap nodes.
 All resources in red and green form the memory foot print of unlinking. The hollow red circular nodes -- $pr$ and $cr$ -- point to the nodes involved in replacing $H_1$ (referenced by \texttt{cr}) wih $H_f$ (referenced by $cf$) in the structure.
 We may have $a_0$ and $a_1$ which are aliases with $pr$ and $cr$ respectively. They are \textit{path-aliases} as they share the same path from root to the node that they reference. 
@@ -696,3 +690,5 @@ There is also another rule, \textsc{T-LinkF-Null}, not shown in Figure \ref{fig:
 \mypar{Entering a Critical Section}
 (\textit{\textbf{Referencing inside \textsf{RCU} Blocks}})
 There are two rules(\textsc{ToRCURead} in Figure \ref{fig:tssr} Appendix \ref{appendix:readtypes} and \textsc{ToRCUWrite} in Figure \ref{fig:tss}) for moving to \textsf{RCU} typing: one for entering a write region, and one for a read region.
+
+The type system ensures unlinked and freeable references are handled *linearly*, as they cannot be dropped (coerced to undef). The top-level rule ToRCUWrite ensures unlinked references have been freed, by forbidding them in the critical section's post-type-environment, as Reviewer 3 noticed. Preventing the reuse of rcuItr references across critical sections is subtler: the non-critical section system is *not* flow-sensitive, and does not include rcuItr.  So the initial environment lacks rcuItr, and "trailing" rcuItr may not escape.
