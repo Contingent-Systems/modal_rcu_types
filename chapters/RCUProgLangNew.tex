@@ -305,8 +305,7 @@ The type system checks that this unlink disconnects only one node: note how the 
 \mypar{Grace and Reclamation}
 After the referent of \texttt{cur} is unlinked, concurrent readers traversing the list may still hold references.  So it is not safe to actually reclaim the memory until after a grace period.
 Lines 28--29 of \lstinline|remove| initiate a grace period and wait for its completion.  At the type level, this is reflected by the change of \lstinline|cur|'s type from \textsf{unlinked} to \textsf{freeable}, reflecting the fact that the grace period extends until any reader critical sections that might have observed the node in the structure have completed.
-This matches the precondition required by our rules for calling \lstinline|Free|, which further changes the type of \lstinline|cur| to \textsf{undef} reflecting that \lstinline|cur| is no longer a valid reference. The type system also ensures no local (writer) aliases exist to the freed node and understanding this enforcement is twofold. First, the type system requires that only \textsf{unlinked} heap nodes can be freed. Second, framing relations in related rules (\textsc{T-UnlinkH}, \textsc{T-Replace} and \textsc{T-Insert} in Figure \ref{fig:tss}) 
-ensure no local aliases still consider the node linked.
+This matches the precondition required by our rules for calling \lstinline|Free|, which further changes the type of \lstinline|cur| to \textsf{undef} reflecting that \lstinline|cur| is no longer a valid reference. The type system also ensures no local (writer) aliases exist to the freed node and understanding this enforcement is twofold. First, the type system requires that only \textsf{unlinked} heap nodes can be freed. Second, framing relations in rules related to the heap mutation ensure no local aliases still consider the node linked.
 %enforce \textit{locality} on the effects of the heap update -- only one node becomes \textsf{unlinked}.
 
 \mypar{Fresh Nodes}
@@ -579,7 +578,7 @@ checks that for every \textsf{rcuItr} reference $n$ in $\Gamma$, it is not a pat
  ;
  \end{tikzpicture}
 
- \caption{\textit{Freshly} allocated heap node pointed by \texttt{curF}-$cf$}
+ \caption{\textit{Freshly} allocated heap node referenced by $cf$}
  \label{fig:frframeout}
  \end{subfigure} \quad\quad
  \begin{subfigure}[b]{.4\linewidth}
@@ -659,7 +658,7 @@ checks that for every \textsf{rcuItr} reference $n$ in $\Gamma$, it is not a pat
  ;
  \end{tikzpicture}
 
- \caption{Safe replacement of the heap node pointed by \texttt{cur}-$cr$ with the \textit{fresh} heap node pointed by \texttt{curF}-$cf$.}
+ \caption{Safe replacement of the heap node referenced by $cr$ with the \textit{fresh} heap node referenced by $cf$.}
  \label{fig:freshframeout}
  \end{subfigure}
  \caption{Replacing \textit{existing} heap nodes with \textit{fresh} ones. Type rule \textsc{T-Replace}.}
