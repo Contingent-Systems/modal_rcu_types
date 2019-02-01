@@ -198,7 +198,7 @@ $\llbracket \textsf{M} \rrbracket_{tid} = \{ (s,h,l,rt,R,B),O,U,T,F  \mid tid = 
 %$\llbracket \textsf{O} \rrbracket_{tid} = \{ (s,h,l,rt,R,B),O,U,T,F  \mid tid \neq l \land tid \notin R \}$.
 \end{itemize}
 
-To support framing (weakening), the Views Framework requires that views form a partial commutative monoid under an operation $\bullet : \mathcal{M} \longrightarrow \mathcal{M} \longrightarrow \mathcal{M}$, provided as a parameter to the framework.
+\mypar{Composition and Interference} To support framing (weakening), the Views Framework requires that views form a partial commutative monoid under an operation $\bullet : \mathcal{M} \longrightarrow \mathcal{M} \longrightarrow \mathcal{M}$, provided as a parameter to the framework.
 The framework also requires an interference relation $\mathcal{R}\subseteq\mathcal{M}\times\mathcal{M}$ between views to reason about local updates to one view preserving validity of adjacent views (akin to the small-footprint property of separation logic).
 Figure \ref{fig:comp} defines our composition operator and the core interference relation $\mathcal{R}_0$ --- the actual inferference between views (between threads, or between a local action and framed-away state) is the reflexive transitive closure of $\mathcal{R}_0$.
 Composition is mostly straightforward point-wise union (threads' views may overlap) of each component.
@@ -256,7 +256,7 @@ v & \textrm{if}~h_1(o,f)=v\land h_2(o,f)=\mathrm{undef}\\
 %In Appendix \ref{sec:prooflemmas} Lemma \ref{lem:wf-compositionap}.
 %  \end{proof}
 
-The framing/weakening type rule will be translated to a use of the frame rule in the Views Framework's logic.  There separating conjunction is simply the existence of two composable instrumented states:
+\mypar{Stable Environment and Views Shift} The framing/weakening type rule will be translated to a use of the frame rule in the Views Framework's logic.  There separating conjunction is simply the existence of two composable instrumented states:
 %Partial separating conjunction then simply requires the existence of two states that compose:
 \[ m \in P \ast Q   \stackrel{def}{=} \exists m' \ldotp \exists m'' \ldotp m' \in P \land m'' \in Q \land m \in m' \bullet m''\]
 %Different threads' views of the state may overlap (e.g., on shared heap locations, or the reader thread set), but one thread may modify that shared state.  
