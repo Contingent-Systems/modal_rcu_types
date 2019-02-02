@@ -22,26 +22,33 @@ The use of disjunction ($Left|Right$) in field maps and paths is required to cap
 \tikzstyle{sub node}=[triangle,draw,inner sep=1.5]
 \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
 \tikzset{
-  red node/.style = {rectangle,draw=red,inner sep=1.5},
-  treenode/.style = {circle, draqw=black, align=center, minimum size=0.05cm},
+  red node/.style = {rectangle,draw=red,inner sep=0.75},
+  treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
   subtree/.style  = {draw,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
-  succn/.style = {circle,draw=purple,fill=purple,inner sep=0.2},
-  blue node/.style = {rectangle,draw=blue,inner sep=1.5}
+  succn/.style = {circle,draw=black,fill=black},
+  blue node/.style = {rectangle,draw=green,inner sep=1.5,dashed}
 }
 
     \node[hollow node]       (r)     []   {$R$};
     \node[subtree]           (t1)    [below left of=r]       {$T_{1}$};
     \node[hollow node]           (k)    [below right of=r]      {$H_1$};
     \node[subtree]             (kl)    [below left of=k]      {$T_{2}$};
-\node[hollow node]          (kr)    [below right of = k]  {$H_2$};
-    \node[hollow node]             (krl)         [below left of = kr]        {$H'_1$};
+    \node[hollow node]          (kr)    [below right of = k]  {$H_2$};
+     \node[subtree]          (rlmst)    [below left of = kr]  {$T_4$};
+     
+    \node[hollow node]             (krl)         [below left of = rlmst]        {$H'_1$};
+        \node[succn]          (nl)    [below left of = krl]  {};
     \node[subtree]          (krr)       [below right of = kr]           {$T_{3}$};
     \path[->]  
 	     (r)     edge node {} (t1)
                 (r)     edge node {} (k)
                 (k)    edge node {} (kl)
 	     (k)    edge node {} (kr)
-	    (kr)    edge node {}  (krl)
+
+         (kr) edge node {} (rlmst)
+          (rlmst) edge node {} (krl)
+             (krl) edge node {} (nl)
+
                 (kr)     edge node {} (krr)
 ;
 \end{tikzpicture}
@@ -56,10 +63,10 @@ The use of disjunction ($Left|Right$) in field maps and paths is required to cap
 \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
 
 \tikzset{
-  red node/.style = {circle,draw=red,inner sep=1.5},
+  red node/.style = {rectangle,draw=red,inner sep=0.75},
   treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
   subtree/.style  = {draw,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
-  succn/.style = {circle,draw=purple,fill=purple,inner sep=0.2},
+  succn/.style = {circle,draw=black,fill=black},
   blue node/.style = {rectangle,draw=green,inner sep=1.5,dashed}
 }
 
@@ -68,16 +75,23 @@ The use of disjunction ($Left|Right$) in field maps and paths is required to cap
     \node[hollow node]           (k)    [below right of=r]      {$H_1$};
     \node[blue node]            (kp1) [right of = k]   {$H'_1$};    
     \node[subtree]             (kl)    [below left of=k]      {$T_{2}$};
-\node[hollow node]          (kr)    [below right of = k]  {$H_2$};
-    \node[hollow node]             (krl)         [below left of = kr]        {$H'_1$};
+    \node[hollow node]          (kr)    [below right of = k]  {$H_2$};
+    \node[subtree]          (rlmst)    [below left of = kr]  {$T_4$};
+    \node[hollow node]             (krl)         [below left of = rlmst]        {$H'_1$};
+    \node[succn]          (nl)    [below left of = krl]  {};
     \node[subtree]          (krr)       [below right of = kr]           {$T_{3}$};
     \path[->]  
 	     (r)     edge node {} (t1)
                 (r)     edge node {} (k) 
                 (k)    edge node {} (kl)
 	     (k)    edge node {} (kr)
-	    (kr)    edge node {}  (krl)
+	    (kr)    edge node {}  (rlmst)
                 (kr)     edge node {} (krr)
+
+         (kr) edge node {} (rlmst)
+          (rlmst) edge node {} (krl)
+             (krl) edge node {} (nl)
+
                 (kp1)   edge[dashed,draw=green] node {} (kr)
 	     (kp1)    edge[dashed,draw=green] node {} (kl)
 ;
@@ -93,11 +107,11 @@ The use of disjunction ($Left|Right$) in field maps and paths is required to cap
 \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
 
 \tikzset{
-  red node/.style = {rectangle,draw=red,inner sep=1.5, dashed},
+  red node/.style = {rectangle,draw=red,inner sep=0.75},
   treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
   subtree/.style  = {draw,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
-  succn/.style = {circle,draw=purple,fill=purple,inner sep=0.2},
-  blue node/.style = {rectangle,draw=blue,inner sep=1.5}
+  succn/.style = {circle,draw=black,fill=black},
+  blue node/.style = {rectangle,draw=green,inner sep=1.5}
 }
 
     \node[hollow node]       (r)     []   {$R$};
@@ -106,14 +120,21 @@ The use of disjunction ($Left|Right$) in field maps and paths is required to cap
     \node[hollow node]            (kp1) [right of = k]   {$H'_1$};    
     \node[subtree]             (kl)    [below left of=k]      {$T_{2}$};
 \node[hollow node]          (kr)    [below right of = k]  {$H_2$};
-    \node[hollow node]             (krl)         [below left of = kr]        {$H'_1$};
+ 
+  \node[subtree]          (rlmst)    [below left of = kr]  {$T_4$};
+  
+    \node[hollow node]             (krl)         [below left of = rlmst]        {$H'_1$};
+    \node[succn]          (nl)    [below left of = krl]  {};
     \node[subtree]          (krr)       [below right of = kr]           {$T_{3}$};
     \path[->]  
 	     (r)     edge node {} (t1)
                 (r)     edge node {} (kp1) 
                 (k)    edge[dashed,draw=red] node {} (kl)
 	     (k)    edge[dashed,draw=red] node {} (kr)
-	    (kr)    edge node {}  (krl)
+	  %  (kr)    edge node {}  (krl)
+         (kr) edge node {} (rlmst)
+          (rlmst) edge node {} (krl)
+             (krl) edge node {} (nl)
                 (kr)     edge node {} (krr)
                 (kp1)   edge node {} (kr)
 	     (kp1)    edge node {} (kl)
@@ -130,10 +151,10 @@ The use of disjunction ($Left|Right$) in field maps and paths is required to cap
 \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
 
 \tikzset{
-  red node/.style = {rectangle,draw=red,inner sep=1.5},
+  red node/.style = {rectangle,draw=red,inner sep=0.75},
   treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
   subtree/.style  = {draw,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
-  succn/.style = {circle,draw=purple,fill=purple,inner sep=0.2},
+  succn/.style = {circle,draw=black,fill=black},
   blue node/.style = {rectangle,draw=blue,inner sep=1.5}
 }
 
@@ -142,11 +163,15 @@ The use of disjunction ($Left|Right$) in field maps and paths is required to cap
     \node[hollow node]            (kp1) [below right of = r]   {$H'_1$};    
     \node[subtree]             (kl)    [below left of=kp1]      {$T_{2}$};
     \node[hollow node]          (kr)    [below right of = kp1]  {$H_2$};
+    \node[subtree]          (rlmst)    [below left of = kr]  {$T_4$};
+    \node[succn]          (nl)    [below left of = rlmst]  {};
     \node[subtree]          (krr)       [below right of = kr]           {$T_{3}$};
     \path[->]  
 	     (r)     edge node {} (t1)
          (r)     edge node {} (kp1) 
          (kr)     edge node {} (krr)
+         (kr) edge node {} (rlmst)
+         (rlmst) edge node {} (nl)
          (kp1)   edge node {} (kr)
 	     (kp1)    edge node {} (kl)
 ;
