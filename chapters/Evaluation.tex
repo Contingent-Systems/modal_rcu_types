@@ -18,23 +18,23 @@ The use of disjunction ($Left|Right$) in field maps and paths is required to cap
 \begin{subfigure}[b]{.4\linewidth}
 \centering
 \begin{tikzpicture}[scale=1]
-\tikzstyle{hollow node}=[circle,draw,inner sep=1.5]
+\tikzstyle{hollow node}=[rectangle,draw,inner sep=1.5]
 \tikzstyle{sub node}=[triangle,draw,inner sep=1.5]
 \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
 \tikzset{
   red node/.style = {rectangle,draw=red,inner sep=1.5},
-  treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
-  subtree/.style  = {isosceles triangle, draw=black, align=center, minimum height=0.5cm, minimum width=0.5cm, shape border rotate=90, anchor=north},
+  treenode/.style = {circle, draqw=black, align=center, minimum size=0.05cm},
+  subtree/.style  = {draw,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
   succn/.style = {circle,draw=purple,fill=purple,inner sep=0.2},
   blue node/.style = {rectangle,draw=blue,inner sep=1.5}
 }
 
-    \node[hollow node]       (r)     []   { };
+    \node[hollow node]       (r)     []   {$R$};
     \node[subtree]           (t1)    [below left of=r]       {$T_{1}$};
-    \node[hollow node]           (k)    [below right of=r]      {$k$};
+    \node[hollow node]           (k)    [below right of=r]      {$H_1$};
     \node[subtree]             (kl)    [below left of=k]      {$T_{2}$};
-\node[hollow node]          (kr)    [below right of = k]  { };
-    \node[hollow node]             (krl)         [below left of = kr]        {$k'$};
+\node[hollow node]          (kr)    [below right of = k]  {$H_2$};
+    \node[hollow node]             (krl)         [below left of = kr]        {$H'_1$};
     \node[subtree]          (krr)       [below right of = kr]           {$T_{3}$};
     \path[->]  
 	     (r)     edge node {} (t1)
@@ -51,25 +51,25 @@ The use of disjunction ($Left|Right$) in field maps and paths is required to cap
 \begin{subfigure}[b]{.4\linewidth}
 \centering
 \begin{tikzpicture}[scale=1]
-\tikzstyle{hollow node}=[circle,draw,inner sep=1.5]
+\tikzstyle{hollow node}=[rectangle,draw,inner sep=1.5]
 \tikzstyle{sub node}=[triangle,draw,inner sep=1.5]
 \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
 
 \tikzset{
   red node/.style = {circle,draw=red,inner sep=1.5},
   treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
-  subtree/.style  = {isosceles triangle, draw=black, align=center, minimum height=0.25cm, minimum width=0.25cm, shape border rotate=90, anchor=north},
+  subtree/.style  = {draw,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
   succn/.style = {circle,draw=purple,fill=purple,inner sep=0.2},
-  blue node/.style = {circle,draw=blue,inner sep=1.5}
+  blue node/.style = {rectangle,draw=green,inner sep=1.5,dashed}
 }
 
-    \node[hollow node]       (r)     []   { };
+    \node[hollow node]       (r)     []   {$R$};
     \node[subtree]           (t1)    [below left of=r]       {$T_{1}$};
-    \node[hollow node]           (k)    [below right of=r]      {$k$};
-    \node[blue node]            (kp1) [right of = k]   {$f'$};    
+    \node[hollow node]           (k)    [below right of=r]      {$H_1$};
+    \node[blue node]            (kp1) [right of = k]   {$H'_1$};    
     \node[subtree]             (kl)    [below left of=k]      {$T_{2}$};
-\node[hollow node]          (kr)    [below right of = k]  { };
-    \node[hollow node]             (krl)         [below left of = kr]        {$k'$};
+\node[hollow node]          (kr)    [below right of = k]  {$H_2$};
+    \node[hollow node]             (krl)         [below left of = kr]        {$H'_1$};
     \node[subtree]          (krr)       [below right of = kr]           {$T_{3}$};
     \path[->]  
 	     (r)     edge node {} (t1)
@@ -78,8 +78,8 @@ The use of disjunction ($Left|Right$) in field maps and paths is required to cap
 	     (k)    edge node {} (kr)
 	    (kr)    edge node {}  (krl)
                 (kr)     edge node {} (krr)
-                (kp1)   edge[dashed,draw=blue] node {} (kr)
-	     (kp1)    edge[dashed,draw=blue] node {} (kl)
+                (kp1)   edge[dashed,draw=green] node {} (kr)
+	     (kp1)    edge[dashed,draw=green] node {} (kl)
 ;
 \end{tikzpicture}
 \caption{Duplicating $k'$ with a fresh variable $f'$}
@@ -88,25 +88,25 @@ The use of disjunction ($Left|Right$) in field maps and paths is required to cap
 \begin{subfigure}[b]{.4\linewidth}
 \centering
 \begin{tikzpicture}[scale=1]
-\tikzstyle{hollow node}=[circle,draw,inner sep=1.5]
+\tikzstyle{hollow node}=[rectangle,draw,inner sep=1.5]
 \tikzstyle{sub node}=[triangle,draw,inner sep=1.5]
 \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
 
 \tikzset{
-  red node/.style = {circle,draw=red,inner sep=1.5},
+  red node/.style = {rectangle,draw=red,inner sep=1.5, dashed},
   treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
-  subtree/.style  = {isosceles triangle, draw=black, align=center, minimum height=0.5cm, minimum width=0.5cm, shape border rotate=90, anchor=north},
+  subtree/.style  = {draw,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
   succn/.style = {circle,draw=purple,fill=purple,inner sep=0.2},
-  blue node/.style = {circle,draw=blue,inner sep=1.5}
+  blue node/.style = {rectangle,draw=blue,inner sep=1.5}
 }
 
-    \node[hollow node]       (r)     []   { };
+    \node[hollow node]       (r)     []   {$R$};
     \node[subtree]           (t1)    [below left of=r]       {$T_{1}$};
-    \node[red node]           (k)    [below right of=r]      {$k$};
-    \node[hollow node]            (kp1) [right of = k]   {$f'$};    
+    \node[red node]           (k)    [below right of=r]      {$H_1$};
+    \node[hollow node]            (kp1) [right of = k]   {$H'_1$};    
     \node[subtree]             (kl)    [below left of=k]      {$T_{2}$};
-\node[hollow node]          (kr)    [below right of = k]  { };
-    \node[hollow node]             (krl)         [below left of = kr]        {$k'$};
+\node[hollow node]          (kr)    [below right of = k]  {$H_2$};
+    \node[hollow node]             (krl)         [below left of = kr]        {$H'_1$};
     \node[subtree]          (krr)       [below right of = kr]           {$T_{3}$};
     \path[->]  
 	     (r)     edge node {} (t1)
@@ -125,23 +125,23 @@ The use of disjunction ($Left|Right$) in field maps and paths is required to cap
 \begin{subfigure}[b]{.4\linewidth}
 \centering
 \begin{tikzpicture}[scale=1]
-\tikzstyle{hollow node}=[circle,draw,inner sep=1.5]
+\tikzstyle{hollow node}=[rectangle,draw,inner sep=1.5]
 \tikzstyle{sub node}=[triangle,draw,inner sep=1.5]
 \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
 
 \tikzset{
   red node/.style = {rectangle,draw=red,inner sep=1.5},
   treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
-  subtree/.style  = {isosceles triangle, draw=black, align=center, minimum height=0.5cm, minimum width=0.5cm, shape border rotate=90, anchor=north},
+  subtree/.style  = {draw,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
   succn/.style = {circle,draw=purple,fill=purple,inner sep=0.2},
   blue node/.style = {rectangle,draw=blue,inner sep=1.5}
 }
 
-    \node[hollow node]       (r)     []   { };
+    \node[hollow node]       (r)     []   {$R$};
     \node[subtree]           (t1)    [below left of=r]       {$T_{1}$};
-    \node[hollow node]            (kp1) [below right of = r]   {$f'$};    
+    \node[hollow node]            (kp1) [below right of = r]   {$H'_1$};    
     \node[subtree]             (kl)    [below left of=kp1]      {$T_{2}$};
-    \node[hollow node]          (kr)    [below right of = kp1]  { };
+    \node[hollow node]          (kr)    [below right of = kp1]  {$H_2$};
     \node[subtree]          (krr)       [below right of = kr]           {$T_{3}$};
     \path[->]  
 	     (r)     edge node {} (t1)
@@ -158,7 +158,7 @@ The use of disjunction ($Left|Right$) in field maps and paths is required to cap
 \label{fig:del2}
 \end{figure}
 
-The most subtle aspect of the deletion is the final step in the case the node $R$ to remove has both children.  In this case, the value $V$ of the left-most node of $R$'s right child --- the next element in the collection order --- is copied into a new node, which is then used to \emph{replace} node $R$: the replacement's fields exactly match $R$'s except for the data (\textsc{T-Replace} via $\N_1 = \N_2$), and the parent is updated to reference the replacement, unlinking $R$.  At this point, there are two nodes with value $V$ in the tree (\textit{weak} BST property of the Citrus~\cite{Arbel:2014:CUR:2611462.2611471}): the replacement node, and what was the left-most node under $R$'s right child. This latter (original) node for $V$ must be unlinked, which is simplified because by being left-most the left child is null, avoiding another round of replacement (\textsc{T-UnlinkH} via $\forall_{f\in dom(\N_1)} \ldotp f\neq f_2 \implies (\N_1(f) = \textsf{null}$).
+The most subtle aspect of the deletion is the final step in the case the node $R$ to remove has both children.  In this case, the value $V$ of the left-most node of $R$'s right child --- the next element in the collection order --- is copied into a new node, which is then used to \emph{replace} node $R$: the replacement's fields exactly match $R$'s except for the data (\textsc{T-Replace} via $\N_1 = \N_2$), and the parent is updated to reference the replacement, unlinking $R$. At this point, there are two nodes with value $V$ in the tree (\textit{weak} BST property of the Citrus~\cite{Arbel:2014:CUR:2611462.2611471}): the replacement node, and what was the left-most node under $R$'s right child. This latter (original) node for $V$ must be unlinked, which is simplified because by being left-most the left child is null, avoiding another round of replacement (\textsc{T-UnlinkH} via $\forall_{f\in dom(\N_1)} \ldotp f\neq f_2 \implies (\N_1(f) = \textsf{null}$).
 The complexity in checking safety here is that once $R$ is found, another loop is used to find $V$ and its parent (since that node will later be removed as well).
 After $V$ is found, there are \emph{two} local unlinking operations, at different depths of the tree.  This is why the type system must keep separate abstract iteration counts for traversals in loops --- these indices act like multiple cursors into the data structure, and allow the types to carry enough information to keep those changes separate and ensure neither introduces a cycle.
 
