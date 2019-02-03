@@ -10,28 +10,33 @@ Appendix \ref{appendix:bag_paul} contains the code for membership checking.
 
 We have also type checked the most challenging part of an RCU binary search tree, the deletion (which also contains the code for a lookup).
 Our implementation is a slightly simplified version of the Citrus BST~\cite{Arbel:2014:CUR:2611462.2611471}: their code supports fine-grained locking for multiple writers, while ours supports only one writer by virtue of using our single-writer primitives.
-For lack of space the annotated code is only in Appendix \ref{appendix:bst_del}, but it motivates some of the conditional-related flexibility discussed in Section \ref{subsection:type-action}.
-The use of disjunction ($Left|Right$) in field maps and paths is required to capture traversals which follow different fields at different times, such as the lookup in a binary search tree.
 \begin{figure}[H]
 \centering 
 \noindent
 \begin{subfigure}[b]{.4\linewidth}
 \centering
-\begin{tikzpicture}[scale=1]
+\begin{tikzpicture}[scale=0.5]
+\tikzstyle{ref node}=[circle,draw,inner sep=1.5]
+\tikzstyle{rref node}=[circle,draw=red,inner sep=1.5]
+\tikzstyle{rhollow node}=[rectangle,draw=red,inner sep=1.5]
 \tikzstyle{hollow node}=[rectangle,draw,inner sep=1.5]
+
 \tikzstyle{sub node}=[triangle,draw,inner sep=1.5]
 \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
 \tikzset{
   red node/.style = {rectangle,draw=red,inner sep=0.75},
-  treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
+  treenode/.style = {circle, draw=black, align=center, minimum size=0.1cm},
   subtree/.style  = {draw,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
+  rsubtree/.style ={draw=red,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
   succn/.style = {circle,draw=black,fill=black},
   blue node/.style = {rectangle,draw=green,inner sep=1.5,dashed}
+  
 }
 
     \node[hollow node]       (r)     []   {$R$};
+    \node[rsubtree] (t0) [below right of = r] [] {$T_0$};
     \node[subtree]           (t1)    [below left of=r]       {$T_{1}$};
-    \node[hollow node]           (k)    [below right of=r]      {$H_1$};
+    \node[rhollow node]           (k)    [below right of=t0]      {$H_1$};
     \node[subtree]             (kl)    [below left of=k]      {$T_{2}$};
     \node[hollow node]          (kr)    [below right of = k]  {$H_2$};
      \node[subtree]          (rlmst)    [below left of = kr]  {$T_4$};
@@ -39,9 +44,18 @@ The use of disjunction ($Left|Right$) in field maps and paths is required to cap
     \node[hollow node]             (krl)         [below left of = rlmst]        {$H'_1$};
         \node[succn]          (nl)    [below left of = krl]  {};
     \node[subtree]          (krr)       [below right of = kr]           {$T_{3}$};
+    \node[subtree]          (t6)       [below right of = krl]           {$T_{6}$};
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    \node[rref node] (pr) [above right of= t0] {$pr$};
+    \node[rref node] (cr) [above right of= k] {$cr$};
+%    \node[fref node] (cf) [above right of = krl] {$cf$};
+    \node[ref node] (lp) [above right of = kr] {$lp$};
+    \node[ref node] (sc) [above left of = krl] {$sc$};
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     \path[->]  
 	     (r)     edge node {} (t1)
-                (r)     edge node {} (k)
+             (r)     edge node {} (t0)
+                (t0)     edge[draw=red] node {} (k)
                 (k)    edge node {} (kl)
 	     (k)    edge node {} (kr)
 
@@ -51,6 +65,13 @@ The use of disjunction ($Left|Right$) in field maps and paths is required to cap
              (krl) edge node {} (nl)
 
                 (kr)     edge node {} (krr)
+                %%%%%%%%%%%%%%%%%
+                (pr) edge[draw=red] node {} (t0)
+                (cr) edge[draw=red] node {} (k)
+%                (cf) edge node {} (krl)
+                (lp) edge node {} (kr)
+                (sc) edge node {} (krl)
+                (krl) edge node {} (t6)
 ;
 \end{tikzpicture}
 \caption{Node $k$ with its successor $k'$}
@@ -58,22 +79,28 @@ The use of disjunction ($Left|Right$) in field maps and paths is required to cap
 \end{subfigure}\quad
 \begin{subfigure}[b]{.4\linewidth}
 \centering
-\begin{tikzpicture}[scale=1]
+\begin{tikzpicture}[scale=0.5]
+\tikzstyle{ref node}=[circle,draw,inner sep=1.5]
 \tikzstyle{hollow node}=[rectangle,draw,inner sep=1.5]
+\tikzstyle{rhollow node}=[rectangle,draw=red,inner sep=1.5]
+
 \tikzstyle{sub node}=[triangle,draw,inner sep=1.5]
 \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
-
+\tikzstyle{rref node}=[circle,draw=red,inner sep=1.5]
+\tikzstyle{fref node}=[circle,draw=green,inner sep=1.5,dashed]
 \tikzset{
   red node/.style = {rectangle,draw=red,inner sep=0.75},
   treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
   subtree/.style  = {draw,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
+  rsubtree/.style ={draw=red,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
   succn/.style = {circle,draw=black,fill=black},
   blue node/.style = {rectangle,draw=green,inner sep=1.5,dashed}
 }
 
     \node[hollow node]       (r)     []   {$R$};
+        \node[rsubtree] (t0) [below right of = r] [] {$T_0$};
     \node[subtree]           (t1)    [below left of=r]       {$T_{1}$};
-    \node[hollow node]           (k)    [below right of=r]      {$H_1$};
+    \node[rhollow node]           (k)    [below right of=t0]      {$H_1$};
     \node[blue node]            (kp1) [right of = k]   {$H'_1$};    
     \node[subtree]             (kl)    [below left of=k]      {$T_{2}$};
     \node[hollow node]          (kr)    [below right of = k]  {$H_2$};
@@ -82,9 +109,20 @@ The use of disjunction ($Left|Right$) in field maps and paths is required to cap
     \node[hollow node]             (krl)         [below left of = rlmst]        {$H'_1$};
     \node[succn]          (nl)    [below left of = krl]  {};
     \node[subtree]          (krr)       [below right of = kr]           {$T_{3}$};
+    
+    %%%%%%%%%%%%%%%%%%%%%%%%%%
+       \node[rref node] (pr) [above right of= t0] {$pr$};
+    \node[rref node] (cr) [above right of= k] {$cr$};
+    \node[fref node] (cf) [above right of = kp1] {$cf$};
+    \node[ref node] (lp) [ left of = rlmst] {$lp$};
+    \node[ref node] (sc) [ left of = krl] {$sc$};
+     \node[subtree]          (t6)       [below right of = krl]           {$T_{6}$};
     \path[->]  
 	     (r)     edge node {} (t1)
-                (r)     edge node {} (k) 
+              (r)     edge node {} (t0)
+                (t0)     edge[draw=red] node {} (k)
+                
+                %(r)     edge node {} (k) 
                 (k)    edge node {} (kl)
 	     (k)    edge node {} (kr)
 	    (kr)    edge node {}  (rlmst)
@@ -97,29 +135,48 @@ The use of disjunction ($Left|Right$) in field maps and paths is required to cap
 
                 (kp1)   edge[dashed,draw=green] node {} (kr)
 	     (kp1)    edge[dashed,draw=green] node {} (kl)
+             %%%%%%%%%%%%%%%%%%%%%%%%%%%
+                            (pr) edge[draw=red] node {} (t0)
+                (cr) edge[draw=red] node {} (k)
+                (cf) edge[dashed,draw=green] node {} (kp1)
+                %(lp) edge node {} (kr)
+                %(sc) edge node {} (krl)
+                                (lp) edge node {} (rlmst)
+                (sc) edge node {} (krl)
+
+                                (krl) edge node {} (t6)
+;
 ;
 \end{tikzpicture}
 \caption{Duplicating $k'$ with a fresh variable $f'$}
 \label{fig:del2.2}
-\end{subfigure}
+\end{subfigure}\quad
 \begin{subfigure}[b]{.4\linewidth}
 \centering
-\begin{tikzpicture}[scale=1]
+\begin{tikzpicture}[scale=0.5]
+\tikzstyle{ref node}=[circle,draw,inner sep=1.5]
 \tikzstyle{hollow node}=[rectangle,draw,inner sep=1.5]
+\tikzstyle{rhollow node}=[rectangle,draw=red,inner sep=1.5]
+
 \tikzstyle{sub node}=[triangle,draw,inner sep=1.5]
 \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
-
+\tikzstyle{rdref node}=[circle,draw=red,inner sep=1.5,dashed]
+\tikzstyle{rref node}=[circle,draw=red,inner sep=1.5]
+\tikzstyle{fref node}=[circle,draw=green,inner sep=1.5,dashed]
 \tikzset{
   red node/.style = {rectangle,draw=red,inner sep=0.75},
   treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
   subtree/.style  = {draw,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
+  rsubtree/.style ={draw=red,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
   succn/.style = {circle,draw=black,fill=black},
-  blue node/.style = {rectangle,draw=green,inner sep=1.5}
+  blue node/.style = {rectangle,draw=green,inner sep=1.5,dashed}
 }
 
+
     \node[hollow node]       (r)     []   {$R$};
+        \node[rsubtree] (t0) [below  right of = r] [] {$T_0$};
     \node[subtree]           (t1)    [below left of=r]       {$T_{1}$};
-    \node[red node]           (k)    [below right of=r]      {$H_1$};
+    \node[red node]           (k)    [below right of=t0]      {$H_1$};
     \node[hollow node]            (kp1) [right of = k]   {$H'_1$};    
     \node[subtree]             (kl)    [below left of=k]      {$T_{2}$};
 \node[hollow node]          (kr)    [below right of = k]  {$H_2$};
@@ -129,9 +186,19 @@ The use of disjunction ($Left|Right$) in field maps and paths is required to cap
     \node[hollow node]             (krl)         [below left of = rlmst]        {$H'_1$};
     \node[succn]          (nl)    [below left of = krl]  {};
     \node[subtree]          (krr)       [below right of = kr]           {$T_{3}$};
+    \node[subtree]          (t6)       [below right of = krl]           {$T_{6}$};
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    \node[rref node] (pr) [above right of= t0] {$pr$};
+    \node[rdref node] (cr) [above right of= k] {$cr$};
+    \node[ref node] (cf) [above right of = kp1] {$cf$};
+    \node[ref node] (lp) [ left of = rlmst] {$lp$};
+    \node[ref node] (sc) [left of = krl] {$sc$};
+
     \path[->]  
 	     (r)     edge node {} (t1)
-                (r)     edge node {} (kp1) 
+              (r)     edge node {} (t0)
+                %(t0)     edge node {} (k)
+                (t0)     edge[draw=red] node {} (kp1) 
                 (k)    edge[dashed,draw=red] node {} (kl)
 	     (k)    edge[dashed,draw=red] node {} (kr)
 	  %  (kr)    edge node {}  (krl)
@@ -142,6 +209,152 @@ The use of disjunction ($Left|Right$) in field maps and paths is required to cap
                 (kr)     edge node {} (krr)
                 (kp1)   edge node {} (kr)
 	     (kp1)    edge node {} (kl)
+             %%%%%%%%%%%%%%%%%%%
+                (pr) edge[draw=red] node {} (t0)
+                (cr) edge[draw=red,dashed] node {} (k)
+                (cf) edge node {} (kp1)
+                (lp) edge node {} (rlmst)
+                (sc) edge node {} (krl)
+                 (krl) edge node {} (t6)
+
+;
+\end{tikzpicture}
+\caption{ Unlinking $k$ via linking fresh variable  $f'$.}
+\label{fig:del2.3}
+\end{subfigure} \quad
+\begin{subfigure}[b]{.4\linewidth}
+\centering
+\begin{tikzpicture}[scale=0.5]
+\tikzstyle{ref node}=[circle,draw,inner sep=1.5]
+\tikzstyle{hollow node}=[rectangle,draw,inner sep=1.5]
+\tikzstyle{rhollow node}=[rectangle,draw=red,inner sep=1.5]
+
+\tikzstyle{sub node}=[triangle,draw,inner sep=1.5]
+\tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+\tikzstyle{rdref node}=[circle,draw=red,inner sep=1.5,dashed]
+\tikzstyle{rref node}=[circle,draw=red,inner sep=1.5]
+\tikzstyle{fref node}=[circle,draw=green,inner sep=1.5,dashed]
+\tikzset{
+  red node/.style = {rectangle,draw=red,inner sep=0.75},
+  treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
+  subtree/.style  = {draw,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
+  rsubtree/.style ={draw=red,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
+  succn/.style = {circle,draw=black,fill=black},
+  blue node/.style = {rectangle,draw=green,inner sep=1.5,dashed}
+}
+
+
+    \node[hollow node]       (r)     []   {$R$};
+        \node[subtree] (t0) [below  right of = r] [] {$T_0$};
+    \node[subtree]           (t1)    [below left of=r]       {$T_{1}$};
+   
+    \node[hollow node]            (kp1) [below right of = t0]   {$H'_1$};    
+    \node[subtree]             (kl)    [below left of=k]      {$T_{2}$};
+\node[hollow node]          (kr)    [below right of = k]  {$H_2$};
+ 
+  \node[rsubtree]          (rlmst)    [below left of = kr]  {$T_4$};
+   \node[subtree]  (t5) [below right of = rlmst] {$T_5$};
+    \node[rhollow node]             (krl)         [below left of = rlmst]        {$H'_1$};
+    \node[succn]          (nl)    [below left of = krl]  {};
+    \node[subtree]          (krr)       [below right of = kr]           {$T_{3}$};
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    \node[ref node] (pr) [above right of= t0] {$pr$};
+    
+    \node[ref node] (cf) [above right of = kp1] {$cf$};
+    \node[rref node] (lp) [ left of = rlmst] {$lp$};
+    \node[rref node] (sc) [left of = krl] {$sc$};
+\node[subtree]          (t6)       [below right of = krl]           {$T_{6}$};
+    \path[->]  
+	     (r)     edge node {} (t1)
+              (r)     edge node {} (t0)
+                %(t0)     edge node {} (k)
+                (t0)     edge node {} (kp1) 
+   
+	  %  (kr)    edge node {}  (krl)
+         (kr) edge node {} (rlmst)
+          (rlmst) edge[draw=red] node {} (krl)
+                              (rlmst) edge node {} (t5)
+             (krl) edge node {} (nl)
+                (kr)     edge node {} (krr)
+                (kp1)   edge node {} (kr)
+	     (kp1)    edge node {} (kl)
+             %%%%%%%%%%%%%%%%%%%
+                (pr) edge node {} (t0)
+                
+                (cf) edge node {} (kp1)
+                (lp) edge[draw=red] node {} (rlmst)
+                (sc) edge[draw=red] node {} (krl)
+                                 (krl) edge node {} (t6)
+
+;
+\end{tikzpicture}
+\caption{ Unlinking $k$ via linking fresh variable  $f'$.}
+\label{fig:del2.3}
+\end{subfigure} \quad
+\begin{subfigure}[b]{.4\linewidth}
+\centering
+\begin{tikzpicture}[scale=0.5]
+\tikzstyle{ref node}=[circle,draw,inner sep=1.5]
+\tikzstyle{hollow node}=[rectangle,draw,inner sep=1.5]
+\tikzstyle{rhollow node}=[rectangle,draw=red,inner sep=1.5]
+\tikzstyle{rdhollow node}=[rectangle,draw=red,inner sep=1.5,dashed]
+\tikzstyle{sub node}=[triangle,draw,inner sep=1.5]
+\tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
+\tikzstyle{rdref node}=[circle,draw=red,inner sep=1.5,dashed]
+\tikzstyle{rref node}=[circle,draw=red,inner sep=1.5]
+\tikzstyle{fref node}=[circle,draw=green,inner sep=1.5,dashed]
+\tikzset{
+  red node/.style = {rectangle,draw=red,inner sep=0.75},
+  treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
+  subtree/.style  = {draw,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
+  rsubtree/.style ={draw=red,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
+  succn/.style = {circle,draw=black,fill=black},
+  blue node/.style = {rectangle,draw=green,inner sep=1.5,dashed}
+}
+
+
+    \node[hollow node]       (r)     []   {$R$};
+        \node[subtree] (t0) [below  right of = r] [] {$T_0$};
+    \node[subtree]           (t1)    [below left of=r]       {$T_{1}$};
+   
+    \node[hollow node]            (kp1) [below right of = t0]   {$H'_1$};    
+    \node[subtree]             (kl)    [below left of=k]      {$T_{2}$};
+\node[hollow node]          (kr)    [below right of = k]  {$H_2$};
+ 
+  \node[rsubtree]          (rlmst)    [below left of = kr]  {$T_4$};
+   \node[subtree]  (t5) [below right of = rlmst] {$T_5$};
+    \node[rdhollow node]             (krl)         [below left of = rlmst]        {$H'_1$};
+    \node[succn]          (nl)    [below left of = krl]  {};
+    \node[subtree]          (krr)       [below right of = kr]           {$T_{3}$};
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    \node[ref node] (pr) [above right of= t0] {$pr$};
+    
+    \node[ref node] (cf) [above right of = kp1] {$cf$};
+    \node[rref node] (lp) [ left of = rlmst] {$lp$};
+    \node[rdref node] (sc) [left of = krl] {$sc$};
+\node[subtree]          (t6)       [below right of = krl]           {$T_{6}$};
+    \path[->]  
+	     (r)     edge node {} (t1)
+              (r)     edge node {} (t0)
+                %(t0)     edge node {} (k)
+                (t0)     edge node {} (kp1) 
+   
+	  %  (kr)    edge node {}  (krl)
+         (kr) edge node {} (rlmst)
+          (rlmst) edge[draw=red] node {} (t6)
+                              (rlmst) edge node {} (t5)
+             (krl) edge node {} (nl)
+                (kr)     edge node {} (krr)
+                (kp1)   edge node {} (kr)
+	     (kp1)    edge node {} (kl)
+             %%%%%%%%%%%%%%%%%%%
+                (pr) edge node {} (t0)
+                
+                (cf) edge node {} (kp1)
+                (lp) edge[draw=red] node {} (rlmst)
+                (sc) edge[draw=red,dashed] node {} (krl)
+                                 (krl) edge[draw=red,dashed] node {} (t6)
+
 ;
 \end{tikzpicture}
 \caption{ Unlinking $k$ via linking fresh variable  $f'$.}
@@ -150,36 +363,58 @@ The use of disjunction ($Left|Right$) in field maps and paths is required to cap
 \begin{subfigure}[b]{.4\linewidth}
 \centering
 \begin{tikzpicture}[scale=1]
+\tikzstyle{ref node}=[circle,draw,inner sep=1.5]
 \tikzstyle{hollow node}=[rectangle,draw,inner sep=1.5]
+\tikzstyle{rhollow node}=[rectangle,draw=red,inner sep=1.5]
+\tikzstyle{rdhollow node}=[rectangle,draw=red,inner sep=1.5,dashed]
 \tikzstyle{sub node}=[triangle,draw,inner sep=1.5]
 \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
-
+\tikzstyle{rdref node}=[circle,draw=red,inner sep=1.5,dashed]
+\tikzstyle{rref node}=[circle,draw=red,inner sep=1.5]
+\tikzstyle{fref node}=[circle,draw=green,inner sep=1.5,dashed]
 \tikzset{
   red node/.style = {rectangle,draw=red,inner sep=0.75},
   treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
   subtree/.style  = {draw,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
+  rsubtree/.style ={draw=red,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
   succn/.style = {circle,draw=black,fill=black},
-  blue node/.style = {rectangle,draw=blue,inner sep=1.5}
+  blue node/.style = {rectangle,draw=green,inner sep=1.5,dashed}
 }
 
+
     \node[hollow node]       (r)     []   {$R$};
+        \node[subtree] (t0) [below right of = r] [] {$T_0$};
     \node[subtree]           (t1)    [below left of=r]       {$T_{1}$};
-    \node[hollow node]            (kp1) [below right of = r]   {$H'_1$};    
+    \node[hollow node]            (kp1) [below right of = t0]   {$H'_1$};    
     \node[subtree]             (kl)    [below left of=kp1]      {$T_{2}$};
     \node[hollow node]          (kr)    [below right of = kp1]  {$H_2$};
-    \node[subtree]          (rlmst)    [below left of = kr]  {$T_4$};
+    \node[rsubtree]          (rlmst)    [below left of = kr]  {$T_4$};
     \node[subtree]  (t5) [below right of = rlmst] {$T_5$};
     %\node[succn]          (nl)    [below left of = rlmst]  {};
     \node[subtree]          (krr)       [below right of = kr]           {$T_{3}$};
+    \node[subtree]          (t6)       [below left of = rlmst]           {$T_{6}$};
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    \node[ref node] (pr) [above right of= t0] {$pr$};
+    \node[rref node] (lp) [ left of = rlmst] {$lp$};    
+    \node[ref node] (cf) [above right of = kp1] {$cf$};    
+
     \path[->]  
 	     (r)     edge node {} (t1)
-         (r)     edge node {} (kp1) 
+              (r)     edge node {} (t0)
+         %       (t0)     edge node {} (k)
+         (t0)     edge node {} (kp1) 
          (kr)     edge node {} (krr)
          (kr) edge node {} (rlmst)
           (rlmst) edge node {} (t5)
   %       (rlmst) edge node {} (nl)
          (kp1)   edge node {} (kr)
 	     (kp1)    edge node {} (kl)
+
+(pr) edge node {} (t0)
+                
+                (cf) edge node {} (kp1)
+                (lp) edge[draw=red] node {} (rlmst)
+                (rlmst) edge[draw=red] node {} (t6)
 ;
 \end{tikzpicture}
 \captionof{figure}{Reclamation of $k$ after waiting all readers on it.}
@@ -188,10 +423,14 @@ The use of disjunction ($Left|Right$) in field maps and paths is required to cap
 \caption{\textsf{Delete} of the node with two children}
 \label{fig:del2}
 \end{figure}
+For lack of space the annotated code is only in Appendix \ref{appendix:bst_del}, but it motivates some of the conditional-related flexibility discussed in Section \ref{subsection:type-action}.
+The use of disjunction ($Left|Right$) in field maps and paths is required to capture traversals which follow different fields at different times, such as the lookup in a binary search tree.
 
 The most subtle aspect of the deletion is the final step in the case the node $R$ to remove has both children.  In this case, the value $V$ of the left-most node of $R$'s right child --- the next element in the collection order --- is copied into a new node, which is then used to \emph{replace} node $R$: the replacement's fields exactly match $R$'s except for the data (\textsc{T-Replace} via $\N_1 = \N_2$), and the parent is updated to reference the replacement, unlinking $R$. At this point, there are two nodes with value $V$ in the tree (\textit{weak} BST property of the Citrus~\cite{Arbel:2014:CUR:2611462.2611471}): the replacement node, and what was the left-most node under $R$'s right child. This latter (original) node for $V$ must be unlinked, which is simplified because by being left-most the left child is null, avoiding another round of replacement (\textsc{T-UnlinkH} via $\forall_{f\in dom(\N_1)} \ldotp f\neq f_2 \implies (\N_1(f) = \textsf{null}$).
 The complexity in checking safety here is that once $R$ is found, another loop is used to find $V$ and its parent (since that node will later be removed as well).
 After $V$ is found, there are \emph{two} local unlinking operations, at different depths of the tree.  This is why the type system must keep separate abstract iteration counts for traversals in loops --- these indices act like multiple cursors into the data structure, and allow the types to carry enough information to keep those changes separate and ensure neither introduces a cycle.
 
 To the best of our knowledge, we are the first to check such code for memory-safe use of RCU primitives modularly, without appeal to the specific implementation of RCU primitives.
+\begin{comment}
 
+\end{comment}
