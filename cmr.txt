@@ -15,12 +15,15 @@ There should be more explanation on the enter/exit critical sections.
 Make Appendix referces proper
 
 Interaction with outside of typesystem should be extended.
+
+Acknowledgement to Matt.
+
+Added tree figure and extended the text of Evaluation for explaining the tree-figure
 ----------------------------------------------------------------------------
 
 
 footnote for the RCU requirements. Or maybe we should completely remove this.
 
-Acknowledgement to Matt.
 
 
 
