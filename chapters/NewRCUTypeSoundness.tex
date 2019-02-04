@@ -1,6 +1,6 @@
 \section{Soundness}
 \label{sec:soundness}
-This section outlines the proof of type soundness -- our full proof appears in Appendices \ref{sec:prooflemmas}, \ref{sec:memaxioms}, \ref{lem:lematom} and \ref{lem:lemstructural}.
+This section outlines the proof of type soundness -- our full proof appears in Appendices \ref{sec:prooflemmas}, \ref{sec:memaxioms}, \ref{lem:lematom} and \ref{lem:lemstructural} of our technical report~\cite{isotek}.
 We prove type soundness by embedding the type system into an abstract concurrent separation logic called the Views Framework~\cite{views}, which when given certain information about proofs for a specific language (primitives and primitive typing) gives back a full program logic including choice and iteration.  As with other work taking this approach~\cite{oopsla12,toplas17}, this consists of several key steps:
 \begin{enumerate}
     \item Define runtime states and semantics for the atomic actions of the language.  These are exactly the semantics from Figure \ref{fig:operationalsemrcu} in Section \ref{sec:semantics}
