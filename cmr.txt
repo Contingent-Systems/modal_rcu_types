@@ -11,16 +11,18 @@ Figure 3 desugaring syntax, especially brackets -- done
 Introduce invariant after logical state
 
 There should be more explanation on the enter/exit critical sections.
-----------------------------------------------------------------------------
+
 Make Appendix referces proper
 
+Interaction with outside of typesystem should be extended.
+----------------------------------------------------------------------------
 
 
-footnote for the RCU requirements.
+footnote for the RCU requirements. Or maybe we should completely remove this.
 
 Acknowledgement to Matt.
 
-Interaction with outside of typesystem should be extended.
+
 
 Discuss with Colin: I am not sure whether we have to take the part of the rule and explain it explicitly in the text.
  
