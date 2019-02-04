@@ -67,7 +67,7 @@
                 (krl) edge node {} (t6)
 ;
 \end{tikzpicture}
-\caption{Heap node $H_1$ and its successor $H'_1$.}
+\caption{The writer traverses subtree $T_0$ to find the heap node $H_1$ with local references $pr$ and $cr$.}
 \label{fig:del2.1}
 \end{subfigure}\quad
 \begin{subfigure}[b]{.4\linewidth}
@@ -141,7 +141,7 @@
 ;
 ;
 \end{tikzpicture}
-\caption{Duplicating $H'_1$ as a fresh heap node before replacing $H_1$ with the fresh one.}
+\caption{Traverse subtree $T_4$ starting from $H_2$ with references $lp$ and $sc$ to find successor $H'_1$ of $H_1$. Duplicating $H'_1$ as a fresh heap node before replacing $H_1$ with the fresh one.}
 \label{fig:del2.2}
 \end{subfigure}\quad
 \begin{subfigure}[b]{.4\linewidth}
@@ -212,7 +212,7 @@
 
 ;
 \end{tikzpicture}
-\caption{ Unlinking $k$ via linking fresh variable  $f'$.}
+\caption{Replace $H_1$ with fresh successor and synchronize with the readers.}
 \label{fig:del2.3}
 \end{subfigure} \quad
 \begin{subfigure}[b]{.4\linewidth}
@@ -281,8 +281,8 @@
 
 ;
 \end{tikzpicture}
-\caption{ Unlinking $k$ via linking fresh variable  $f'$.}
-\label{fig:del2.3}
+\caption{Unlinks old successor referenced by $sc$.}
+\label{fig:del2.4}
 \end{subfigure} \quad
 \begin{subfigure}[b]{.4\linewidth}
 \centering
@@ -350,8 +350,8 @@
 
 ;
 \end{tikzpicture}
-\caption{ Unlinking $k$ via linking fresh variable  $f'$.}
-\label{fig:del2.3}
+\caption{Safe unlinking of the old successor whose left subtree is null.}
+\label{fig:del2.5}
 \end{subfigure}\quad
 \begin{subfigure}[b]{.4\linewidth}
 \centering
@@ -410,10 +410,10 @@
                 (rlmst) edge[draw=red] node {} (t6)
 ;
 \end{tikzpicture}
-\captionof{figure}{Reclamation of $k$ after waiting all readers on it.}
-\label{fig:del2.4}
+\captionof{figure}{Reclamation of the old successor.}
+\label{fig:del2.6}
 \end{subfigure}
-\caption{\textsf{Delete} of the node with two children}
+\caption{\textsf{Delete} of a heap node with two children in BST~\cite{Arbel:2014:CUR:2611462.2611471}.}
 \label{fig:del2}
 \end{figure}
 We have used our type system to check correct use of RCU primitives in two RCU data structures representative of the broader space.
@@ -430,6 +430,3 @@ The complexity in checking safety here is that once $R$ is found, another loop i
 After $V$ is found, there are \emph{two} local unlinking operations, at different depths of the tree.  This is why the type system must keep separate abstract iteration counts for traversals in loops --- these indices act like multiple cursors into the data structure, and allow the types to carry enough information to keep those changes separate and ensure neither introduces a cycle.
 
 To the best of our knowledge, we are the first to check such code for memory-safe use of RCU primitives modularly, without appeal to the specific implementation of RCU primitives.
-\begin{comment}
-
-\end{comment}
