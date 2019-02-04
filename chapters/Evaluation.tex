@@ -43,7 +43,7 @@
     \node[rref node] (cr) [above right of= k] {$cr$};
 %    \node[fref node] (cf) [above right of = krl] {$cf$};
     \node[ref node] (lp) [above right of = kr] {$lp$};
-    \node[ref node] (sc) [above left of = krl] {$sc$};
+%    \node[ref node] (sc) [above left of = krl] {$sc$};
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     \path[->]  
 	     (r)     edge node {} (t1)
@@ -63,7 +63,7 @@
                 (cr) edge[draw=red] node {} (k)
 %                (cf) edge node {} (krl)
                 (lp) edge node {} (kr)
-                (sc) edge node {} (krl)
+ %               (sc) edge node {} (krl)
                 (krl) edge node {} (t6)
 ;
 \end{tikzpicture}
@@ -427,7 +427,12 @@ The use of disjunction ($Left|Right$) in field maps and paths is required to cap
 
 The most subtle aspect of the deletion is the final step in the case the node $H_1$ to remove has both children. In this case, the value $H_s$ of the left-most node of $H_1$'s right child --- the next element in the collection order --- is copied into a new \textit{freshly-allocated} node -- shown in Figure \ref{del2.1}, which is then used to \emph{replace} node $H_1$ -- shown in Figure \ref{2.3}: the replacement's fields exactly match $H_1$'s except for the data (\textsc{T-Replace} via $\N_1 = \N_2$), and the parent is updated to reference the replacement, unlinking $H_1$. At this point -- shown in Figure \ref{del2.3}-\ref{del2.4}, there are two nodes with value $H_s$ in the tree (\textit{weak} BST property of the Citrus~\cite{Arbel:2014:CUR:2611462.2611471}): the replacement node, and what was the left-most node under $H_1$'s right child. This latter (original) node for $H_s$ must be unlinked --shown in Figure \ref{del2.5}, which is simplified because by being left-most the left child is null, avoiding another round of replacement (\textsc{T-UnlinkH} via $\forall_{f\in dom(\N_1)} \ldotp f\neq f_2 \implies (\N_1(f) = \textsf{null}$).
 
-The complexity in checking safety here is that once $H_1$ is found after traversing the subtree $T_0$ with references $pr:rcuItr(l|r)^{k} \{l|r \rightarrow cr\}$ and $crrcuItr(l|r)^{k}.r \{\}$ -- where $(l|k)^{k}$ comes from $T_0$ traversal, another loop is used to find $H'_1$ and its parent (since that node will later be removed as well) after traversing the subtree $T_4$ with references $lp:(l|r)^{k}.right.right.(l|r)^{m} \{l|r \rightarrow sc\}$ and $lp:(l|r)^{k}.right.right.left.(l|r)^{m}.left \{\}$ -- where $(l|m)^{m}$ comes from $T_4$ traversal.
+The complexity in checking safety here is that once $H_1$ is found after traversing the subtree $T_0$ with references
+\[ pr:rcuItr(l|r)^{k} \{l|r \rightarrow cr\},\, cr:rrcuItr(l|r)^{k}.(l|r) \{\}\]
+where $(l|k)^{k}$ comes from $T_0$ traversal, another loop is used to find $H_s$ and its parent (since that node will later be removed as well) after traversing the subtree $T_4$ with references
+\[lp:(l|r)^{k}.(l|r).r.(l|r)^{m} \{l|r \rightarrow sc\},\, lp:(l|r)^{k}.(l|r).r.l.(l)^{m}.l\{\}\]
+where $(l|m)^{m}$ comes from $T_4$ traversal.
+
 After $H'_1$ is found, there are \emph{two} local unlinking operations, at different depths of the tree.  This is why the type system must keep separate abstract iteration counts for traversals in loops --- these indices act like multiple cursors into the data structure, and allow the types to carry enough information to keep those changes separate and ensure neither introduces a cycle.
 
 To the best of our knowledge, we are the first to check such code for memory-safe use of RCU primitives modularly, without appeal to the specific implementation of RCU primitives.
