@@ -1,12 +1,12 @@
 \section{Soundness}
 \label{sec:soundness}
-This section outlines the proof of type soundness -- our full proof appears in Appendices \ref{sec:prooflemmas}, \ref{sec:memaxioms}, \ref{lem:lematom} and \ref{lem:lemstructural} of our technical report~\cite{isotek}.
+This section outlines the proof of type soundness -- our full proof appears in Appendices \ref{sec:prooflemmas}, \ref{sec:memaxioms}, \ref{lem:lematom} and \ref{lem:lemstructural} of the technical report~\cite{isotek}.
 We prove type soundness by embedding the type system into an abstract concurrent separation logic called the Views Framework~\cite{views}, which when given certain information about proofs for a specific language (primitives and primitive typing) gives back a full program logic including choice and iteration.  As with other work taking this approach~\cite{oopsla12,toplas17}, this consists of several key steps:
 \begin{enumerate}
     \item Define runtime states and semantics for the atomic actions of the language.  These are exactly the semantics from Figure \ref{fig:operationalsemrcu} in Section \ref{sec:semantics}
     \item Define a denotational interpretation $\db{-}$ of the types (Figure \ref{fig:denotingtypeenviroment}) in terms of an \emph{instrumented} execution state -- a runtime state (Section \ref{sec:semantics}) with additional bookkeeping to simplify proofs.  
     The denotation encodes invariants specific to each type, like the fact that \textsf{unlinked} references are unreachable from the heap. %, or that \textsf{freeable} references are unreachable from the heap as well as other threads' local variables.
-    The instrumented execution states are also constrained by additional \textit{global} \textsf{WellFormed}ness \textit{invariants} (Appendix \ref{sec:memaxioms}) the type system is intended to maintain, such as tree structure of the data structure.
+    The instrumented execution states are also constrained by additional \textit{global} \textsf{WellFormed}ness \textit{invariants} -- see Appendix \ref{sec:memaxioms} of the technical report~\cite{isotek} for detailed formal invariants -- the type system is intended to maintain, such as tree structure of the data structure.
     \item Prove a lemma -- called \emph{Axiom Soundness} (Lemma \ref{lem:axmsoundness}) -- that the type rules for atomic actions are sound.  Specifically, that given a state in the denotation of the pre-type-environment of a primitive type rule, the operational semantics produce a state in the denotation of the post-type-environment.  This includes preservation of global invariants.
     \item Give a desugaring $\downarrow-\downarrow$ of non-trivial control constructs (Figure \ref{fig:asm}) into the simpler non-deterministic versions provided by Views.
 \end{enumerate}
@@ -49,7 +49,7 @@ An object can be observed as part of the structure (\texttt{iterator}), removed 
 \mypar{Invariants of RCU Views and Denotations of Types}\label{sec:lemmas} In this section we aim to convey the intuition behind the predicate \textsf{WellFormed} which enforces global invariants on logical states, and how it interacts with the denotations of types in key ways.
 %In this section we aim to convey an intuition for the {soundness} of the type system through an informal summarization of the global \textsf{WellFormed}ness invariants together with the denotations of the types imposed on the instrumented states in the proof. 
 \textsf{WellFormed} is the conjunction of a number of more specific invariants, which we outline here.
-For full details, see Appendix \ref{sec:memaxioms}.
+For full details, see Appendix \ref{sec:memaxioms} of the technical report~\cite{isotek}.
 
 \paragraph{The Invariant for Read Traversal} Reader threads access valid heap locations even during the grace period. The validity of their heap accesses ensured by the observations they make over the heap locations --- which can only be \textsf{iterator} as they can only use local \textsf{rcuItr} references. To this end, a \textsf{Readers-Iterators-Only} invariant asserts that a heap location can only be observed as \textsf{iterator} by the reader threads.
 \paragraph{Invariants on Grace-Period}
@@ -285,9 +285,9 @@ $.
 Alternatively, we say that environment denotation is \emph{stable} (closed under $\mathcal{R}$).
 \end{lemma}
 \begin{proof}
-In Appendix \ref{sec:prooflemmas} Lemma \ref{lemma:stblwap}.
+In Appendix \ref{sec:prooflemmas} Lemma \ref{lemma:stblwap} of the tecnical report~\cite{isotek}.
 \end{proof}
-We elide the statement of the analogous result for the read-side critical section, available in Appendix \ref{sec:prooflemmas}.
+We elide the statement of the analogous result for the read-side critical section, available in Appendix \ref{sec:prooflemmas} of the technical report.
 %\begin{lemma}[Stable Environment Denotation-R]
 %For any \emph{closed} environment $\Gamma$ (i.e., $\forall x\in\mathsf{dom}(\Gamma)\ldotp, \mathsf{FV}(\Gamma(x))\subseteq\mathsf{dom}(\Gamma)$):
 %\[
@@ -359,7 +359,7 @@ $
 $
 \end{lemma}
 \begin{proof}
-By case analysis on $\alpha$. Details in Appendix \ref{sec:prooflemmas}. % Lemma \ref{lem:axmsoundnessap}
+By case analysis on $\alpha$. Details in Appendix \ref{sec:prooflemmas} of the techical report~\cite{isotek}. % Lemma \ref{lem:axmsoundnessap}
 \end{proof}
 \begin{lemma}[Context-SubTyping-M]\label{lem:cntxsubt-mcln}
 $ \Gamma \subt \Gamma'  \implies \llbracket \Gamma \rrbracket_{M,tid} \sqsubseteq \llbracket  \Gamma' \rrbracket_{M,tid} $
@@ -387,7 +387,7 @@ $}
 \end{lemma}
 \begin{proof}
 By induction on the typing derivation, appealing to Lemma \ref{lem:axmsoundness} for primitives, Lemma \ref{lem:cntxsubt-mcln} and consequence for subtyping, and otherwise appealing to structural rules of the Views logic and inductive hypotheses.
-Full details in Appendix \ref{sec:prooflemmas}. %Lemma \ref{lemma:embedwap}.
+Full details in Appendix \ref{sec:prooflemmas} of the technical report~\cite{isotek}. %Lemma \ref{lemma:embedwap}.
   \end{proof}
 
 The corresponding obligations and proofs for the read-side critical section type system are similar in statement and proof approach, just for the read-side type judgments and environment denotations.
