@@ -1182,8 +1182,8 @@ sn & \textsf{struct name}   & &  i,j & \mathsf{nat (indices)}  \\
 
 \usepackage{microtype}%if unwanted, comment out or use option "draft"
 %\bibliographystyle{plainurl}% the recommended bibstyle
-\newif\ifpaper
-\papertrue
+\newif\iftechr
+\techrfalse
 %\bibliography{references/paper}
 \begin{document}
 %
@@ -1224,7 +1224,6 @@ Our type system allows us to give the first proofs of memory safety for RCU link
 %We propose a flow-sensitive type system ~\cite{Foster:2002:FTQ:512529.512531} based on Ownership Types ~\cite{Clarke:2007:ACO:1787553.1787559} which enforces correct usage of RCU to provide memory safety for data structures which are clients of RCU.
 %\keywords{Deferred Memory Reclamation \and Grace Period \and Read-Copy-Update Programming \and Memory Safety \and Type System \and Views Framework.}
 \end{abstract}\raggedbottom
-%\ifpaper
 \input{chapters/RCUTypesIntro.tex}\raggedbottom
 \input{chapters/RCUTypesMotivation.tex}\raggedbottom
 \input{chapters/RCUSemantics.tex}\raggedbottom
@@ -1236,7 +1235,6 @@ Our type system allows us to give the first proofs of memory safety for RCU link
 %% .. or use the thebibliography environment explicitely
 \bibliographystyle{splncs04}
 \bibliography{references/paper}
-%\else
 \newpage
 \appendix
 \input{chapters/RCUTypesSoundnessLemmasESOP.tex}
@@ -1248,6 +1246,5 @@ Our type system allows us to give the first proofs of memory safety for RCU link
 \input{chapters/appendixsafeunlink.tex}
 \newpage
 \input{chapters/appendixrcusection.tex}
-%\fi
 \end{document}
 \grid
