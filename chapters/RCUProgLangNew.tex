@@ -689,7 +689,7 @@ There is also another rule, \textsc{T-LinkF-Null}, not shown in Figure \ref{fig:
 
 \mypar{Entering a Critical Section}
 (\textit{\textbf{Referencing inside \textsf{RCU} Blocks}})
-We introduce the \textit{syntactic sugaring} $\textsf{RCUWrite } x.f \textsf{ as } y \textsf{ in } \{C\}$ for write critical sections where the analogous syntactic sugaring can be found for read-critical sections in Appendix \ref{appendix:readtypes} of the technical report~\cite{isotek}.
+We introduce the \textit{syntactic sugaring} $\textsf{RCUWrite } x.f \textsf{ as } y \textsf{ in } \{C\}$ for write-side critical sections where the analogous syntactic sugaring can be found for read-side critical sections in Appendix \ref{appendix:readtypes} of the technical report~\cite{isotek}.
 
 The type system ensures \textsf{unlinked} and \textsf{freeable} references are handled linearly, as they cannot be dropped -- coerced to \textsf{undef}. The top-level rule \textsc{ToRCUWrite} in Figure \ref{fig:tss} ensures \textsf{unlinked} references have been freed by forbidding them in the critical section's post-type environment. Our technical report~\cite{isotek} also includes the analogous rule \textsc{ToRCURead} for the read critical section in Figure \ref{fig:tssr} of Appendix \ref{appendix:readtypes}.
 
