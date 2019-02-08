@@ -668,11 +668,8 @@ Our type rule for ensuring safe replacement (\textsc{T-Replace}) prevents path a
 %(\textit{\textbf{Mutation - Reclaiming a Heap Node after a Grace Period}}) - The reason why we have type \textsf{freeable} after the grace period is to prevent the ability to call \texttt{Free} before the grace period ends. This means that we cannot give ownership of a heap node to heap right after unlinking. Our type rule(\textsc{T-Sync}) ensures this via enforcing that we call \texttt{Free} only with a reference in type \textsf{freeable}. To get \textsf{freeable} reference, first we wait the grace period \texttt{SyncStart};\texttt{SyncStop} for unlinked heap nodes to end. The \texttt{SyncStart} does not have any effect on type of the variables.
 
 \mypar{Inserting a Fresh Node}
-\textsc{T-Insert} type checks heap updates that link a fresh node into a linked data structure. Inserting a \textsf{rcuFresh} reference also faces some of the aliasing complications that we have already discussed for direct unlinking and replacing a node. Unlike the replacement case, the path to the last heap node (the referent of $o$) from the root is \emph{extended} by $f$, which risks falsifying the paths for aliases and descendants of $o$. We prevent this inconsistency with
-\[
-\forall_{x \in \Gamma, \N_3, \rho_3,f_1,y} \ldotp (x:\textsf{rcuItr}\,\rho_3\,\N_3([f_1 \rightharpoonup y])) \implies
- (\forall_{\rho_4\neq \epsilon} \ldotp \neg\mathsf{MayAlias}(\rho_3, \rho.\rho_4) )
-\]
+\textsc{T-Insert} type checks heap updates that link a fresh node into a linked data structure. Inserting a \textsf{rcuFresh} reference also faces some of the aliasing complications that we have already discussed for direct unlinking and replacing a node. Unlike the replacement case, the path to the last heap node (the referent of $o$) from the root is \emph{extended} by $f$, which risks falsifying the paths for aliases and descendants of $o$. The final assumption(the implication) of \textsc{T-Insert} checks for this inconsistency.
+
 There is also another rule, \textsc{T-LinkF-Null}, not shown in Figure \ref{fig:tss}, which handles the case where the fields of the fresh node are not object references, but instead all contain null (e.g., for appending to the end of a linked list or inserting a leaf node in a tree).
 
 \mypar{Entering a Critical Section}
