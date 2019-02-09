@@ -1212,13 +1212,6 @@ Memory management in lock-free data structures remains a major challenge in conc
 
 We present a static type system to ensure correct use of RCU memory management: that nodes removed from a data structure are always scheduled for subsequent deallocation, and that nodes are scheduled for deallocation at most once. As part of our soundness proof, we give an abstract semantics for RCU memory management primitives which captures the fundamental properties of RCU. 
 Our type system allows us to give the first proofs of memory safety for RCU linked list and binary search tree implementations without requiring full verification.
-%To the bset of our knowledge we not only verify a singly linked list and but also a binary search tree for the first time. 
-%Memory management has been one of the hardest parts in concurrent programming to reason about. What is harder is doing this reasoning for optimistic-concurrent-memory-access-patterns (OCMAP)s such as Read Copy Update(RCU) ~\cite{Mckenney:2004:EDD:1048173} and Hazard Pointers ~\cite{Michael:2004:HPS:987524.987595}. These patterns have been widely used to avoid using locks to synchronise reader threads for performance concerns. Linux kernel is one of the well-known place where these patterns used for improving the performance and scalability on highly concurrent architectures.
-
-%In this paper we focus on RCU which is based on the notion called grace period which means objects are not freed up until all pre-existing read operations on them are complete. Based on this guarantee provided by RCU semantics, a thread can access shared memory locations without holding any responsibility of being aware that they get deallocated. This optimistic memory access makes memory management one of the most complex aspects of the algorithms, because it makes hard to decide when memory reclamation is safe.
-
-%We propose a flow-sensitive type system ~\cite{Foster:2002:FTQ:512529.512531} based on Ownership Types ~\cite{Clarke:2007:ACO:1787553.1787559} which enforces correct usage of RCU to provide memory safety for data structures which are clients of RCU.
-%\keywords{Deferred Memory Reclamation \and Grace Period \and Read-Copy-Update Programming \and Memory Safety \and Type System \and Views Framework.}
 \end{abstract}\raggedbottom
 \input{chapters/RCUTypesIntro.tex}\raggedbottom
 \input{chapters/RCUTypesMotivation.tex}\raggedbottom
