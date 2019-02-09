@@ -47,14 +47,6 @@ Clements, A.T., Kaashoek, M.F., Zeldovich, N.: Scalable address spaces using
   \doi{10.1145/2150976.2150998},
   \url{http://doi.acm.org/10.1145/2150976.2150998}
 
-\bibitem{Cohen:2009:VPS:1616077.1616080}
-Cohen, E., Dahlweid, M., Hillebrand, M., Leinenbach, D., Moskal, M., Santen,
-  T., Schulte, W., Tobies, S.: Vcc: A practical system for verifying concurrent
-  c. In: Proceedings of the 22Nd International Conference on Theorem Proving in
-  Higher Order Logics. pp. 23--42. TPHOLs '09, Springer-Verlag, Berlin,
-  Heidelberg (2009). \doi{10.1007/978-3-642-03359-9\_2},
-  \url{http://dx.doi.org/10.1007/978-3-642-03359-9_2}
-
 \bibitem{Cooper2015RelativisticPI}
 Cooper, T., Walpole, J.: Relativistic programming in haskell using types to
   enforce a critical section discipline (2015),
@@ -140,10 +132,19 @@ Kokologiannakis, M., Sagonas, K.: Stateless model checking of the linux
   \doi{10.1145/3092282.3092287},
   \url{http://doi.acm.org/10.1145/3092282.3092287}
 
+\bibitem{krebbers2017essence}
+Krebbers, R., Jung, R., Bizjak, A., Jourdan, J.H., Dreyer, D., Birkedal, L.:
+  The essence of higher-order concurrent separation logic. In: European
+  Symposium on Programming. pp. 696--723. Springer (2017)
+
 \bibitem{Kung:1980:CMB:320613.320619}
 Kung, H.T., Lehman, P.L.: Concurrent manipulation of binary search trees. ACM
   Trans. Database Syst.  \textbf{5}(3),  354--382 (Sep 1980).
   \doi{10.1145/320613.320619}, \url{http://doi.acm.org/10.1145/320613.320619}
+
+\bibitem{isotek}
+Kuru, I., Gordon, C.S.: Safe deferred memory reclamation with types. CoRR
+  \textbf{abs/1811.11853} (2018), \url{http://arxiv.org/abs/1811.11853}
 
 \bibitem{LiangMKM16}
 Liang, L., McKenney, P.E., Kroening, D., Melham, T.: Verification of the
@@ -179,6 +180,11 @@ Mckenney, P.E.: A tour through rcu's requirements (2017),
 Mckenney, P.E., Appavoo, J., Kleen, A., Krieger, O., Krieger, O., Russell, R.,
   Sarma, D., Soni, M.: Read-copy update. In: In Ottawa Linux Symposium. pp.
   338--367 (2001)
+
+\bibitem{myr}
+Meyer, R., Wolff, S.: Decoupling lock-free data structures from memory
+  reclamation for static analysis. {PACMPL}  \textbf{3}({POPL}),  58:1--58:31
+  (2019), \url{https://dl.acm.org/citation.cfm?id=3290371}
 
 \bibitem{Michael:2004:HPS:987524.987595}
 Michael, M.M.: Hazard pointers: Safe memory reclamation for lock-free objects.
