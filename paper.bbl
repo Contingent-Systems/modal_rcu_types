@@ -32,13 +32,6 @@ Barnett, M., Chang, B.Y.E., DeLine, R., Jacobs, B., Leino, K.R.M.: Boogie: A
   Objects. pp. 364--387. FMCO'05, Springer-Verlag, Berlin, Heidelberg (2006).
   \doi{10.1007/11804192\_17}, \url{http://dx.doi.org/10.1007/11804192_17}
 
-\bibitem{Calcagno:2007:LAA:1270399.1271718}
-Calcagno, C., O'Hearn, P.W., Yang, H.: Local action and abstract separation
-  logic. In: Proceedings of the 22Nd Annual IEEE Symposium on Logic in Computer
-  Science. pp. 366--378. LICS '07, IEEE Computer Society, Washington, DC, USA
-  (2007). \doi{10.1109/LICS.2007.30},
-  \url{https://doi.org/10.1109/LICS.2007.30}
-
 \bibitem{DBLP:conf/asplos/ClementsKZ12}
 Clements, A.T., Kaashoek, M.F., Zeldovich, N.: Scalable address spaces using
   {RCU} balanced trees. In: Proceedings of the 17th International Conference on
@@ -202,12 +195,6 @@ M\"{u}ller, P., Schwerhoff, M., Summers, A.J.: Viper: A verification
 \bibitem{grc}
 Paul E.~McKenney, Mathieu~Desnoyers, L.J., Triplett, J.: The rcu-barrier
   menagerie (Nov 2016), \url{https://lwn.net/Articles/573497/}
-
-\bibitem{Reynolds:2002:SLL:645683.664578}
-Reynolds, J.C.: Separation logic: A logic for shared mutable data structures.
-  In: Proceedings of the 17th Annual IEEE Symposium on Logic in Computer
-  Science. pp. 55--74. LICS '02, IEEE Computer Society, Washington, DC, USA
-  (2002), \url{http://dl.acm.org/citation.cfm?id=645683.664578}
 
 \bibitem{verrcu}
 Tassarotti, J., Dreyer, D., Vafeiadis, V.: Verifying read-copy-update in a
