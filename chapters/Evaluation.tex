@@ -27,9 +27,9 @@
 }
 
     \node[hollow node]       (r)     []   {$R$};
-    \node[rsubtree] (t0) [below right of = r] [] {$T_0$};
+    \node[subtree] (t0) [below right of = r] [] {$T_0$};
     \node[subtree]           (t1)    [below left of=r]       {$T$};
-    \node[rhollow node]           (k)    [below right of=t0]      {$H_1$};
+    \node[hollow node]           (k)    [below right of=t0]      {$H_1$};
     \node[subtree]             (kl)    [below left of=k]      {$T_{2}$};
     \node[hollow node]          (kr)    [below right of = k]  {$H_2$};
      \node[subtree]          (rlmst)    [below left of = kr]  {$T_4$};
@@ -39,8 +39,8 @@
     \node[subtree]          (krr)       [below right of = kr]           {$T$};
     \node[subtree]          (t6)       [below right of = krl]           {$T_{6}$};
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    \node[rref node] (pr) [above right of= t0] {$pr$};
-    \node[rref node] (cr) [above right of= k] {$cr$};
+    \node[ref node] (pr) [above right of= t0] {$pr$};
+    \node[ref node] (cr) [above right of= k] {$cr$};
 %    \node[fref node] (cf) [above right of = krl] {$cf$};
     \node[ref node] (lp) [above right of = kr] {$lp$};
 %    \node[ref node] (sc) [above left of = krl] {$sc$};
@@ -48,7 +48,7 @@
     \path[->]  
 	     (r)     edge node {} (t1)
              (r)     edge node {} (t0)
-                (t0)     edge[draw=red] node {} (k)
+                (t0)     edge node {} (k)
                 (k)    edge node {} (kl)
 	     (k)    edge node {} (kr)
 
@@ -59,15 +59,15 @@
 
                 (kr)     edge node {} (krr)
                 %%%%%%%%%%%%%%%%%
-                (pr) edge[draw=red] node {} (t0)
-                (cr) edge[draw=red] node {} (k)
+                (pr) edge node {} (t0)
+                (cr) edge node {} (k)
 %                (cf) edge node {} (krl)
                 (lp) edge node {} (kr)
  %               (sc) edge node {} (krl)
                 (krl) edge node {} (t6)
 ;
 \end{tikzpicture}
-\caption{The writer traverses subtree $T_0$ to find the heap node $H_1$ with local references $pr$ and $cr$.}
+\caption{The writer traverses subtree $T_0$ to find the heap node $H_1$ with local references $pr$ and $cr$. Black-filled node representing the null node.}
 \label{fig:del2.1}
 \end{subfigure}\quad
 \begin{subfigure}[b]{.4\linewidth}
@@ -75,19 +75,19 @@
 \begin{tikzpicture}[scale=0.5]
 \tikzstyle{ref node}=[circle,draw,inner sep=1.5]
 \tikzstyle{hollow node}=[rectangle,draw,inner sep=1.5]
-\tikzstyle{rhollow node}=[rectangle,draw=red,inner sep=1.5]
+\tikzstyle{rhollow node}=[rectangle,draw,ultra thick,inner sep=1.5]
 
 \tikzstyle{sub node}=[triangle,draw,inner sep=1.5]
 \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
-\tikzstyle{rref node}=[circle,draw=red,inner sep=1.5]
-\tikzstyle{fref node}=[circle,draw=green,inner sep=1.5,dashed]
+\tikzstyle{rref node}=[circle,draw,ultra thick,inner sep=1.5]
+\tikzstyle{fref node}=[circle,draw,ultra thick, dotted, inner sep=1.5,dashed]
 \tikzset{
   red node/.style = {rectangle,draw=red,inner sep=0.75},
-  treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
+  treenode/.style = {circle, draw=black, align=center, minimum size=0.1cm},
   subtree/.style  = {draw,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
-  rsubtree/.style ={draw=red,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
+  rsubtree/.style ={ultra thick, draw,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
   succn/.style = {circle,draw=black,fill=black},
-  blue node/.style = {rectangle,draw=green,inner sep=1.5,dashed}
+  blue node/.style = {rectangle,draw,ultra thick, dotted,inner sep=1.5,dashed}
 }
 
     \node[hollow node]       (r)     []   {$R$};
@@ -113,7 +113,7 @@
     \path[->]  
 	     (r)     edge node {} (t1)
               (r)     edge node {} (t0)
-                (t0)     edge[draw=red] node {} (k)
+                (t0)     edge[draw, ultra thick] node {} (k)
                 
                 %(r)     edge node {} (k) 
                 (k)    edge node {} (kl)
@@ -126,12 +126,12 @@
                     (rlmst) edge node {} (t5)
              (krl) edge node {} (nl)
 
-                (kp1)   edge[dashed,draw=green] node {} (kr)
-	     (kp1)    edge[dashed,draw=green] node {} (kl)
+                (kp1)   edge[ultra thick,dotted] node {} (kr)
+	     (kp1)    edge[ultra thick,dotted] node {} (kl)
              %%%%%%%%%%%%%%%%%%%%%%%%%%%
-                            (pr) edge[draw=red] node {} (t0)
-                (cr) edge[draw=red] node {} (k)
-                (cf) edge[dashed,draw=green] node {} (kp1)
+                            (pr) edge[draw, ultra thick] node {} (t0)
+                (cr) edge[draw, ultra thick] node {} (k)
+                (cf) edge[ultra thick,dotted] node {} (kp1)
                 %(lp) edge node {} (kr)
                 %(sc) edge node {} (krl)
                                 (lp) edge node {} (rlmst)
@@ -141,7 +141,7 @@
 ;
 ;
 \end{tikzpicture}
-\caption{Traverse subtree $T_4$ starting from $H_2$ with references $lp$ and $sc$ to find successor $H'_1$ of $H_1$. Duplicating $H'_1$ as a fresh heap node before replacing $H_1$ with the fresh one.}
+\caption{Traverse subtree $T_4$ starting from $H_2$ with references $lp$ and $sc$ to find successor $H_s$ of $H_1$. Duplicating $H_s$ as a fresh heap node before replacing $H_1$ with the fresh one.}
 \label{fig:del2.2}
 \end{subfigure}\quad
 \begin{subfigure}[b]{.4\linewidth}
@@ -153,11 +153,11 @@
 
 \tikzstyle{sub node}=[triangle,draw,inner sep=1.5]
 \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
-\tikzstyle{rdref node}=[circle,draw=red,inner sep=1.5,dashed]
-\tikzstyle{rref node}=[circle,draw=red,inner sep=1.5]
+\tikzstyle{rdref node}=[circle,draw,inner sep=1.5,dashed]
+\tikzstyle{rref node}=[circle,draw,inner sep=1.5]
 \tikzstyle{fref node}=[circle,draw=green,inner sep=1.5,dashed]
 \tikzset{
-  red node/.style = {rectangle,draw=red,inner sep=0.75},
+  red node/.style = {rectangle,dashed,draw,inner sep=0.75},
   treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
   subtree/.style  = {draw,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
   rsubtree/.style ={draw=red,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
@@ -167,7 +167,7 @@
 
 
     \node[hollow node]       (r)     []   {$R$};
-        \node[rsubtree] (t0) [below  right of = r] [] {$T_0$};
+        \node[subtree] (t0) [below  right of = r] [] {$T_0$};
     \node[subtree]           (t1)    [below left of=r]       {$T$};
     \node[red node]           (k)    [below right of=t0]      {$H_1$};
     \node[hollow node]            (kp1) [right of = k]   {$H_s$};    
@@ -191,9 +191,9 @@
 	     (r)     edge node {} (t1)
               (r)     edge node {} (t0)
                 %(t0)     edge node {} (k)
-                (t0)     edge[draw=red] node {} (kp1) 
-                (k)    edge[dashed,draw=red] node {} (kl)
-	     (k)    edge[dashed,draw=red] node {} (kr)
+                (t0)     edge node {} (kp1) 
+                (k)    edge[dashed] node {} (kl)
+	     (k)    edge[dashed] node {} (kr)
 	  %  (kr)    edge node {}  (krl)
          (kr) edge node {} (rlmst)
           (rlmst) edge node {} (krl)
@@ -203,8 +203,8 @@
                 (kp1)   edge node {} (kr)
 	     (kp1)    edge node {} (kl)
              %%%%%%%%%%%%%%%%%%%
-                (pr) edge[draw=red] node {} (t0)
-                (cr) edge[draw=red,dashed] node {} (k)
+                (pr) edge node {} (t0)
+                (cr) edge[dashed] node {} (k)
                 (cf) edge node {} (kp1)
                 (lp) edge node {} (rlmst)
                 (sc) edge node {} (krl)
@@ -220,18 +220,18 @@
 \begin{tikzpicture}[scale=0.5]
 \tikzstyle{ref node}=[circle,draw,inner sep=1.5]
 \tikzstyle{hollow node}=[rectangle,draw,inner sep=1.5]
-\tikzstyle{rhollow node}=[rectangle,draw=red,inner sep=1.5]
+\tikzstyle{rhollow node}=[rectangle,draw,ultra thick,inner sep=1.5]
 
 \tikzstyle{sub node}=[triangle,draw,inner sep=1.5]
 \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
 \tikzstyle{rdref node}=[circle,draw=red,inner sep=1.5,dashed]
-\tikzstyle{rref node}=[circle,draw=red,inner sep=1.5]
+\tikzstyle{rref node}=[circle,draw,ultra thick,inner sep=1.5]
 \tikzstyle{fref node}=[circle,draw=green,inner sep=1.5,dashed]
 \tikzset{
   red node/.style = {rectangle,draw=red,inner sep=0.75},
   treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
   subtree/.style  = {draw,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
-  rsubtree/.style ={draw=red,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
+  rsubtree/.style ={draw,ultra thick,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
   succn/.style = {circle,draw=black,fill=black},
   blue node/.style = {rectangle,draw=green,inner sep=1.5,dashed}
 }
@@ -265,7 +265,7 @@
    
 	  %  (kr)    edge node {}  (krl)
          (kr) edge node {} (rlmst)
-          (rlmst) edge[draw=red] node {} (krl)
+          (rlmst) edge[ultra thick] node {} (krl)
                               (rlmst) edge node {} (t5)
              (krl) edge node {} (nl)
                 (kr)     edge node {} (krr)
@@ -275,8 +275,8 @@
                 (pr) edge node {} (t0)
                 
                 (cf) edge node {} (kp1)
-                (lp) edge[draw=red] node {} (rlmst)
-                (sc) edge[draw=red] node {} (krl)
+                (lp) edge[ultra thick] node {} (rlmst)
+                (sc) edge[ultra thick] node {} (krl)
                                  (krl) edge node {} (t6)
 
 ;
@@ -289,18 +289,18 @@
 \begin{tikzpicture}[scale=0.5]
 \tikzstyle{ref node}=[circle,draw,inner sep=1.5]
 \tikzstyle{hollow node}=[rectangle,draw,inner sep=1.5]
-\tikzstyle{rhollow node}=[rectangle,draw=red,inner sep=1.5]
-\tikzstyle{rdhollow node}=[rectangle,draw=red,inner sep=1.5,dashed]
+\tikzstyle{rhollow node}=[rectangle,draw,inner sep=1.5]
+\tikzstyle{rdhollow node}=[rectangle,draw,inner sep=1.5,dashed]
 \tikzstyle{sub node}=[triangle,draw,inner sep=1.5]
 \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
-\tikzstyle{rdref node}=[circle,draw=red,inner sep=1.5,dashed]
-\tikzstyle{rref node}=[circle,draw=red,inner sep=1.5]
+\tikzstyle{rdref node}=[circle,draw,inner sep=1.5,dashed]
+\tikzstyle{rref node}=[circle,draw,inner sep=1.5]
 \tikzstyle{fref node}=[circle,draw=green,inner sep=1.5,dashed]
 \tikzset{
-  red node/.style = {rectangle,draw=red,inner sep=0.75},
+  red node/.style = {rectangle,draw,inner sep=0.75},
   treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
   subtree/.style  = {draw,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
-  rsubtree/.style ={draw=red,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
+  rsubtree/.style ={draw,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
   succn/.style = {circle,draw=black,fill=black},
   blue node/.style = {rectangle,draw=green,inner sep=1.5,dashed}
 }
@@ -334,7 +334,7 @@
    
 	  %  (kr)    edge node {}  (krl)
          (kr) edge node {} (rlmst)
-          (rlmst) edge[draw=red] node {} (t6)
+          (rlmst) edge node {} (t6)
                               (rlmst) edge node {} (t5)
              (krl) edge node {} (nl)
                 (kr)     edge node {} (krr)
@@ -344,9 +344,9 @@
                 (pr) edge node {} (t0)
                 
                 (cf) edge node {} (kp1)
-                (lp) edge[draw=red] node {} (rlmst)
-                (sc) edge[draw=red,dashed] node {} (krl)
-                                 (krl) edge[draw=red,dashed] node {} (t6)
+                (lp) edge node {} (rlmst)
+                (sc) edge[dashed] node {} (krl)
+                                 (krl) edge[dashed] node {} (t6)
 
 ;
 \end{tikzpicture}
@@ -358,18 +358,18 @@
 \begin{tikzpicture}[scale=1]
 \tikzstyle{ref node}=[circle,draw,inner sep=1.5]
 \tikzstyle{hollow node}=[rectangle,draw,inner sep=1.5]
-\tikzstyle{rhollow node}=[rectangle,draw=red,inner sep=1.5]
-\tikzstyle{rdhollow node}=[rectangle,draw=red,inner sep=1.5,dashed]
+\tikzstyle{rhollow node}=[rectangle,draw,inner sep=1.5]
+\tikzstyle{rdhollow node}=[rectangle,draw,inner sep=1.5,dashed]
 \tikzstyle{sub node}=[triangle,draw,inner sep=1.5]
 \tikzstyle{solid node}=[rectangle,draw,inner sep=1.5]
-\tikzstyle{rdref node}=[circle,draw=red,inner sep=1.5,dashed]
-\tikzstyle{rref node}=[circle,draw=red,inner sep=1.5]
+\tikzstyle{rdref node}=[circle,draw,inner sep=1.5,dashed]
+\tikzstyle{rref node}=[circle,draw,inner sep=1.5]
 \tikzstyle{fref node}=[circle,draw=green,inner sep=1.5,dashed]
 \tikzset{
   red node/.style = {rectangle,draw=red,inner sep=0.75},
   treenode/.style = {circle, draqw=black, align=center, minimum size=0.1cm},
   subtree/.style  = {draw,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
-  rsubtree/.style ={draw=red,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
+  rsubtree/.style ={draw,minimum size=0cm,inner sep=0,regular polygon,regular polygon sides=3},
   succn/.style = {circle,draw=black,fill=black},
   blue node/.style = {rectangle,draw=green,inner sep=1.5,dashed}
 }
@@ -406,8 +406,8 @@
 (pr) edge node {} (t0)
                 
                 (cf) edge node {} (kp1)
-                (lp) edge[draw=red] node {} (rlmst)
-                (rlmst) edge[draw=red] node {} (t6)
+                (lp) edge node {} (rlmst)
+                (rlmst) edge node {} (t6)
 ;
 \end{tikzpicture}
 \captionof{figure}{Reclamation of the old successor.}
