@@ -650,7 +650,7 @@ checks that for every \textsf{rcuItr} reference $n$ in $\Gamma$, it is not a pat
 
 \mypar{Replacing with a Fresh Node}
 Replacing with a \textsf{rcuFresh} reference faces the same aliasing complications as direct unlinking.
-We illustrate these challenges in Figures \ref{fig:frframeout} and \ref{fig:freshframeout}. Our technical report~\cite{isotek} also includes Figures \ref{fig:bframeout} and \ref{fig:bunlinkframeout} in Appendix D to illustrate complexities in unlinking.
+We illustrate these challenges in Figures \ref{fig:frframeout} and \ref{fig:freshframeout}. Our technical report~\cite{isotek} also includes Figures 32a and 32b in Appendix D to illustrate complexities in unlinking.
 The square $R$ nodes are root nodes, and $H$ nodes are general heap nodes.
 All resources in red and green form the memory foot print of unlinking. The hollow red circular nodes -- $pr$ and $cr$ -- point to the nodes involved in replacing $H_1$ (referenced by \texttt{cr}) wih $H_f$ (referenced by $cf$) in the structure.
 We may have $a_0$ and $a_1$ which are aliases with $pr$ and $cr$ respectively. They are \textit{path-aliases} as they share the same path from root to the node that they reference. 
@@ -676,6 +676,6 @@ There is also another rule, \textsc{T-LinkF-Null}, not shown in Figure \ref{fig:
 (\textit{\textbf{Referencing inside \textsf{RCU} Blocks}})
 We introduce the \textit{syntactic sugaring} $\textsf{RCUWrite } x.f \textsf{ as } y \textsf{ in } \{C\}$ for write-side critical sections where the analogous syntactic sugaring can be found for read-side critical sections in Appendix E of the technical report~\cite{isotek}.
 
-The type system ensures \textsf{unlinked} and \textsf{freeable} references are handled linearly, as they cannot be dropped -- coerced to \textsf{undef}. The top-level rule \textsc{ToRCUWrite} in Figure \ref{fig:tss} ensures \textsf{unlinked} references have been freed by forbidding them in the critical section's post-type environment. Our technical report~\cite{isotek} also includes the analogous rule \textsc{ToRCURead} for the read critical section in Figure \ref{fig:tssr} of Appendix E.
+The type system ensures \textsf{unlinked} and \textsf{freeable} references are handled linearly, as they cannot be dropped -- coerced to \textsf{undef}. The top-level rule \textsc{ToRCUWrite} in Figure \ref{fig:tss} ensures \textsf{unlinked} references have been freed by forbidding them in the critical section's post-type environment. Our technical report~\cite{isotek} also includes the analogous rule \textsc{ToRCURead} for the read critical section in Figure 33 of Appendix E.
 
 Preventing the reuse of \textsf{rcuItr} references across critical sections is subtler: the non-critical section system is not flow-sensitive, and does not include \textsf{rcuItr}. Therefore, the initial environment lacks \textsf{rcuItr} references, and trailing \textsf{rcuItr} references may not escape.
