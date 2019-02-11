@@ -1,7 +1,12 @@
 \section{Soundness}
 \label{sec:soundness}
 This section outlines the proof of type soundness -- our full proof appears in Appendices A.1, A.2, A.3 and A.4 of the technical report~\cite{isotek}.
-We prove type soundness by embedding the type system into an abstract concurrent separation logic called the Views Framework~\cite{views}, which when given certain information about proofs for a specific language (primitives and primitive typing) gives back a full program logic including choice and iteration. As with other work taking this approach~\cite{oopsla12,toplas17}, this consists of several key steps explained in the following subsections, but a high-level informal soundness argument is based on the following facts. Because the parameters given to the Views framework ensure the Views logic's Hoare triples $\{-\}C\{-\}$ are sound, this proves soundness of the type rules with respect to type denotations. Moreover, as our denotation of types encodes the property that the post-environment of any type rule accurately characterizes which memory is linked vs. unlinked, etc., and the global invariants ensure all allocated heap memory is reachable from the root or from some thread's stack, this entails that our type system prevents memory leaks.
+We prove type soundness by embedding the type system into an abstract concurrent separation logic called the Views Framework~\cite{views}, which when given certain information about proofs for a specific language (primitives and primitive typing) gives back a full program logic including choice and iteration. As with other work taking this approach~\cite{oopsla12,toplas17}, this consists of several key steps explained in the following subsections, but a high-level informal soundness argument is based on the following facts:
+\begin{itemize}
+\item Because the parameters given to the Views framework ensure the Views logic's Hoare triples $\{-\}C\{-\}$ are sound, this proves soundness of the type rules with respect to type denotations.
+
+\item Moreover, as our denotation of types encodes the property that the post-environment of any type rule accurately characterizes which memory is linked vs. unlinked, etc., and the global invariants ensure all allocated heap memory is reachable from the root or from some thread's stack, this entails that our type system prevents memory leaks.
+  \end{itemize}
 \subsection{Proof}
 \label{sec:proof}
 This section provides more details on how the Views Framework~\cite{views} is used to prove soundness, giving the major parameters to the framework and outlining global invariants and key lemmas.
