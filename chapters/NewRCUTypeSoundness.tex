@@ -1,22 +1,7 @@
 \section{Soundness}
 \label{sec:soundness}
 This section outlines the proof of type soundness -- our full proof appears in Appendices A.1, A.2, A.3 and A.4 of the technical report~\cite{isotek}.
-We prove type soundness by embedding the type system into an abstract concurrent separation logic called the Views Framework~\cite{views}, which when given certain information about proofs for a specific language (primitives and primitive typing) gives back a full program logic including choice and iteration.  As with other work taking this approach~\cite{oopsla12,toplas17}, this consists of several key steps:
-\begin{enumerate}
-    \item Define runtime states and semantics for the atomic actions of the language.  These are exactly the semantics from Figure \ref{fig:operationalsemrcu} in Section \ref{sec:semantics}
-    \item Define a denotational interpretation $\db{-}$ of the types (Figure \ref{fig:denotingtypeenviroment}) in terms of an \emph{instrumented} execution state -- a runtime state (Section \ref{sec:semantics}) with additional bookkeeping to simplify proofs.  
-    The denotation encodes invariants specific to each type, like the fact that \textsf{unlinked} references are unreachable from the heap. %, or that \textsf{freeable} references are unreachable from the heap as well as other threads' local variables.
-    The instrumented execution states are also constrained by additional \textit{global} \textsf{WellFormed}ness \textit{invariants} -- see Appendix A.2 of the technical report~\cite{isotek} for detailed formal invariants -- the type system is intended to maintain, such as tree structure of the data structure.
-    \item Prove a lemma -- called \emph{Axiom Soundness} (Lemma \ref{lem:axmsoundness}) -- that the type rules for atomic actions are sound.  Specifically, that given a state in the denotation of the pre-type-environment of a primitive type rule, the operational semantics produce a state in the denotation of the post-type-environment.  This includes preservation of global invariants.
-    \item Give a desugaring $\downarrow-\downarrow$ of non-trivial control constructs (Figure \ref{fig:asm}) into the simpler non-deterministic versions provided by Views.
-\end{enumerate}
-The top-level soundness claim then requires proving that every valid source typing derivation corresponds to a valid derivation in the Views logic:
-$
-    \forall \Gamma,C,\Gamma', \Gamma\vdash_M C \dashv \Gamma' \Rightarrow \{\db{\Gamma}\}\downarrow C\downarrow\{\db{\Gamma'}\}
-$.
-%The judgment $\assert{-}~C~\assert{-}$ is a claim in the abstract separation logic provided by the Views Framework, which is sound as long as the earlier steps satisfy some natural consistency properties (this is a result of the Views Framework itself~\cite{views}).
-Because the parameters given to the Views framework ensure the Views logic's Hoare triples $\{-\}C\{-\}$ are sound, this proves soundness of the type rules with respect to type denotations.
-Because our denotation of types encodes the property that the post-environment of any type rule accurately characterizes which memory is linked vs. unlinked, etc., and the global invariants ensure all allocated heap memory is reachable from the root or from some thread's stack, this entails that our type system prevents memory leaks.
+We prove type soundness by embedding the type system into an abstract concurrent separation logic called the Views Framework~\cite{views}, which when given certain information about proofs for a specific language (primitives and primitive typing) gives back a full program logic including choice and iteration. As with other work taking this approach~\cite{oopsla12,toplas17}, this consists of several key steps explained in the following subsections, but a high-level informal soundness argument is based on the following facts. Because the parameters given to the Views framework ensure the Views logic's Hoare triples $\{-\}C\{-\}$ are sound, this proves soundness of the type rules with respect to type denotations. Moreover, as our denotation of types encodes the property that the post-environment of any type rule accurately characterizes which memory is linked vs. unlinked, etc., and the global invariants ensure all allocated heap memory is reachable from the root or from some thread's stack, this entails that our type system prevents memory leaks.
 \subsection{Proof}
 \label{sec:proof}
 This section provides more details on how the Views Framework~\cite{views} is used to prove soundness, giving the major parameters to the framework and outlining global invariants and key lemmas.
@@ -46,8 +31,8 @@ An object can be observed as part of the structure (\texttt{iterator}), removed 
 %\[\textsf{RCU} = \{ o \mid \textsf{FType}(f) = \textsf{RCU} \land \exists o' \ldotp h(o',f) = o \}\]
 \looseness=-1
 
-\mypar{Invariants of RCU Views and Denotations of Types}\label{sec:lemmas} In this section we aim to convey the intuition behind the predicate \textsf{WellFormed} which enforces global invariants on logical states, and how it interacts with the denotations of types in key ways.
-%In this section we aim to convey an intuition for the {soundness} of the type system through an informal summarization of the global \textsf{WellFormed}ness invariants together with the denotations of the types imposed on the instrumented states in the proof. 
+\mypar{Invariants of RCU Views and Denotations of Types}\label{sec:lemmas} Here we aim to convey the intuition behind the predicate \textsf{WellFormed} which enforces global invariants on logical states, and how it interacts with the denotations of types in key ways.
+
 \textsf{WellFormed} is the conjunction of a number of more specific invariants, which we outline here.
 For full details, see Appendix A.2 of the technical report~\cite{isotek}.
 
@@ -84,13 +69,6 @@ Moreover, the denotation of \textsf{rcuFresh} type, $\llbracket \mathsf{rcuFresh
 % to support the soundness of the \textit{framing} relations in \textsc{T-Replace}(discussed in Figure \ref{fig:freshframeout}) and \textsc{T-Insert}.
 %Similar to the case for unlinking, the \textsf{Readers-Iterators-Only} must be preserved against inserting/replacing a fresh node and
 \paragraph{Invariants on Tree Structure} Our invariants enforce the \textit{tree} structure heap layouts for data structures. \textsf{Unique-Reachable} invariant asserts that every heap location reachable from root can only be reached with following an unique path. To preserve the tree structure, \textsf{Unique-Root} enforces unreachability of the root from any heap location that is reachable from root itself. 
-
-Assertions in the Views logic are (almost) sets of the logical states that satisfy a validity predicate \textsf{WellFormed}, outlined in Section \ref{sec:lemmas}:
-%A thread's (or scope's) \emph{view} of memory is a subset of the instrumented(logical states), which satisfy certain \textsf{WellFormed}ness criteria relating the physical state and the additional meta-data ($O$, $U$, $T$ and $F$)
-\[\mathcal{M} \stackrel{def}{=} \{ m \in (\textsf{MState} \times O \times U \times T \times F) \mid  \textsf{WellFormed}(m) \} \]
-%We do our reasoning for soundness over instrumented states and define an erasure relation
-%\[\lfloor - \rfloor :\mathsf{MState} \implies \textsf{LState}\]
-%that projects instrumented states to the common components with \textsf{MState}.
 
 \begin{figure}[!t]\scriptsize
 \[
@@ -178,8 +156,15 @@ $
 \label{fig:denotingtypeenviroment}
 \vspace{-2mm}
 \end{figure}
+\mypar{Type Environments} Assertions in the Views logic are (almost) sets of the logical states that satisfy a validity predicate \textsf{WellFormed}, outlined above:
+%A thread's (or scope's) \emph{view} of memory is a subset of the instrumented(logical states), which satisfy certain \textsf{WellFormed}ness criteria relating the physical state and the additional meta-data ($O$, $U$, $T$ and $F$)
+\[\mathcal{M} \stackrel{def}{=} \{ m \in (\textsf{MState} \times O \times U \times T \times F) \mid  \textsf{WellFormed}(m) \} \]
+%We do our reasoning for soundness over instrumented states and define an erasure relation
+%\[\lfloor - \rfloor :\mathsf{MState} \implies \textsf{LState}\]
+%that projects instrumented states to the common components with \textsf{MState}.
+%In this section we aim to convey an intuition for the {soundness} of the type system through an informal summarization of the global \textsf{WellFormed}ness invariants together with the denotations of the types imposed on the instrumented states in the proof.
 
-Every type environment represents a set of possible views (\textsf{WellFormed} logical states) consistent with the types in the environment.  We make this precise with a denotation function
+Every type environment represents a set of possible views (\textsf{WellFormed} logical states) consistent with the types in the environment. We make this precise with a denotation function
 \[\llbracket-\rrbracket\_ : \mathsf{TypeEnv}\rightarrow\mathsf{TID}\rightarrow\mathcal{P}(\mathcal{M})\]
 that yields the set of states corresponding to a given type environment. This is defined as the intersection of individual variables' types as in Figure \ref{fig:denotingtypeenviroment}.
 %\[\llbracket-:-\rrbracket_- : \mathsf{Var}\rightarrow\mathsf{Type}\rightarrow\mathsf{TID}\rightarrow\mathcal{P}(\mathcal{M})\]
@@ -204,8 +189,6 @@ Figure \ref{fig:comp} defines our composition operator and the core interference
 Composition is mostly straightforward point-wise union (threads' views may overlap) of each component.
 Interference bounds the interference writers and readers may inflict on each other.  Notably, if a view contains the writer thread, other threads may not modify the shared portion of the heap, or release the writer lock.  Other aspects of interference are natural restrictions like that threads may not modify each others' local variables.
 \textsf{WellFormed} states are closed under both composition (with another \textsf{WellFormed} state) and interference ($\mathcal{R}$ relates \textsf{WellFormed} states only to other \textsf{WellFormed} states).
-
-
 
 \begin{figure}[!t]\scriptsize
     \begin{flalign*}
@@ -337,7 +320,10 @@ $
 \end{figure}
 
 There are two remaining subtleties to address.  First,
-commands $C$ also require translation: the Views Framework has only non-deterministic branches and loops, so the standard versions from our core language must be encoded.  The approach to this is based on a standard idea in verification, which we show here for conditionals as shown in Figure \ref{fig:asm}. $\textsf{assume}(b)$ is a standard idea in verification semantics~\cite{Barnett:2005:BMR:2090458.2090481,Muller:2016:VVI:2963187.2963190}, which ``does nothing'' (freezes) if the condition $b$ is false, so its postcondition in the Views logic can reflect the truth of $b$.  \textsf{assume} in Figure \ref{fig:asm} adapts this for the Views Framework as in other Views-based proofs~\cite{oopsla12,toplas17}, specifying sets of machine states as a predicate. We write boolean expressions as shorthand for the set of machine states making that expression true.  
+commands $C$ also require translation: the Views Framework has only non-deterministic branches and loops, so the standard versions from our core language must be encoded.  The approach to this is based on a standard idea in verification, which we show here for conditionals as shown in Figure \ref{fig:asm}. $\textsf{assume}(b)$ is a standard idea in verification semantics~\cite{Barnett:2005:BMR:2090458.2090481,Muller:2016:VVI:2963187.2963190}, which ``does nothing'' (freezes) if the condition $b$ is false, so its postcondition in the Views logic can reflect the truth of $b$.  \textsf{assume} in Figure \ref{fig:asm} adapts this for the Views Framework as in other Views-based proofs~\cite{oopsla12,toplas17}, specifying sets of machine states as a predicate. We write boolean expressions as shorthand for the set of machine states making that expression true. With this setup done, the top-level soundness claim then requires proving -- once for the reader type system, once for the writer type system -- that every valid source typing derivation corresponds to a valid derivation in the Views logic:
+$
+    \forall \Gamma,C,\Gamma', \Gamma\vdash_M C \dashv \Gamma' \Rightarrow \{\db{\Gamma}\}\downarrow C\downarrow\{\db{\Gamma'}\}
+$.
 
 Second, we have not addressed a way to encode subtyping.  One might hope this corresponds to a kind of implication, and therefore subtyping corresponds to consequence.  Indeed, this is how we (and prior work~\cite{oopsla12,toplas17}) address subtyping in a Views-based proof.
 Views defines the notion of \emph{view shift}\footnote{This is the same notion present in later program logics like Iris~\cite{krebbers2017essence}, though more recent variants are more powerful.} ($\sqsubseteq$) as a way to reinterpret a set of instrumented states as a new (compatible) set of instrumented states, offering a kind of logical consequence, used in a rule of consequence in the Views logic:
