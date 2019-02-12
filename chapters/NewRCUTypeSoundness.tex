@@ -1,11 +1,10 @@
 \section{Soundness}
 \label{sec:soundness}
 This section outlines the proof of type soundness -- our full proof appears in Appendices A.1, A.2, A.3 and A.4 of the technical report~\cite{isotek}.
-We prove type soundness by embedding the type system into an abstract concurrent separation logic called the Views Framework~\cite{views}, which when given certain information about proofs for a specific language (primitives and primitive typing) gives back a full program logic including choice and iteration. As with other work taking this approach~\cite{oopsla12,toplas17}, this consists of several key steps explained in the following subsections, but a high-level informal soundness argument is based on the following facts:
+We prove type soundness by embedding the type system into an abstract concurrent separation logic called the Views Framework~\cite{views}, which when given certain information about proofs for a specific language (primitives and primitive typing) gives back a full program logic including choice and iteration. As with other work taking this approach~\cite{oopsla12,toplas17}, this consists of several key steps explained in the following subsections, but a high-level informal soundness argument is as the following:
 \begin{itemize}
 \item Because the parameters given to the Views framework ensure the Views logic's Hoare triples $\{-\}C\{-\}$ are sound, this proves soundness of the type rules with respect to type denotations.
-
-\item Moreover, as our denotation of types encodes the property that the post-environment of any type rule accurately characterizes which memory is linked vs. unlinked, etc., and the global invariants ensure all allocated heap memory is reachable from the root or from some thread's stack, this entails that our type system prevents memory leaks.
+\item Because our denotation of types encodes the property that the post-environment of any type rule accurately characterizes which memory is linked vs. unlinked, etc., and the global invariants ensure all allocated heap memory is reachable from the root or from some thread's stack, this entails that our type system prevents memory leaks.
   \end{itemize}
 \subsection{Proof}
 \label{sec:proof}
@@ -32,18 +31,14 @@ Each memory allocation / object can be \emph{observed} in one of the following s
 \[\textsf{obs} := \texttt{iterator} \; \mathrm{tid} \mid \texttt{unlinked} \mid \texttt{fresh} \mid \texttt{freeable} \mid \texttt{root}\]
 An object can be observed as part of the structure (\texttt{iterator}), removed but possibly accessible to other threads, freshly allocated, safe to deallocate, or the root of the structure.
 
-%We are interested in \textsf{RCU} typed of heap domain which we define as:
-%\[\textsf{RCU} = \{ o \mid \textsf{FType}(f) = \textsf{RCU} \land \exists o' \ldotp h(o',f) = o \}\]
-\looseness=-1
-
-\mypar{Invariants of RCU Views and Denotations of Types}\label{sec:lemmas} Here we aim to convey the intuition behind the predicate \textsf{WellFormed} which enforces global invariants on logical states, and how it interacts with the denotations of types in key ways.
+\mypar{Invariants of RCU Views and Denotations of Types}\label{sec:lemmas} Next, we aim to convey the intuition behind the predicate \textsf{WellFormed} which enforces global invariants on logical states, and how it interacts with the denotations of types(Figure \ref{fig:denotingtypeenviroment}) in key ways.
 
 \textsf{WellFormed} is the conjunction of a number of more specific invariants, which we outline here.
 For full details, see Appendix A.2 of the technical report~\cite{isotek}.
 
 \paragraph{The Invariant for Read Traversal} Reader threads access valid heap locations even during the grace period. The validity of their heap accesses ensured by the observations they make over the heap locations --- which can only be \textsf{iterator} as they can only use local \textsf{rcuItr} references. To this end, a \textsf{Readers-Iterators-Only} invariant asserts that a heap location can only be observed as \textsf{iterator} by the reader threads.
 \paragraph{Invariants on Grace-Period}
-Our logical state (Section \ref{sec:proof}) includes some ``free list'' auxiliary state tracking which readers are still accessing \emph{each} unlinked node during grace periods. This must be consistent with the bounding thread set $B$ in the machine state.
+Our logical state includes some ``free list'' auxiliary state tracking which readers are still accessing \emph{each} unlinked node during grace periods. This must be consistent with the bounding thread set $B$ in the machine state.
 The \textsf{Readers-In-Free-List} invariant 
 asserts that all reader threads with observations of unlinked locations are in the to-free lists for those locations.
 This is essentially tracking which readers are being ``shown grace'' for each location.
