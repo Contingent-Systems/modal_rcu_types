@@ -427,25 +427,14 @@ Our implementation is a slightly simplified version of the Citrus BST~\cite{Arbe
 
 In Figure \ref{fig:del2}, we show the steps for deleting the heap node $H_1$. To locate the node $H_1$, as shown in Figure \ref{fig:del2.1}, we first traverse the subtree $T_0$ with references $pr$ and $cr$
 \[ pr:rcuItr(l|r)^{k} \{l|r \rightarrow cr\},\, cr:rcuItr(l|r)^{k}.(l|r) \{\}\]
-where $T_0$ traversal is summarized as $(l|k)^{k}$. The most subtle aspect of the deletion is the final step in which case the node $H_1$ has both children. In this case, as shown in Figure \ref{fig:del2.2}, we have to traverse the subtree $T_4$ to locate the node $H_s$ which is the left-most node of $H_1$'s right child -- the next element in the collection order 
+where the traversal of $T_0$ is summarized as $(l|k)^{k}$. The most subtle aspect of the deletion is the final step in which case the node $H_1$ has both children. In this case, we have to locate the successor node $H_s$ -- the next element in the collection order. As we see in Figure \ref{fig:del2.1}, we first set the $lp$ to show $cr$'s right child. Then, we start traversing the subtree $T_4$ to locate the $H_s$ with references $lp$ and $sc$
 \[lp:(l|r)^{k}.(l|r).r.(l|r)^{m} \{l|r \rightarrow sc\},\, sc:(l|r)^{k}.(l|r).r.l.(l)^{m}.l\{\}\]
-where $T_4$ traversal is summarized as $(l|m)^{m}$. Then $H_s$ is copied into a new \textit{freshly-allocated} node as shown in Figure \ref{fig:del2.2}, which is then used to \emph{replace} node $H_1$ as shown in Figure \ref{fig:del2.3}: the replacement's fields exactly match $H_1$'s except for the data (\textsc{T-Replace} via $\N_1 = \N_2$) as shown in Figure \ref{fig:del2.2}, and the parent is updated to reference the replacement, unlinking $H_1$.
+where the traversal of $T_4$ is summarized as $(l|m)^{m}$.
+
+Then $H_s$ is copied into a new \textit{freshly-allocated} node as shown in Figure \ref{fig:del2.2}, which is then used to \emph{replace} node $H_1$ as shown in Figure \ref{fig:del2.3}: the replacement's fields exactly match $H_1$'s except for the data (\textsc{T-Replace} via $\N_1 = \N_2$) as shown in Figure \ref{fig:del2.2}, and the parent is updated to reference the replacement, unlinking $H_1$.
 
 At this point, as shown in Figures \ref{fig:del2.3} and \ref{fig:del2.4}, there are two nodes with the same value in the tree (\textit{weak} BST property of the Citrus~\cite{Arbel:2014:CUR:2611462.2611471}): the replacement node, and what was the left-most node under $H_1$'s right child. This latter (original) node $H_s$ must be unlinked as shown in Figure \ref{fig:del2.5}, which is simplified because by being left-most the left child is null, avoiding another round of replacement (\textsc{T-UnlinkH} via $\forall_{f\in dom(\N_1)} \ldotp f\neq f_2 \implies (\N_1(f) = \textsf{null}$).
 
 Traversing $T_4$ to find successor brings an interesting complexity into the reasoning. After the successor node $H_s$ is found in \ref{fig:del2.2}, there are \emph{two} local unlinking operations as shown in Figures \ref{fig:del2.3} and \ref{fig:del2.5}, at different depths of the tree.  This is why the type system must keep separate abstract iteration counts, e.g., $k$ of $(l|r)^{k}$ or $m$ of $(l|r)^{m}$, for traversals in loops --- these indices act like multiple cursors into the data structure, and allow the types to carry enough information to keep those changes separate and ensure neither introduces a cycle.
 
 To the best of our knowledge, we are the first to check such code for memory-safe use of RCU primitives modularly, without appeal to the specific implementation of RCU primitives.
-\begin{comment}
-The most subtle aspect of the deletion is the final step in the case the node $H_1$ to remove has both children.  In this case, the value $H'_1$ of the left-most node of $H_1$'s right child --- the next element in the collection order --- is copied into a new node, which is then used to \emph{replace} node $H_1$: the replacement's fields exactly match $H_1$'s except for the data (\textsc{T-Replace} via $\N_1 = \N_2$), and the parent is updated to reference the replacement, unlinking $H_1$. At this point, there are two nodes with value $H'_1$ in the tree (\textit{weak} BST property of the Citrus~\cite{Arbel:2014:CUR:2611462.2611471}): the replacement node, and what was the left-most node under $H_1$'s right child. This latter (original) node for $H'_1$ must be unlinked, which is simplified because by being left-most the left child is null, avoiding another round of replacement (\textsc{T-UnlinkH} via $\forall_{f\in dom(\N_1)} \ldotp f\neq f_2 \implies (\N_1(f) = \textsf{null}$).
-The complexity in checking safety here is that once $H_1$ is found, another loop is used to find $H'_1$ and its parent (since that node will later be removed as well).
-After $H'_1$ is found, there are \emph{two} local unlinking operations, at different depths of the tree.  This is why the type system must keep separate abstract iteration counts for traversals in loops --- these indices act like multiple cursors into the data structure, and allow the types to carry enough information to keep those changes separate and ensure neither introduces a cycle.
-
-To the best of our knowledge, we are the first to check such code for memory-safe use of RCU primitives modularly, without appeal to the specific implementation of RCU primitives.
-
-%%%%%%%%%%%%%%%%%%%
-
-There are two 
-
-
-\end{comment}
