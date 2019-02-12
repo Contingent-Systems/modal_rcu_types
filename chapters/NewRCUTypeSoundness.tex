@@ -1,6 +1,6 @@
 \section{Soundness}
 \label{sec:soundness}
-This section outlines the proof of type soundness -- our full proof appears in Appendices A.1, A.2, A.3 and A.4 of the technical report~\cite{isotek}.
+This section outlines the proof of type soundness -- our full proof appears the accompanying technical report~\cite{isotek}.
 We prove type soundness by embedding the type system into an abstract concurrent separation logic called the Views Framework~\cite{views}, which when given certain information about proofs for a specific language (primitives and primitive typing) gives back a full program logic including choice and iteration. As with other work taking this approach~\cite{oopsla12,toplas17}, this consists of several key steps explained in the following subsections, but a high-level informal soundness argument is as the following:
 \begin{itemize}
 \item Because the parameters given to the Views framework ensure the Views logic's Hoare triples $\{-\}C\{-\}$ are sound, this proves soundness of the type rules with respect to type denotations.
@@ -13,14 +13,14 @@ This section provides more details on how the Views Framework~\cite{views} is us
 %The other critical pieces are a choice for a partial \emph{view} of machine states --- usually an extended machine state with meta-information --- and a relation constraining how other parts of the program can interfere with a view (e.g., modifying a value in the heap, but not changing its type).
 %Our type system will be related to the views by giving a denotation of type environments in terms of views, and then proving that for each atomic action shown in \ref{fig:operationalsemrcu} in Section \ref{sec:semantics} and type rule in Figure \ref{fig:tss} Section \ref{subsection:type-action}(also for type rules for \textit{structural} and \textit{reader critical section} in Figure \ref{fig:tssr} Appendix \ref{appendix:readtypes}), given a view in the denotation of the initial type environment of the rule, running the semantics for that action yields a local view in the denotation of the output type environment of the rule. The following works through this in more detail. We define logical states, $\textsf{LState}$ to be
 
-\mypar{Logical State} Section \ref{sec:semantics} defined what Views calls \emph{atomic actions} (the primitive operations) and their semantics of runtime \emph{machine states}.  The Views Framework uses a separate notion of instrumented (logical) state over which the logic is built, related by a concretization function $\lfloor-\rfloor$ taking an instrumented state to the machine states of Section \ref{sec:semantics}.  Most often --- including in our proof ---  the logical state adds useful auxiliary state to the machine state, and the concretization is simply projection.
+\mypar{Logical State} Section \ref{sec:semantics} defined what Views calls \emph{atomic actions} (the primitive operations) and their semantics on runtime \emph{machine states}.  The Views Framework uses a separate notion of instrumented (logical) state over which the logic is built, related by a concretization function $\lfloor-\rfloor$ taking an instrumented state to the machine states of Section \ref{sec:semantics}.  Most often --- including in our proof ---  the logical state adds useful auxiliary state to the machine state, and the concretization is simply projection.
 Thus we define our logical states \textsf{LState} as:
 \begin{itemize}
-\item A machine state, $\sigma=(s,h,l,rt,R,B)$;
+\item A machine state, $\sigma=(s,h,l,rt,R,B)$
 \item An observation map, O, of type $ \textsf{Loc} \to \mathcal{P}(\textsf{obs})$
 \item Undefined variable map, $U$, of type $\mathcal{P}(\textsf{Var}\times \textsf{TID})$
 \item Set of threads, $T$, of type $\mathcal{P}(\textsf{TIDS})$
-\item A to-free map(or free list), $F$, of type $\textsf{Loc} \rightharpoonup \mathcal{P}(\textsf{TID})$
+\item A to-free map (or free list), $F$, of type $\textsf{Loc} \rightharpoonup \mathcal{P}(\textsf{TID})$
 \end{itemize}
 The thread ID set $T$ includes the thread ID of all running threads.
 The free map $F$ tracks which reader threads may hold references to each location. It is not required for execution of code, and for validating an implementation could be ignored, but we use it later with our type system to help prove that memory deallocation is safe.
@@ -31,18 +31,18 @@ Each memory allocation / object can be \emph{observed} in one of the following s
 \[\textsf{obs} := \texttt{iterator} \; \mathrm{tid} \mid \texttt{unlinked} \mid \texttt{fresh} \mid \texttt{freeable} \mid \texttt{root}\]
 An object can be observed as part of the structure (\texttt{iterator}), removed but possibly accessible to other threads, freshly allocated, safe to deallocate, or the root of the structure.
 
-\mypar{Invariants of RCU Views and Denotations of Types}\label{sec:lemmas} Next, we aim to convey the intuition behind the predicate \textsf{WellFormed} which enforces global invariants on logical states, and how it interacts with the denotations of types(Figure \ref{fig:denotingtypeenviroment}) in key ways.
+\mypar{Invariants of RCU Views and Denotations of Types}\label{sec:lemmas} Next, we aim to convey the intuition behind the predicate \textsf{WellFormed} which enforces global invariants on logical states, and how it interacts with the denotations of types (Figure \ref{fig:denotingtypeenviroment}) in key ways.
 
 \textsf{WellFormed} is the conjunction of a number of more specific invariants, which we outline here.
 For full details, see Appendix A.2 of the technical report~\cite{isotek}.
 
-\paragraph{The Invariant for Read Traversal} Reader threads access valid heap locations even during the grace period. The validity of their heap accesses ensured by the observations they make over the heap locations --- which can only be \textsf{iterator} as they can only use local \textsf{rcuItr} references. To this end, a \textsf{Readers-Iterators-Only} invariant asserts that a heap location can only be observed as \textsf{iterator} by the reader threads.
+\paragraph{The Invariant for Read Traversal} Reader threads access valid heap locations even during the grace period. The validity of their heap accesses ensured by the observations they make over the heap locations --- which can only be \textsf{iterator} as they can only use local \textsf{rcuItr} references. To this end, a \textsf{Readers-Iterators-Only} invariant asserts that reader threads can only observe a heap location as \textsf{iterator}.
 \paragraph{Invariants on Grace-Period}
-Our logical state includes some ``free list'' auxiliary state tracking which readers are still accessing \emph{each} unlinked node during grace periods. This must be consistent with the bounding thread set $B$ in the machine state.
+Our logical state includes a ``free list'' auxiliary state tracking which readers are still accessing \emph{each} unlinked node during grace periods. This must be consistent with the bounding thread set $B$ in the machine state.
 The \textsf{Readers-In-Free-List} invariant 
 asserts that all reader threads with observations of unlinked locations are in the to-free lists for those locations.
 This is essentially tracking which readers are being ``shown grace'' for each location.
-The \textsf{Iterators-Free-List} invariant complements this by asserting all readers with such observations are in the bounding thread set.
+The \textsf{Iterators-Free-List} invariant complements this by asserting all readers with such observations  on unlinked nodes are in the bounding thread set.
 
 The writer thread can refer to a heap location in the free list with a local reference either in type \textsf{freeable} or \textsf{unlinked}. Once the writer unlinks a heap node, it first observes the heap node as \textsf{unlinked} then \textsf{freeable}. The denotation of \textsf{freeable} is only valid following a grace period: it asserts no readers hold aliases of the \textsf{freeable} reference. The denotation of \textsf{unlinked} permits the either the same (perhaps no readers overlapped) 
 or that it is in the to-free list.
@@ -64,11 +64,11 @@ The invariants \textsf{Unlinked-Reachability} and \textsf{Free-List-Reachability
 %%% CG NOTE: I commented this last part out because this isn't the place to discuss batch deallocation
 \paragraph{Invariants on Safe Traversal against Inserting/Replacing} A writer {replacing an existing node with a fresh one} or {inserting a single fresh node} assumes the fresh (before insertion) node is unreachable to readers before it is published/linked.
 %The crucial essence in providing memory safety against these actions is enforcing unreachability of the fresh nodes until they are \textit{published/linked}. Unlike in the case of \textit{unlinking} where the reader threads can observe an unlinked heap node as \textsf{iterator} during the grace period, the reader threads cannot observe the fresh heap nodes until they are published. 
-The \textsf{Fresh-Writes} invariant asserts that a fresh heap location can only be allocated and referenced by the writer thread. The relation between a freshly allocated heap and the rest of the heap is established by the \textsf{Fresh-Reachable} invariant, which requires that there exists no heap node pointing to the freshly allocated one. This invariant supports the preservation of the tree structure. \textsf{Fresh-Not-Reader} invariant supports the safe traversal of the reader threads via asserting that they cannot observe a heap location as \textsf{fresh}. 
-Moreover, the denotation of \textsf{rcuFresh} type, $\llbracket \mathsf{rcuFresh}\,\N \rrbracket_{tid}$, enforces that fields in $\N$ point to valid heap locations (observed as \textsf{iterator} by the writer thread).
+The \textsf{Fresh-Writes} invariant asserts that a fresh heap location can only be allocated and referenced by the writer thread. The relation between a freshly allocated heap and the rest of the heap is established by the \textsf{Fresh-Reachable} invariant, which requires that there exists no heap node pointing to the freshly allocated one. This invariant supports the preservation of the tree structure. The \textsf{Fresh-Not-Reader} invariant supports the safe traversal of the reader threads via asserting that they cannot observe a heap location as \textsf{fresh}. 
+Moreover, the denotation of the \textsf{rcuFresh} type, $\llbracket \mathsf{rcuFresh}\,\N \rrbracket_{tid}$, enforces that fields in $\N$ point to valid heap locations (observed as \textsf{iterator} by the writer thread).
 % to support the soundness of the \textit{framing} relations in \textsc{T-Replace}(discussed in Figure \ref{fig:freshframeout}) and \textsc{T-Insert}.
 %Similar to the case for unlinking, the \textsf{Readers-Iterators-Only} must be preserved against inserting/replacing a fresh node and
-\paragraph{Invariants on Tree Structure} Our invariants enforce the \textit{tree} structure heap layouts for data structures. \textsf{Unique-Reachable} invariant asserts that every heap location reachable from root can only be reached with following an unique path. To preserve the tree structure, \textsf{Unique-Root} enforces unreachability of the root from any heap location that is reachable from root itself. 
+\paragraph{Invariants on Tree Structure} Our invariants enforce the \textit{tree} structure heap layouts for data structures. The \textsf{Unique-Reachable} invariant asserts that every heap location reachable from root can only be reached with following an unique path. To preserve the tree structure, \textsf{Unique-Root} enforces unreachability of the root from any heap location that is reachable from root itself. 
 
 \begin{figure}[!t]\scriptsize
 \[
