@@ -53,7 +53,7 @@ The \textsf{Writer-Unlink} invariant asserts that a heap location observed as \t
 following a path from the root compatible with $\rho$ reaches the referent, and all are observed as \textsf{iterator}.
 %all the heap locations on the path starting from the root to the referent heap location are valid only observed as \textsf{iterator}.
 
-Only a bounding thread may view an (unlinked) heap location in the free list as \textsf{iterator}. The denotation of the reader thread's \textsf{rcuItr} reference, $\llbracket \mathsf{rcuItr} \rrbracket_{tid}$, requires the referent be either reachable from the root or an unlinked reference in the to-free list.
+The denotation of a reader thread's \textsf{rcuItr} reference, $\llbracket \mathsf{rcuItr} \rrbracket_{tid}$, \textsf{Readers-Iterator-Only} and \textsf{Readers-In-Free-List} all together assert that a reader thread(which can also be a bounding thread) can view an unlinked heap location(which can be in the free list) only as \textsf{iterator}.
 %and it is important in terms of  the preservation of \textsf{Readers-Iterator-Only} invariant for the set of bounding threads against unlinking as they are a subset of the reader threads. 
 At the same time, it is essential that reader threads arriving after a node is unlinked cannot access it.
 %However, the unreachability of a mutated heap location to newly-arrived reader threads is essential for the \textit{soundness} of the system. 
