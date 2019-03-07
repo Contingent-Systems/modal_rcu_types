@@ -24,33 +24,120 @@ The lock $l$ enforces mutual exclusion between write-side critical sections.
 The root location $rt$ is the root of  an \textsf{RCU} data structure. We model only a single global RCU data structure, as the generalization to multiple structures is straightforward but complicates formal development later in the paper.
 The reader set $R$ tracks the thread IDs (TIDs) of all threads currently executing a read block. 
 The bounding set $B$ tracks which threads the writer is \emph{actively} waiting for during a grace period --- it is empty if the writer is not waiting.
-\begin{figure*}\scriptsize%%%%%%%%%%%%OPdERATIONAL SEMANTICS%%%%%%%%%%%%%%
-  \grammar
-  %$\desugarsync$ \\
-%  $\desugarwrite$\\
-%  $\desugarread$
-\[\begin{array}{c@{\;}rl@{\Downarrow_{\mathit{tid}}}ll} 
-(\textsc{RCU-WBegin}) & \llbracket\texttt{WriteBegin}\rrbracket & (s,h,\mathsf{unlocked},rt,R,B) &(s,h,l,rt,R,B) & \\
-(\textsc{RCU-WEnd}) & \llbracket\texttt{WriteEnd}\rrbracket & (s,h,l,rt,R,B) & (s,h,\mathsf{unlocked},rt,R,B) & \\
-(\textsc{RCU-RBegin}) & \llbracket\texttt{ReadBegin}\rrbracket & (s,h,tid,rt,R,B) & (s,h,tid,rt,R\uplus \{tid\},B) \qquad \mathit{tid} \neq l &  \\
-(\textsc{RCU-REnd}) & \llbracket\texttt{ReadEnd}\rrbracket & (s,h,tid,rt,R\uplus\{tid\},B) & (s,h,l,rt,R,B\setminus \{tid\}) \qquad  \mathit{tid} \neq l& \\
-(\textsc{RCU-SStart}) & \llbracket\texttt{SyncStart}\rrbracket & (s,h,l,rt,R,\emptyset) & (s,h,l,rt,R,R) &\\  %\forall_{t\in R}\ldotp t \notin r \\
-(\textsc{RCU-SStop}) & \llbracket\texttt{SyncStop}\rrbracket & (s,h,l,rt,R,\emptyset) & (s,h,l,rt,R,\emptyset) &  \\
-(\textsc{Free}) & {\llbracket\texttt{Free}(x)\rrbracket} & (s,h,l,rt,R,\emptyset) & (s,h',l,rt,R,\emptyset) &
-\end{array}\]
-$\textrm{provided}~ \forall_{f,o'}\ldotp rt \neq s(x,tid) \textrm{ and } o' \neq s(x,tid) \implies h(o',f) = h'(o',f) \textrm{ and } \forall_{f}\ldotp h'(o,f)=\textsf{undef}$
-\[\begin{array}{c@{\;}rl@{\Downarrow_{\mathit{tid}}}ll} 
-(\textsc{HUpdt}) & \llbracket\texttt{x.f=y}\rrbracket   &(s,h,l,rt,R,B)& (s,h[s(x,tid),f \mapsto s(y,tid)],l,rt,R,B) &\\
-(\textsc{HRead})   & \llbracket\texttt{y=x.f}\rrbracket   &(s,h,l,rt,R,B)& (s[(y,tid) \mapsto h(s(x,tid),f)],h,l,rt,R,B) & \\
-(\textsc{SUpdt}) & \llbracket\texttt{y=x}\rrbracket     &(s,h,l,rt,R,B)& (s[(y,tid) \mapsto (x,tid)],h,l,rt,R,B) &\\
-(\textsc{HAlloc}) & \llbracket\texttt{y=new}\rrbracket &(s,h,l,rt,R,B)& (s,h[\ell\mapsto\mathsf{nullmap}],l,rt,R,B) & 
-\end{array}\]
-$  \textrm{provided}~ rt \neq s(y,tid) \textrm{ and } s[(y,tid) \mapsto \ell], \textrm{ and }$
-$h[\ell \mapsto \mathsf{nullmap}] \overset{\mathrm{def}}{=} \lambda (o',f) . \textrm{ if } o=o' \textrm{ then } skip \textrm{ else } h(o',f)$
-\caption{Operational semantics for \textsf{RCU}.}
+\begin{figure*}
+\grammar
+%%%%%%%%%%%%%%%%%%%%
+$
+\inferrule
+{}
+{
+\op{\texttt{x.f=y}}{(s,h[s(x,tid),f \mapsto s(y,tid)],l,R,F)}
+}
+\;(\textsc{HUpdate})
+$
+\medskip
+%%%%%%%%%%%%%%%%%%%%
+$
+\inferrule
+{}
+{
+\op{\texttt{y=x.f}}{((s[(y,tid) \mapsto h(s(x,tid),f)],h,l,R,F)}
+}
+\;(\textsc{HRead})
+$
+\medskip
+%%%%%%%%%%%%%%%%%%%%
+$
+\inferrule
+{}
+{
+\op{\texttt{y=x}}{(s[(y,tid) \mapsto (x,tid)],h,l,R,F)}
+}
+\;(\textsc{SUpdate})
+$
+\medskip
+%%%%%%%%%%%%%%%%%%%%
+$
+\inferrule
+{}
+{
+\op{\texttt{y=new}}{(s,h,l,R,F)}
+}
+\;(\textsc{HAllocate})
+$
+\medskip
+%%%%%%%%%%%%%%%%%%%%
+$
+\inferrule
+{}
+{
+\op{\texttt{asyncDelayedFree}(x)}{(s,h,l,R,F \uplus \{ (R,S(x))\} )} \\
+ \texttt{ provided } s[(y,tid)\mapsto o], \;  h[o \mapsto \texttt{new}] \text{ and } \texttt{default}(\textsf{FType}(f))\\
+  \lambda o', f  \ldotp  \text{ if }  o = o' \;  \text{ skip } \text{ else }  h(o',f)
+}
+\;(\textsc{AFree})
+$
+\medskip
+%%%%%%%%%%%%%%%%%%%%
+$
+\inferrule
+{}
+{
+\op{\texttt{gcStep}}{(s,h',l,R,F)}
+}
+\;(\textsc{GC})
+$
+\medskip
+%%%%%%%%%%%%%%%%%%%%
+$
+\inferrule
+{}
+{
+\opm{\texttt{WriteBegin}}{(s,h,\mathrm{unlocked},R,F)}{(s,h,\mathrm{tid},R,F)}\\
+ \texttt{ provided }  s[(x,tid)\mapsto o], \; (\forall f, o' \ldotp o\neq o' \Rightarrow h(o',f) = h'(o',f))) \\
+  \text{ and } \forall f \ldotp h'(o,f)\; \textsf{ undefined }
+}
+\;(\textsc{RCU-W-Begin})
+$
+\medskip
+%%%%%%%%%%%%%%%%%%%%
+$
+\inferrule
+{}
+{
+\opm{\texttt{WriteEnd}}{(s,h,\mathrm{tid},R,F)}{(s,h,\textsf{unlocked},R,F)} \\
+ \textrm{provided }tid \notin R
+}
+\;(\textsc{RCU-W-End})
+$
+\medskip
+%%%%%%%%%%%%%%%%%%%%
+$
+\inferrule
+{}
+{
+\opm{\texttt{ReadBegin}}{(s,h,l,R,F)}{(s,h,l,R \uplus \{ \mathrm{tid}\},F)} \\
+ \textrm{provided }tid \neq l
+}
+\;(\textsc{RCU-R-Begin})
+$
+\medskip
+%%%%%%%%%%%%%%%%%%%%
+$
+\inferrule
+{}
+{
+ \opm{\texttt{ReadEnd}}{( s,h,l,R \uplus \{ \mathrm{tid} \},F)}{(s,h,l,R,F \setminus \mathrm{tid}) }
+ \textrm{provided } \; F \setminus tid \; \textrm{ as } \; \{ (T \setminus tid \},o) \mid (T,o) \in F \}
+}
+\;(\textsc{RCU-R-End})
+$
+\medskip
+}
+\caption{Operational Semantics for RCU Programming Model}
 \label{fig:operationalsemrcu}
-\vspace{-2mm}
-\end{figure*}%%%%%%%%%%%%%%%%%%%%%OPERATIONAL SEMANTICS ENDS%%%%%%%%%%%%%%%%%%
+\end{figure*}
+%%%%%%%%%%%%%%%%%%%%%OPERATIONAL SEMANTICS ENDS%%%%%%%%%%%%%%%%%%
 
 Figure \ref{fig:operationalsemrcu} gives operational semantics for \emph{atomic} actions; conditionals, loops, and sequencing all have standard semantics, and parallel composition uses sequentially-consistent interleaving semantics.
 
@@ -99,3 +186,4 @@ These semantics do permit a reader in the blocking set to finish its read-side c
 %Real implementations, of course, must also tolerate the weak memory model of whatever processor they run on, leading them to use. For example, the primitive to dereference a memory location shown by a pointer and the primitive to update the memory location shown by a pointer contain architecture-specific memory barrier instructions and compiler directives to enforce correct ordering. Both primitives reduce to simple assignment statements on sequentially consistent systems. Dereferencing is volatile access except on DEC Alpha, which also requires a memory barrier \todo{CITE}.
 
 %The Linux implementation of the communication in between reader thread and writer thread is based on waiting for context switches. The implementation uses calls \lstinline|SyncStart| and returns back from \lstinline|SyncStop| after all CPUs have passed through at least one context switch. The synchronous version of the primitive to wait reader threads is \textsf{synchronize\_rcu}. For performance reasons, the Linux implementation has also asynchronous version of this primitive named \textsf{call\_rcu}. Detecting context switches requires maintaining state shared between CPUs. A CPU must update state, which other CPUs read, that indicate it executed a context switch ~\cite{Mckenney_rcuusage}.
+
