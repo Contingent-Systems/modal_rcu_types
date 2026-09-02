@@ -438,6 +438,13 @@ The mechanization takes the semantic property as a hypothesis
 (\texttt{Mirrors}) and proves the case from it, so the choice is yours and
 nothing downstream depends on it.
 
+\textsc{T-Insert} has the \emph{same} gap, in the same place: its
+$\forall_{f_2\in dom(\mathcal{N}_1)} \ldotp f_4 \neq f_2 \implies \mathcal{N}_1(f_2) =
+\textsf{null}$ constrains only the tracked fields, so an untracked field of the
+fresh node could point anywhere and give the inserted node a second child.  The
+mechanization again takes the semantic property (\texttt{PointsOnlyAt}).
+Whatever fix is chosen should cover both rules --- they are one problem, not two.
+
 \subsection{The encoding: raw heap plus $h^{*}$}
 \label{sec:inv-iris}
 
@@ -477,10 +484,25 @@ or it factors through the written edge.
 \]
 Since each of \textsc{T-UnlinkH}, \textsc{T-Replace} and \textsc{T-Insert}
 performs exactly one write, all three reduce to this plus a statement of how the
-factored suffix is rewritten --- shortened by one segment for unlinking,
-length-preserving for replacement, lengthened by one for insertion.  Isolating
-that common statement is the next step, in place of three separate path
-arguments.
+factored suffix is rewritten.  All three are proved:
+\[
+\begin{array}{lll}
+\textsc{T-Replace}  & \text{length-preserving} & \texttt{UNQR\_replace} \\
+\textsc{T-Insert}   & \text{lengthened by one} & \texttt{UNQR\_insert} \\
+\textsc{T-UnlinkH}  & \text{shortened by one}  & \texttt{UNQR\_unlink}
+\end{array}
+\]
+Two things worth recording from doing them.  \textsc{T-UnlinkH}, which the
+technical report's proofs gesture at hardest, turns out to need \emph{fewer}
+hypotheses than the other two: with no fresh node there is nothing to mirror and
+no fields-are-null condition, and the rule's
+$\forall_{f\in dom(\mathcal{N}_1)} \ldotp f \neq f_2 \implies \mathcal{N}_1(f) = \textsf{null}$
+plays no part --- it bounds how much of the structure becomes unreachable, which
+is \textbf{ULKR}'s business, not \textbf{UNQR}'s.  And the case that has to be
+excluded in \textsc{T-Insert} and \textsc{T-UnlinkH}, but not in
+\textsc{T-Replace}, is a collision between an \emph{unchanged} path and a
+rewritten one; ruling it out is why the characterisation must record that the
+unchanged path does not traverse the written edge.
 
 The residue --- the observation map $O$, the free list $F$, the grace-period
 invariants (\textbf{IFL}, \textbf{RINFL}, \textbf{FLR}) and the fresh-node

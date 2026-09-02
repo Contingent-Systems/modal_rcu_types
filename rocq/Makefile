@@ -3,11 +3,11 @@
 #   make          build
 #   make clean
 #
-# Requires Rocq 9.0 (tested with 9.0+rc1).  Nothing here depends on Iris or
-# stdpp yet -- WellFormed's invariants are pure propositions and HeapPaths is
-# plain reachability theory.  Later milestones (ghost state, type denotations,
-# atomic-action soundness) will add both, which are present in the `bluerock`
-# opam switch.
+# Requires Rocq 9.0 or later (tested with 9.0+rc1 and 9.2).  Nothing here
+# depends on Iris or stdpp yet -- WellFormed's invariants are pure propositions
+# and HeapPaths is plain reachability theory.  Later milestones (ghost state,
+# type denotations, atomic-action soundness) will add both, which are present
+# in the `bluerock` opam switch.
 #
 # Milestones:
 #   WellFormed.v  the seventeen global invariants, corrected; satisfiability;

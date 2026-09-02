@@ -378,25 +378,239 @@ Proof.
   lia.
 Qed.
 
-(** ** Next targets
+(** ** T-Insert
 
-    [T-Replace] is done.  The other two mutations differ only in how the
-    factored suffix relates to the old heap:
+    [p.f := n] with [n] fresh and one field of [n], namely [f4], already
+    pointing back at [o].  Unlike Replace, the path to everything under [o] is
+    *lengthened* by one segment: what was reached by [rho.f.tau] is now reached
+    by [rho.f.f4.tau].  So the unchanged-path case and the lengthened-path case
+    are genuinely different, and ruling out a collision between them needs to
+    know that an unchanged path does not traverse the written edge.  Hence: *)
 
-      - T-UnlinkH  writes [x.f1 := r] where [x.f1 = z] and [z.f2 = r].  Paths
-        through the written edge are *shortened* by one segment, which is why
-        the rule must exclude descendants of [r] -- their recorded paths would
-        otherwise go stale.  The analogue of [hstar_replace_step] should say the
-        walk from [r] is unchanged; the extra work is that the path *image* is
-        no longer the identity, so UNQR needs injectivity of segment deletion.
+Lemma avoids_app_edge_false : forall h ou fu p1 p2 o,
+  hstar h o p1 = Some ou -> ~ avoids h o (p1 ++ fu :: p2) ou fu.
+Proof.
+  intros h ou fu p1. induction p1 as [|g q IH]; intros p2 o Hp1 Hav.
+  - simpl in Hp1. injection Hp1 as <-. destruct Hav as [Hne _]. apply Hne. reflexivity.
+  - simpl in Hp1. destruct (h o g) as [[o1|]|] eqn:E; try discriminate.
+    destruct Hav as [_ Hrest]. rewrite E in Hrest.
+    exact (IH p2 o1 Hp1 Hrest).
+Qed.
 
-      - T-Insert   writes [p.f := n] with [n] fresh and one field of [n] already
-        pointing back into the structure.  Paths through the edge are
-        *lengthened* by one, the case the rule's final implication guards.  This
-        should be closest to Replace, with [hstar_replace_step] replaced by a
-        version that takes one extra step through [n]. *)
+(** [n]'s only outgoing RCU edge is [f4], pointing at [o].
+
+    NOTE: the same modelling gap as [Mirrors].  The rule supplies
+    [forall f2 in dom(N1). f4 <> f2 -> N1(f2) = null], which constrains only the
+    *tracked* fields; a field outside [dom(N1)] is unconstrained by the
+    denotation and could point anywhere.  We take the semantic property. *)
+Definition PointsOnlyAt (h : Heap) (n : Loc) (f4 : FName) (o : Loc) : Prop :=
+  h n f4 = Some (VLoc o)
+  /\ forall g x, g <> f4 -> h n g <> Some (VLoc x).
+
+Lemma hstar_insert_step : forall h P f o n f4 tau,
+  PointsOnlyAt h n f4 o ->
+  n <> P ->
+  avoids h o tau P f ->
+  hstar (upd h P f (VLoc n)) n (f4 :: tau) = hstar h o tau.
+Proof.
+  intros h P f o n f4 tau [Hf4 _] Hne Hav. simpl.
+  rewrite (upd_other h P f (VLoc n) n f4)
+    by (intro HH; injection HH as HH1 _; contradiction).
+  rewrite Hf4. apply hstar_upd_avoids. exact Hav.
+Qed.
+
+(** Any other field of [n] is null, so the walk dies there. *)
+Lemma hstar_insert_dead : forall h P f o n f4 g tau,
+  PointsOnlyAt h n f4 o ->
+  n <> P ->
+  g <> f4 ->
+  hstar (upd h P f (VLoc n)) n (g :: tau) = None.
+Proof.
+  intros h P f o n f4 g tau [_ Hnull] Hne Hg. simpl.
+  rewrite (upd_other h P f (VLoc n) n g)
+    by (intro HH; injection HH as HH1 _; contradiction).
+  destruct (h n g) as [[x|]|] eqn:E; try reflexivity.
+  exfalso. exact (Hnull g x Hg E).
+Qed.
+
+Theorem hstar_insert_char : forall h root P f o n f4 sigma x,
+  PointsOnlyAt h n f4 o ->
+  n <> P ->
+  h P f = Some (VLoc o) ->
+  (forall tau, hstar h o tau <> Some P) ->
+  hstar (upd h P f (VLoc n)) root sigma = Some x ->
+  (hstar h root sigma = Some x /\ avoids h root sigma P f)
+  \/ (x = n /\ exists p1, sigma = p1 ++ [f] /\ hstar h root p1 = Some P)
+  \/ (exists p1 tau, sigma = p1 ++ f :: f4 :: tau
+                     /\ hstar h root p1 = Some P
+                     /\ hstar h root (p1 ++ f :: tau) = Some x).
+Proof.
+  intros h root P f o n f4 sigma x Hn Hne HPf Hnoback Hreach.
+  destruct (avoids_dec h root sigma P f) as [Hav|Hna].
+  - left. split; [| exact Hav].
+    rewrite <- (hstar_upd_avoids h P f (VLoc n) sigma root Hav). exact Hreach.
+  - destruct (avoids_false_factors h P f sigma root Hna)
+      as [p1 [p2 [-> [Hp1 Hav1]]]].
+    rewrite (hstar_upd_through h P f n p1 p2 root Hav1 Hp1) in Hreach.
+    destruct p2 as [|g tau].
+    + simpl in Hreach. injection Hreach as <-.
+      right; left. split; [reflexivity |].
+      exists p1. split; [reflexivity | exact Hp1].
+    + destruct (Nat.eq_dec g f4) as [->|Hg].
+      * right; right.
+        assert (Hav2 : avoids h o tau P f).
+        { destruct (avoids_dec h o tau P f) as [Y|N]; [exact Y | exfalso].
+          destruct (avoids_false_factors h P f tau o N) as [q1 [_ [_ [Hq _]]]].
+          exact (Hnoback q1 Hq). }
+        rewrite (hstar_insert_step h P f o n f4 tau Hn Hne Hav2) in Hreach.
+        exists p1, tau. split; [reflexivity | split; [exact Hp1 |]].
+        rewrite hstar_app, Hp1. simpl. rewrite HPf. exact Hreach.
+      * exfalso.
+        rewrite (hstar_insert_dead h P f o n f4 g tau Hn Hne Hg) in Hreach.
+        discriminate.
+Qed.
+
+Theorem UNQR_insert : forall h root P f o n f4,
+  UNQR_h h root ->
+  PointsOnlyAt h n f4 o ->
+  n <> P ->
+  h P f = Some (VLoc o) ->
+  (forall tau, hstar h o tau <> Some P) ->
+  (forall sigma, hstar h root sigma <> Some n) ->
+  UNQR_h (upd h P f (VLoc n)) root.
+Proof.
+  intros h root P f o n f4 HU Hn Hne HPf Hnoback Hfresh sigma sigma' x H1 H2.
+  destruct (hstar_insert_char h root P f o n f4 sigma  x Hn Hne HPf Hnoback H1)
+    as [[Ha Hav] | [[Hx1 [q1 [Hs1 Hq1]]] | [q1 [t1 [Hs1 [Hq1 Hr1]]]]]];
+  destruct (hstar_insert_char h root P f o n f4 sigma' x Hn Hne HPf Hnoback H2)
+    as [[Hb Hav'] | [[Hx2 [q2 [Hs2 Hq2]]] | [q2 [t2 [Hs2 [Hq2 Hr2]]]]]].
+  - (* unchanged / unchanged *) exact (HU _ _ _ Ha Hb).
+  - (* unchanged / reaches n *) exfalso. subst x. exact (Hfresh sigma Ha).
+  - (* unchanged / lengthened: the unchanged path would have to cross the edge *)
+    exfalso. rewrite (HU sigma (q2 ++ f :: t2) x Ha Hr2) in Hav.
+    exact (avoids_app_edge_false h P f q2 t2 root Hq2 Hav).
+  - exfalso. subst x. exact (Hfresh sigma' Hb).
+  - (* both reach n: the path to P is unique *)
+    subst sigma sigma'. rewrite (HU q1 q2 P Hq1 Hq2). reflexivity.
+  - (* reaches n / lengthened: n would be reachable in the old heap *)
+    exfalso. subst x. exact (Hfresh (q2 ++ f :: t2) Hr2).
+  - exfalso. rewrite (HU sigma' (q1 ++ f :: t1) x Hb Hr1) in Hav'.
+    exact (avoids_app_edge_false h P f q1 t1 root Hq1 Hav').
+  - exfalso. subst x. exact (Hfresh (q1 ++ f :: t1) Hr1).
+  - (* both lengthened *)
+    subst sigma sigma'.
+    assert (Hq : q1 = q2) by exact (HU q1 q2 P Hq1 Hq2). subst q2.
+    assert (Heq : q1 ++ f :: t1 = q1 ++ f :: t2) by exact (HU _ _ x Hr1 Hr2).
+    apply app_inv_head in Heq. injection Heq as ->. reflexivity.
+Qed.
+
+(** ** T-UnlinkH
+
+    Writes [x.f1 := r] where [x.f1 = z] and [z.f2 = r], so paths through the
+    written edge are *shortened* by one segment: what was reached by
+    [rho.f1.f2.tau] is now reached by [rho.f1.tau].
+
+    Structurally this is the mirror image of Insert, and needs strictly fewer
+    hypotheses -- there is no fresh node, so nothing to mirror and no
+    fields-are-null side condition.  The rule's
+    [forall f in dom(N1). f <> f2 -> N1(f) = null] is not needed here: it
+    constrains how much of the structure becomes unreachable (one node, not a
+    subtree), which is ULKR's business, not UNQR's. *)
+
+(** The general no-back-edge lemma: nothing below a node can reach back to it.
+    [UNQR_no_back_edge] above is the one-step instance; unlinking needs the
+    two-step one, for [X] against its grandchild [r]. *)
+Lemma UNQR_no_back : forall h root X rho delta r,
+  UNQR_h h root ->
+  hstar h root rho = Some X ->
+  delta <> [] ->
+  hstar h root (rho ++ delta) = Some r ->
+  forall tau, hstar h r tau <> Some X.
+Proof.
+  intros h root X rho delta r HU Hrho Hd Hr tau Hcontra.
+  assert (Hxd : hstar h X delta = Some r)
+    by (rewrite hstar_app, Hrho in Hr; exact Hr).
+  assert (Hlong : hstar h root (rho ++ delta ++ tau) = Some X)
+    by (rewrite hstar_app, Hrho, hstar_app, Hxd; exact Hcontra).
+  assert (Heq : rho = rho ++ delta ++ tau) by exact (HU _ _ _ Hrho Hlong).
+  assert (Hlen : length rho = length (rho ++ delta ++ tau))
+    by (rewrite <- Heq; reflexivity).
+  rewrite length_app in Hlen.
+  destruct delta as [|d0 dr]; [contradiction | simpl in Hlen]. lia.
+Qed.
+
+Theorem hstar_unlink_char : forall h root X f1 z f2 r sigma x,
+  h X f1 = Some (VLoc z) ->
+  h z f2 = Some (VLoc r) ->
+  (forall tau, hstar h r tau <> Some X) ->
+  hstar (upd h X f1 (VLoc r)) root sigma = Some x ->
+  (hstar h root sigma = Some x /\ avoids h root sigma X f1)
+  \/ (exists p1 s2, sigma = p1 ++ f1 :: s2
+                    /\ hstar h root p1 = Some X
+                    /\ hstar h root (p1 ++ f1 :: f2 :: s2) = Some x).
+Proof.
+  intros h root X f1 z f2 r sigma x HXf1 Hzf2 Hnoback Hreach.
+  destruct (avoids_dec h root sigma X f1) as [Hav|Hna].
+  - left. split; [| exact Hav].
+    rewrite <- (hstar_upd_avoids h X f1 (VLoc r) sigma root Hav). exact Hreach.
+  - destruct (avoids_false_factors h X f1 sigma root Hna)
+      as [p1 [s2 [-> [Hp1 Hav1]]]].
+    rewrite (hstar_upd_through h X f1 r p1 s2 root Hav1 Hp1) in Hreach.
+    assert (Hav2 : avoids h r s2 X f1).
+    { destruct (avoids_dec h r s2 X f1) as [Y|N]; [exact Y | exfalso].
+      destruct (avoids_false_factors h X f1 s2 r N) as [q1 [_ [_ [Hq _]]]].
+      exact (Hnoback q1 Hq). }
+    rewrite (hstar_upd_avoids h X f1 (VLoc r) s2 r Hav2) in Hreach.
+    right. exists p1, s2. split; [reflexivity | split; [exact Hp1 |]].
+    rewrite hstar_app, Hp1. simpl. rewrite HXf1. simpl. rewrite Hzf2. exact Hreach.
+Qed.
+
+Theorem UNQR_unlink : forall h root X f1 z f2 r,
+  UNQR_h h root ->
+  h X f1 = Some (VLoc z) ->
+  h z f2 = Some (VLoc r) ->
+  (forall tau, hstar h r tau <> Some X) ->
+  UNQR_h (upd h X f1 (VLoc r)) root.
+Proof.
+  intros h root X f1 z f2 r HU HXf1 Hzf2 Hnoback sigma sigma' x H1 H2.
+  destruct (hstar_unlink_char h root X f1 z f2 r sigma  x HXf1 Hzf2 Hnoback H1)
+    as [[Ha Hav] | [q1 [s1 [Hs1 [Hq1 Hr1]]]]];
+  destruct (hstar_unlink_char h root X f1 z f2 r sigma' x HXf1 Hzf2 Hnoback H2)
+    as [[Hb Hav'] | [q2 [s2 [Hs2 [Hq2 Hr2]]]]].
+  - (* unchanged / unchanged *) exact (HU _ _ _ Ha Hb).
+  - (* unchanged / shortened: the unchanged path would have to cross the edge *)
+    exfalso. rewrite (HU sigma (q2 ++ f1 :: f2 :: s2) x Ha Hr2) in Hav.
+    exact (avoids_app_edge_false h X f1 q2 (f2 :: s2) root Hq2 Hav).
+  - exfalso. rewrite (HU sigma' (q1 ++ f1 :: f2 :: s1) x Hb Hr1) in Hav'.
+    exact (avoids_app_edge_false h X f1 q1 (f2 :: s1) root Hq1 Hav').
+  - (* both shortened *)
+    subst sigma sigma'.
+    assert (Hq : q1 = q2) by exact (HU q1 q2 X Hq1 Hq2). subst q2.
+    assert (Hs : s1 = s2).
+    { assert (Heq : q1 ++ f1 :: f2 :: s1 = q1 ++ f1 :: f2 :: s2)
+        by exact (HU _ _ x Hr1 Hr2).
+      apply app_inv_head in Heq. congruence. }
+    rewrite Hs. reflexivity.
+Qed.
+
+(** ** Status
+
+    All three heap-mutating rules preserve the tree shape, each discharged
+    against [hstar_upd_char] plus one statement about how the factored suffix is
+    rewritten:
+
+      - T-Replace  length-preserving   ([hstar_replace_step])
+      - T-Insert   lengthened by one   ([hstar_insert_step])
+      - T-UnlinkH  shortened by one    (no step lemma needed)
+
+    What remains for the atomic-action lemmas is the rest of WellFormed --
+    the observation map, the free list, and the grace-period invariants -- which
+    is ghost state rather than reachability, and belongs with the Iris
+    instantiation. *)
 
 Print Assumptions hstar_upd_char.
 Print Assumptions UNQR_replace.
-Print Assumptions UNQR_no_back_edge.
+Print Assumptions UNQR_insert.
+Print Assumptions UNQR_unlink.
+Print Assumptions UNQR_no_back.
 Print Assumptions UNQR_h_upd_unreachable.
