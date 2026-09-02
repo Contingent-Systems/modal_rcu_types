@@ -418,34 +418,51 @@ temporal story, which only you have.
 \paragraph{Whether AWRT should be derived rather than assumed.}
 See \S\ref{sec:inv-iris}.
 
-\subsection{Recommendation for the Iris encoding}
+\subsection{The encoding: raw heap plus $h^{*}$}
 \label{sec:inv-iris}
 
-Several of these invariants exist only because the model represents the
-structure as a raw heap plus a reachability function $h^{*}$, and must then
-\emph{assert} that the result is a tree.  If the mechanization instead carries a
-representation predicate $\textsf{tree\_rep} : \Loc \to \textsf{tree} \to
-\textsf{iProp}$, with paths as positions within it, then
+Four of these invariants --- \textbf{UNQR} (\S17), \textbf{UNQRT-a} (\S16),
+\textbf{OW} (\S1) and \textbf{HD} (\S15) --- exist only because the model
+represents the structure as a raw heap together with a reachability function
+$h^{*}$, and must then \emph{assert} that the result is a tree.  Carrying an
+inductive representation predicate instead would make all four derivable.
 
-\begin{itemize}
-\item \textbf{UNQR} (\S17) --- unique reachability --- is a property of positions
-  in an inductive tree, and is \emph{derivable};
-\item \textbf{UNQRT-a} (\S16) --- no incoming edge to the root --- likewise;
-\item \textbf{OW} (\S1) --- in-degree at most one for live nodes --- likewise;
-\item \textbf{HD} (\S15) --- domain closure --- becomes structural.
-\end{itemize}
-
-That converts the four invariants most likely to be quietly violated by a proof
-step into lemmas the representation gives you, and it removes the need to
-re-establish them by hand in every atomic-action case.  The residue --- the
-observation map $O$, the free list $F$, the grace-period invariants
-(\textbf{IFL}, \textbf{RINFL}, \textbf{FLR}) and the fresh-node invariants
-(\textbf{FR}, \textbf{WF}, \textbf{FNR}, \textbf{FPI}) --- is genuinely about
-ghost state and stays as ghost state.
-
-The cost is that unlinked-but-not-yet-freed nodes live \emph{outside} the tree
-while readers may still hold them, so the invariant becomes
+\paragraph{Decision.}  We keep the raw heap.  Two reasons.  First, fidelity: the
+existing soundness argument is phrased over $\sigma.h$ and $h^{*}$, so its
+structure --- once repaired --- transfers directly, whereas a representation
+predicate would require re-deriving each case.  Second, the split a
+representation predicate appears to buy is illusory here: unlinked-but-not-yet
+-freed nodes sit \emph{outside} the tree while readers may still hold them, so
+the invariant would have to be
 $\textsf{tree\_rep}\;rt\;t \ast \big(\ast_{o \in dom(F)} \textsf{detached}\;o\big)$
-rather than a single predicate.  That split is not incidental --- it is exactly
-the delayed ownership transfer, and having it visible in the invariant's
-structure is an argument for this encoding rather than against it.
+and the detached region would need its own reachability reasoning regardless.
+
+\paragraph{Consequence.}  Those four invariants must be re-established by hand
+in every atomic-action case, and they are the fiddly ones --- \textbf{UNQR}
+especially, since preserving ``distinct paths reach distinct nodes'' across a
+field write is precisely the step the technical report's proofs gesture at.  The
+mitigation is to prove the reachability theory once and discharge every action
+against it, rather than re-deriving a path argument per rule.
+
+That theory is \texttt{rocq/HeapPaths.v}.  Its central result is a dichotomy:
+after a single field write, every path either behaves exactly as it did before,
+or it factors through the written edge.
+\[
+\begin{array}{l}
+\forall h, o_u, f_u, v, \rho, o \ldotp
+  h^{*}[o_u.f_u \mapsto v](o,\rho) = h^{*}(o,\rho) \\
+\qquad {} \lor\; \exists \rho_1,\rho_2 \ldotp \rho = \rho_1 \cdot f_u \cdot \rho_2
+  \land h^{*}(o,\rho_1) = o_u
+\end{array}
+\]
+Since each of \textsc{T-UnlinkH}, \textsc{T-Replace} and \textsc{T-Insert}
+performs exactly one write, all three reduce to this plus a statement of how the
+factored suffix is rewritten --- shortened by one segment for unlinking,
+length-preserving for replacement, lengthened by one for insertion.  Isolating
+that common statement is the next step, in place of three separate path
+arguments.
+
+The residue --- the observation map $O$, the free list $F$, the grace-period
+invariants (\textbf{IFL}, \textbf{RINFL}, \textbf{FLR}) and the fresh-node
+invariants (\textbf{FR}, \textbf{WF}, \textbf{FNR}, \textbf{FPI}) --- is
+genuinely about ghost state and becomes ghost state in the Iris encoding.
