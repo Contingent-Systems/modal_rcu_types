@@ -268,17 +268,24 @@ Qed.
 
 (** The mirroring hypothesis.
 
-    NOTE: the type rule states [N1 = N2], equality of the two *field maps*.
-    That is weaker than what is needed here.  A field map records only the
-    fields that have been read or set, and neither
-    [[| rcuItr rho N |]] nor [[| rcuFresh N |]] constrains a field outside
-    [dom(N)] -- so [N1 = N2] does not by itself give [forall g, h n g = h o g],
-    and the subtrees could differ on an untracked field.  Section 4 says "we
-    presume all objects contain all fields", which suggests the intended reading
-    is that [N] is total on RCU fields at the point of the rule, but nothing in
-    the system enforces it.  Either the rule needs that side condition or the
-    denotation needs strengthening.  We take the semantic property as a
-    hypothesis and flag the gap. *)
+    The type rule's [N1 = N2] is equality of the two *field maps*, which on its
+    own is weaker than what is needed here: a field map records only the fields
+    that have been read or set, and neither [[| rcuItr rho N |]] nor
+    [[| rcuFresh N |]] constrains a field outside [dom(N)], so the subtrees
+    could differ on an untracked field.
+
+    T-Replace therefore carries the side condition
+    [forall f', FType(f') = RCU -> f' in dom(N1)].  With it, [N1 = N2] pins the
+    entire RCU footprint of both nodes and [Mirrors] follows from the
+    denotations.  It is not a burden in practice: writing a field of the fresh
+    node with T-WriteFH already requires that field to be in the replaced node's
+    map, so any replacement that copies every RCU field satisfies it by
+    construction -- the BST deletion does.
+
+    [Mirrors] stays a hypothesis here only because this file models the heap and
+    not the type system; it is supplied by the rule, not assumed away.  Note
+    also that [Heap] carries RCU fields only, so the [forall g] below is the
+    quantification over RCU fields that the side condition delivers. *)
 Definition Mirrors (h : Heap) (n o : Loc) : Prop := forall g, h n g = h o g.
 
 Lemma hstar_replace_step : forall h P f o n g p,
@@ -399,10 +406,21 @@ Qed.
 
 (** [n]'s only outgoing RCU edge is [f4], pointing at [o].
 
-    NOTE: the same modelling gap as [Mirrors].  The rule supplies
-    [forall f2 in dom(N1). f4 <> f2 -> N1(f2) = null], which constrains only the
-    *tracked* fields; a field outside [dom(N1)] is unconstrained by the
-    denotation and could point anywhere.  We take the semantic property. *)
+    The rule supplies [forall f2 in dom(N1). f4 <> f2 -> N1(f2) = null], which
+    on its own constrains only the *tracked* fields, leaving a field outside
+    [dom(N1)] free to point anywhere and give the inserted node a second child.
+
+    Unlike [Mirrors], this one is closed in the denotation rather than the rule:
+    [[| rcuFresh N |]] now also requires every RCU field outside [dom(N)] to be
+    null.  That is an invariant of the fresh-node lifecycle rather than a new
+    obligation -- T-Alloc establishes it (fresh object, all fields null, empty
+    map) and T-WriteFH, the only rule that writes a fresh object's field,
+    preserves it by moving exactly the written field into [dom(N)].  Together
+    with the rule's null condition it gives [PointsOnlyAt] outright.
+
+    The split is deliberate: T-Insert's obligation is about the *fresh* node, so
+    a denotation invariant reaches it, whereas [Mirrors] also constrains the
+    pre-existing node, whose untracked fields are legitimately non-null. *)
 Definition PointsOnlyAt (h : Heap) (n : Loc) (f4 : FName) (o : Loc) : Prop :=
   h n f4 = Some (VLoc o)
   /\ forall g x, g <> f4 -> h n g <> Some (VLoc x).

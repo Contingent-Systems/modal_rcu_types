@@ -418,7 +418,7 @@ temporal story, which only you have.
 \paragraph{Whether AWRT should be derived rather than assumed.}
 See \S\ref{sec:inv-iris}.
 
-\paragraph{$\mathcal{N}_1 = \mathcal{N}_2$ in \textsc{T-Replace} is weaker than the proof needs.}
+\paragraph{$\mathcal{N}_1 = \mathcal{N}_2$ in \textsc{T-Replace} is weaker than the proof needs (resolved).}
 Found while mechanizing the \textsc{T-Replace} case
 (\texttt{rocq/HeapPaths.v}).  Preserving \textbf{UNQR} across the replacement
 requires that the fresh node's subtree \emph{be} the old node's subtree, i.e.\
@@ -429,21 +429,54 @@ neither $\llbracket \textsf{rcuItr}\,\rho\,\mathcal{N} \rrbracket$ nor $\llbrack
 \textsf{rcuFresh}\,\mathcal{N} \rrbracket$ constrains a field outside $dom(\mathcal{N})$ --- so
 the two subtrees may differ on an untracked field while $\mathcal{N}_1 = \mathcal{N}_2$ holds.
 
-Section \ref{sec:tslbl} says ``we presume all objects contain all fields'',
-which suggests the intended reading is that $\mathcal{N}$ is total on \RCU{} fields at
-the point of the rule, but nothing in the system enforces it.  Either
-\textsc{T-Replace} needs that as an explicit side condition, or the denotations
-need strengthening so that $\mathcal{N}$ determines the object's full \RCU{} footprint.
-The mechanization takes the semantic property as a hypothesis
-(\texttt{Mirrors}) and proves the case from it, so the choice is yours and
-nothing downstream depends on it.
-
-\textsc{T-Insert} has the \emph{same} gap, in the same place: its
+\textsc{T-Insert} has the same \emph{symptom}, in the same place: its
 $\forall_{f_2\in dom(\mathcal{N}_1)} \ldotp f_4 \neq f_2 \implies \mathcal{N}_1(f_2) =
 \textsf{null}$ constrains only the tracked fields, so an untracked field of the
-fresh node could point anywhere and give the inserted node a second child.  The
-mechanization again takes the semantic property (\texttt{PointsOnlyAt}).
-Whatever fix is chosen should cover both rules --- they are one problem, not two.
+fresh node could point anywhere and give the inserted node a second child.
+
+\paragraph{Resolution.}  One tempting reading should be discarded first.  Section
+\ref{sec:tslbl}'s ``we presume all objects contain all fields'' is about object
+\emph{layout} --- every object has every field present, so the system need not
+do C-style field-presence checking --- and says nothing about $dom(\mathcal{N})$.  The
+rules are explicit that it does not: \textsc{T-Alloc} produces
+$\mathcal{N}_{\emptyset}$, \textsc{T-ReadH} produces $\mathcal{N}_{\emptyset}$ for the
+variable it reads into, and \textsc{T-WriteFH} requires $f\notin dom(\mathcal{N}')$ and
+returns $\mathcal{N}'([f\rightharpoonup z])$.  A field map is by construction ``the
+fields read or written so far''; totality is contrary to the design, not an
+unstated intent the system fails to enforce.
+
+The two rules therefore need fixes in different places, because \textsc{T-Insert}'s
+obligation is about the \emph{fresh} node and \textsc{T-Replace}'s is about the
+\emph{pre-existing} one.
+
+\textsc{T-Insert} is fixed in the denotation, with no change to the rule.
+$\llbracket \textsf{rcuFresh}\,\mathcal{N} \rrbracket_{tid}$ now also requires every
+\RCU{} field outside $dom(\mathcal{N})$ to be \textsf{null}.  This is an invariant of the
+fresh-node lifecycle rather than a new proof obligation: \textsc{T-Alloc}
+establishes it, and \textsc{T-WriteFH} --- the only rule that writes a field of a
+\textsf{rcuFresh} object --- preserves it by moving exactly the written field into
+$dom(\mathcal{N})$.  With it, the rule's existing null condition on $dom(\mathcal{N}_1)$ gives
+\texttt{PointsOnlyAt} outright.
+
+\textsc{T-Replace} cannot be fixed the same way.  \texttt{Mirrors} quantifies over
+the fields of \emph{both} nodes, and the second is an \textsf{rcuItr} inside the
+structure whose untracked fields are legitimately non-null, so ``unlisted implies
+\textsf{null}'' would simply be false of it.  That one needs an explicit side
+condition on the rule, $\forall_{f'} \ldotp \textsf{FType}(f')=\RCU \implies f'
+\in dom(\mathcal{N}_1)$; together with $\mathcal{N}_1 = \mathcal{N}_2$ the two maps then pin the entire
+\RCU{} footprint of both nodes and \texttt{Mirrors} follows from the denotations.
+
+Only the \textsc{T-Replace} condition costs the checker anything, and in practice
+it is bookkeeping: writing a field of the fresh node with \textsc{T-WriteFH}
+already requires that field to be in the replaced node's map, so any replacement
+that copies every \RCU{} field satisfies it by construction.  The binary search
+tree deletion sets both \texttt{Left} and \texttt{Right} of the fresh node before
+replacing, and so still type checks.
+
+The mechanization continues to take \texttt{Mirrors} and \texttt{PointsOnlyAt} as
+hypotheses --- \texttt{HeapPaths.v} models the heap, not the type system --- but
+they are now supplied by the revised rule and denotation rather than assumed
+away.
 
 \subsection{The encoding: raw heap plus $h^{*}$}
 \label{sec:inv-iris}
