@@ -82,10 +82,16 @@ state component.
 
 $\textsf{WellFormed}(\sigma,O,U,T,F)$ is the conjunction of the seventeen
 predicates below.  Each carries a severity: \textsc{critical} means the original
-is vacuous, unprovable, or unstatable, so any proof case discharged against it
-establishes nothing; \textsc{major} means ill-formed but with recoverable
-intent; \textsc{minor} means a typo, an unused binder, or a caption that
-contradicts its formula.
+is vacuous, unprovable, unstatable, or too weak to support the use the proofs
+make of it, so a proof case discharged against it establishes nothing;
+\textsc{major} means ill-formed but with recoverable intent; \textsc{minor}
+means a typo, an unused binder, or a caption that contradicts its formula.
+
+All seventeen are mechanized in \texttt{rocq/WellFormed.v}, which also carries
+machine-checked proofs of the \textsc{critical} claims and a satisfiability
+witness (\S\ref{sec:inv-impact}).  That development is axiom-free; both
+\texttt{Print Assumptions} queries report \emph{closed under the global
+context}.
 
 \paragraph{1.\ OW --- No Sharing.\hfill\textsc{minor}}
 \[
@@ -148,17 +154,34 @@ $\mathit{tid} \in T_{r}$, not $\mathit{tid} \in \sigma.B$.  The latter follows,
 but only via \textbf{RINFL}; the caption should say so rather than assert it
 directly.
 
-\paragraph{5.\ ULKR --- Unlinked Reachability.\hfill\textsc{minor}}
+\paragraph{5.\ ULKR --- Unlinked Reachability.\hfill\textsc{critical}}
 \[
 \textbf{ULKR} \defn \forall o,o',f',\mathit{tid} \ldotp
-  \unlk\,\mathit{tid} \in O(o) \land \sigma.h(o',f') = o
+  \big(\unlk\,\mathit{tid} \in O(o) \lor \frbl\,\mathit{tid} \in O(o)\big)
+  \land \sigma.h(o',f') = o
   \implies \unlk\,\mathit{tid} \in O(o') \lor \frbl\,\mathit{tid} \in O(o')
 \]
-\emph{Changed:} tagging only.  The caption says ``all heap locations from which
-you can reach the \unlk{} one'', but the formula is the one-step version, which
-is the right primitive --- the transitive statement is a derived lemma
-(\textbf{ULKR}$^{*}$, by induction on path length) and should be recorded as
-such rather than conflated with the invariant.
+\emph{Changed:} the hypothesis is closed under the disjunction.  The published
+version takes only $\unlk$ on the left but concludes $\unlk \lor \frbl$, so its
+conclusion is weaker than its hypothesis and \textbf{it does not chain}: the
+induction on path length stalls at the first $\frbl$ predecessor, where no
+invariant applies.
+
+\emph{Why this is critical:} the caption, and the prose in Section
+\ref{sec:lemmas}, both state the \emph{reachability} consequence --- ``unlinked
+nodes are reachable only from other unlinked nodes, and never from the root'' ---
+and that is the property carrying the memory-safety argument, since it is what
+stops a newly arrived reader from reaching an unlinked node.  The one-step
+formula does not yield it.  With the hypothesis closed as above the induction
+goes through and the reachability form is a genuine corollary.
+
+This one was not found by reading.  It surfaced when the Rocq proof of the
+transitive form would not close; the counterexample is a chain $2 \to 1 \to 0$
+with $0$ unlinked, $1$ freeable --- which the published invariant explicitly
+permits, since it offers exactly that disjunct --- and $2$ an ordinary iterator
+reaching an unlinked node.  Both the repair and the counterexample are machine
+checked: see \texttt{ULKR\_closed\_reaches} and \texttt{ULKR\_does\_not\_chain}
+in \texttt{rocq/WellFormed.v}.
 
 \paragraph{6.\ FLR --- Free List Reachability.\hfill\textsc{major}, \textsc{open}}
 \[
@@ -350,11 +373,28 @@ The semantic changes above invalidate specific cases in Section
   needs the case where the freed location was not the target of any surviving
   edge, which is \textbf{ULKR}.
 
+\item \textbf{ULKR (\S5)} --- the \textbf{ULKR} cases themselves are unaffected,
+  since they establish the one-step form and the closed hypothesis is only
+  harder in the antecedent.  What must be revisited is Section
+  \ref{sec:lemmas}'s claim that \textbf{ULKR} and \textbf{FLR} together keep
+  unlinked nodes unreachable from the root: that is the transitive form, and it
+  needs the corrected invariant.
+
 \item \textbf{WULK, IFL, FLR, RINFL, UNQRT} --- restatement only, provided the
   \textsc{open} question in \S\ref{sec:inv-open} resolves in favour of the
   reading already used in the proofs.  Recheck each citation site rather than
   assuming.
 \end{enumerate}
+
+\paragraph{Machine-checked status.}  Of the claims above, five are mechanized in
+\texttt{rocq/WellFormed.v}: \texttt{UNQR\_orig\_vacuous} and
+\texttt{UNQR\_orig\_admits\_non\_trees};
+\texttt{RITR\_orig\_contradicts\_fresh};
+\texttt{FR\_orig\_admits\_writer\_local\_alias};
+\texttt{FPI\_orig\_contradicts\_FNR}; and \texttt{ULKR\_does\_not\_chain}
+together with its repair \texttt{ULKR\_closed\_reaches}.  The remaining
+\textsc{major} and \textsc{minor} items are restatements whose defects are
+syntactic (capture, scope, unused binders) and are visible without proof.
 
 \subsection{Open questions}
 \label{sec:inv-open}
