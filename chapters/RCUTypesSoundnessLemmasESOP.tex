@@ -60,7 +60,7 @@ m\in \mathcal{M}
 \left\{
 \begin{array}{l|l}
 m\in \mathcal{M}
-&(\textsf{unlinked}\in  O(.s(x,tid)) \land l = tid \land x \notin U) \land \\
+&(\textsf{unlinked}\in  O(s(x,tid)) \land l = tid \land x \notin U) \land \\
 & (\exists_{T'\subseteq T}\ldotp s(x,tid) \mapsto T'\in F \implies T' \subseteq B \land tid \notin T' )
 \end{array}
 \right\}
@@ -102,7 +102,7 @@ m\in \mathcal{M}
 \begin{array}{l|l}
 m\in \mathcal{M}
 & \begin{array}{l}((rt \notin U \land s(x,tid) = rt \land rt \in dom(h) \land \\ 
-O(rt) \in \textsf{root} \land s(x,tid) \notin dom(F) ) \end{array}
+\textsf{root} \in O(rt) \land s(x,tid) \notin dom(F) ) \end{array}
 \end{array}
 \right\}
 \end{array}

@@ -1,0 +1,411 @@
+%!TEX root = ../paper.tex
+%
+% Revised statement of the WellFormed invariants.
+%
+% Purpose: a single precise specification of WellFormed, suitable as input to
+%   (a) the Iris/Rocq mechanization, and
+%   (b) the Clang frontend type checker.
+%
+% This file supersedes the invariant figures in Section \ref{sec:memaxioms} of
+% chapters/RCUTypesSoundnessLemmasESOP.tex. It is NOT yet folded into that
+% appendix: several changes below alter the meaning of an invariant and
+% therefore invalidate proof cases that cite it by name. See Section
+% \ref{sec:inv-impact} for which ones.
+%
+\section{\textsf{WellFormed}, Revised}
+\label{sec:inv-revised}
+
+\newcommand{\obs}{\textsf{obs}}
+\newcommand{\itr}{\textsf{iterator}}
+\newcommand{\unlk}{\textsf{unlinked}}
+\newcommand{\frsh}{\textsf{fresh}}
+\newcommand{\frbl}{\textsf{freeable}}
+\newcommand{\rt}{\textsf{root}}
+\newcommand{\Loc}{\textsf{Loc}}
+\newcommand{\TID}{\textsf{TID}}
+\newcommand{\FType}{\textsf{FType}}
+\newcommand{\RCU}{\textsf{RCU}}
+\newcommand{\defn}{\;\triangleq\;}
+
+\subsection{Preliminaries}
+\label{sec:inv-prelim}
+
+Four notational problems recur across the original figures and are fixed once
+here rather than seventeen times below.
+
+\paragraph{(C0) Every observation carries the observing thread.}
+The original grammar tags only \itr:
+\[\obs ::= \itr\;\mathit{tid} \mid \unlk \mid \frsh \mid \frbl \mid \rt\]
+This makes three invariants unstatable or ill-typed.  \textbf{RITR} is
+\emph{about} which threads may make which observations, and cannot be phrased
+when the observations in question are anonymous; \textbf{WULK} works around this
+by writing $\textsf{undef}\notin O(o)$, but \textsf{undef} is not in the grammar
+at all (undefinedness lives in $U$, not $O$); \textbf{WF} recovers the observer
+only indirectly, through a variable that happens to point at the location.  We
+therefore tag uniformly:
+\[\obs ::= \itr\;\mathit{tid} \mid \unlk\;\mathit{tid} \mid \frsh\;\mathit{tid} \mid \frbl\;\mathit{tid} \mid \rt\]
+\rt{} stays anonymous: it is a property of the structure, not of an observer.
+
+This is the one deliberate \emph{design} change in this document; everything
+else is a repair.  It is cheap: the type denotations in Figure
+\ref{fig:denotingtypeenviroment} already conjoin $l = \mathit{tid}$ wherever an
+untagged observation appears, so adding the tag introduces no new content
+there --- it only makes explicit what those conjuncts already fix.  For the Iris
+encoding the cost is zero, since $O$ is a $\textsf{gmap}\;\Loc\;(\textsf{gset}\;\obs)$
+either way.  If this change is rejected, \textbf{RITR} and \textbf{WULK} must
+instead be restated as invariants over the transition relation rather than over
+a single state, which is strictly more painful to mechanize.
+
+\paragraph{(C1) $\textsf{OID}$.}
+Used in \textbf{OW} but never defined anywhere in the paper.  Read as \Loc:
+the invariant is about fields holding \emph{object references}, so the guard
+distinguishes pointer-valued fields from scalar ones.  We write $v\in\Loc$.
+
+\paragraph{(C2) $h^{*}$ is partial.}
+$h^{*} : (\Loc\times\textsf{Path}) \rightharpoonup \textsf{Val}$ is declared
+partial in Figure \ref{fig:denotingtypeenviroment}, but several invariants
+quantify over all $\rho$ as though it were total, which makes them false for
+paths that run off the structure.  We write $h^{*}(\sigma.rt,\rho) = \lfloor o
+\rfloor$ for ``$h^{*}$ is defined at $\rho$ and yields $o$''.
+
+\paragraph{(C3) Free-list lookup.}
+The original writes $\sigma.F([o\mapsto T])$ as a \emph{predicate} meaning
+``$o\in dom(F)$ and $F(o)=T$'', and in two places binds it under
+$\forall_{T'\subseteq T}$, which reads as asserting that $F$ maps $o$ to every
+subset of $T$.  Worse, the bound name $T$ collides with the thread-set component
+$T$ of the logical state $(\sigma,O,U,T,F)$ --- a capture bug in \textbf{FLR}
+and \textbf{RINFL}.  We write $\sigma.F(o) = T_{r}$, reserving $T$ for the
+state component.
+
+\subsection{The invariants}
+\label{sec:inv-list}
+
+$\textsf{WellFormed}(\sigma,O,U,T,F)$ is the conjunction of the seventeen
+predicates below.  Each carries a severity: \textsc{critical} means the original
+is vacuous, unprovable, or unstatable, so any proof case discharged against it
+establishes nothing; \textsc{major} means ill-formed but with recoverable
+intent; \textsc{minor} means a typo, an unused binder, or a caption that
+contradicts its formula.
+
+\paragraph{1.\ OW --- No Sharing.\hfill\textsc{minor}}
+\[
+\begin{array}{l}
+\textbf{OW} \defn \forall o,o',f,f',v \ldotp
+  \sigma.h(o,f) = v \land \sigma.h(o',f') = v \land v\in\Loc \\
+\qquad {} \land \FType(f) = \RCU \land \FType(f') = \RCU \implies \\
+\qquad\quad (o = o' \land f = f')
+  \;\lor\; \textsf{Detached}(O,o) \;\lor\; \textsf{Detached}(O,o')
+\end{array}
+\]
+where $\textsf{Detached}(O,o) \defn \exists \mathit{tid} \ldotp
+\{\unlk\,\mathit{tid}, \frbl\,\mathit{tid}, \frsh\,\mathit{tid}\} \cap O(o) \neq \emptyset$.
+
+\emph{Changed:} the caption (``none of the heap nodes can be observed as
+undefined'') describes a different invariant than the formula, which is
+in-degree-at-most-one for live nodes.  Renamed accordingly --- ``Ownership'' is
+misleading.  $\FType(f') = \RCU$ added: the original constrains only $f$, which
+would let a non-\RCU{} field alias a live node.  $\textsf{OID}$ resolved per (C1).
+
+\paragraph{2.\ RWOW --- Reader/Writer Observation Coexistence.\hfill\textsc{major}}
+\[
+\begin{array}{l}
+\textbf{RWOW} \defn \forall x,\mathit{tid},o \ldotp
+  \sigma.s(x,\mathit{tid}) = o \land (x,\mathit{tid}) \notin U \implies \\
+\qquad \itr\,\mathit{tid} \in O(o) \;\lor\; \big(\sigma.l = \mathit{tid} \land
+  ( \unlk\,\mathit{tid} \in O(o) \lor \frbl\,\mathit{tid} \in O(o) \lor \frsh\,\mathit{tid} \in O(o) )\big)
+\end{array}
+\]
+\emph{Changed:} parenthesisation only.  The original nests
+$(\sigma.l{=}\mathit{tid} \land (\unlk \in O(o)) \lor (\sigma.l{=}\mathit{tid} \land \frbl \in O(o)))$
+with unbalanced grouping, so the intended four-way disjunction does not parse as
+written.
+
+\paragraph{3.\ AWRT --- Alias With Root.\hfill\textsc{minor}}
+\[
+\textbf{AWRT} \defn \forall y,\mathit{tid} \ldotp
+  \sigma.s(y,\mathit{tid}) = \sigma.rt \land (y,\mathit{tid}) \notin U
+  \implies \itr\,\mathit{tid} \in O(\sigma.rt)
+\]
+\emph{Changed:} $h^{*}(\sigma.rt,\epsilon)$ replaced by $\sigma.rt$ (they are
+equal by definition, and the indirection obscures the invariant).  $s$
+qualified as $\sigma.s$, consistently with the rest.  $(y,\mathit{tid}) \notin
+U$ added --- without it a dangling variable that happens to hold $rt$ forces an
+observation into $O$.
+
+\emph{Note for mechanization:} this makes $\sigma.rt$ carry \emph{both}
+$\rt$ and $\itr\,\mathit{tid}$.  That is intended --- \textsc{T-Root} hands the
+reader an $\textsf{rcuItr}\,\epsilon$ --- but $\llbracket x : \textsf{rcuRoot}
+\rrbracket$ asserts $\rt \in O(rt)$, so the two must be shown to coexist rather
+than to conflict.  State it as an explicit lemma.
+
+\paragraph{4.\ IFL --- Iterators in Free List.\hfill\textsc{major}}
+\[
+\textbf{IFL} \defn \forall \mathit{tid},o,T_{r} \ldotp
+  \itr\,\mathit{tid} \in O(o) \land \sigma.F(o) = T_{r} \implies \mathit{tid} \in T_{r}
+\]
+\emph{Changed:} per (C3).  Caption also overshoots: the formula concludes
+$\mathit{tid} \in T_{r}$, not $\mathit{tid} \in \sigma.B$.  The latter follows,
+but only via \textbf{RINFL}; the caption should say so rather than assert it
+directly.
+
+\paragraph{5.\ ULKR --- Unlinked Reachability.\hfill\textsc{minor}}
+\[
+\textbf{ULKR} \defn \forall o,o',f',\mathit{tid} \ldotp
+  \unlk\,\mathit{tid} \in O(o) \land \sigma.h(o',f') = o
+  \implies \unlk\,\mathit{tid} \in O(o') \lor \frbl\,\mathit{tid} \in O(o')
+\]
+\emph{Changed:} tagging only.  The caption says ``all heap locations from which
+you can reach the \unlk{} one'', but the formula is the one-step version, which
+is the right primitive --- the transitive statement is a derived lemma
+(\textbf{ULKR}$^{*}$, by induction on path length) and should be recorded as
+such rather than conflated with the invariant.
+
+\paragraph{6.\ FLR --- Free List Reachability.\hfill\textsc{major}, \textsc{open}}
+\[
+\textbf{FLR} \defn \forall o,o',f',T_{r} \ldotp
+  \sigma.F(o) = T_{r} \land \sigma.h(o',f') = o
+  \implies \exists T_{r}' \ldotp \sigma.F(o') = T_{r}' \land T_{r} \bowtie T_{r}'
+\]
+\emph{Changed:} per (C3), including the $T$ capture.  \textbf{The direction of
+$\bowtie$ needs your adjudication and is left open} --- see Section
+\ref{sec:inv-open}.
+
+\paragraph{7.\ WULK --- Writer Unlink.\hfill\textsc{major}}
+\[
+\textbf{WULK} \defn \forall o \ldotp \itr\,\sigma.l \in O(o) \implies
+  \forall \mathit{tid} \ldotp \unlk\,\mathit{tid} \notin O(o) \land \frbl\,\mathit{tid} \notin O(o)
+\]
+\emph{Changed:} the caption (``the writer thread cannot observe a heap location
+as \unlk'') states something the formula does not, and something that is plainly
+false --- the writer observes locations as \unlk{} constantly; that is the
+entire point of the type. The formula's actual content, which is the useful one,
+is that \itr{} and \unlk/\frbl{} observations of the same location are mutually
+exclusive.  Caption corrected. $\textsf{undef} \notin O(o)$ dropped: not in the
+grammar, and subsumed by $U$.
+
+\paragraph{8.\ FR --- Fresh Unreachable.\hfill\textsc{critical}}
+\[
+\begin{array}{l}
+\textbf{FR} \defn \forall \mathit{tid},x,o \ldotp
+  \sigma.s(x,\mathit{tid}) = o \land \frsh\,\mathit{tid} \in O(o) \implies \\
+\qquad (\forall o',f' \ldotp \sigma.h(o',f') \neq o)
+\;\land\;
+  (\forall y,\mathit{tid}' \ldotp (y,\mathit{tid}') \neq (x,\mathit{tid}) \implies \sigma.s(y,\mathit{tid}') \neq o)
+\end{array}
+\]
+\emph{Changed:} the original is a \emph{disjunction}
+$(h(o',f') \neq o) \lor (s(y,\mathit{tid}) \neq o \lor (\mathit{tid}' \neq
+\mathit{tid} \implies s(y,\mathit{tid}') \neq o))$ whose second disjunct
+contradicts its own hypothesis: instantiating $y := x$ gives
+$\sigma.s(x,\mathit{tid}) \neq o$, which the antecedent has just asserted is
+false.  The two clauses are independent obligations --- no heap edge into a
+fresh node, and no second variable aliasing it --- so this must be a
+conjunction, with the alias clause excluding the witness $x$ itself.
+
+\emph{Why this is critical:} \textbf{FR} is the sole justification for the
+freshness/uniqueness step in the \textsc{Replace} and \textsc{Insert} lemmas
+(both cite \texttt{ahu16f.FR} / \texttt{ahu16flk.FR} for ``there exists no field
+alias/path alias to the freshly allocated $o_n$'').  In its published form it
+does not support that step.
+
+\paragraph{9.\ WF --- Fresh Only by Writer.\hfill\textsc{minor}}
+\[
+\textbf{WF} \defn \forall \mathit{tid},x,o \ldotp
+  \sigma.s(x,\mathit{tid}) = o \land \frsh\,\mathit{tid} \in O(o) \implies \mathit{tid} = \sigma.l
+\]
+\emph{Note:} under (C0) this is close to definitional.  Keep it as a named
+invariant for readability, but expect it to discharge in one step.
+
+\paragraph{10.\ FNR --- Fresh Not Reader-Visible.\hfill\textsc{minor}}
+\[
+\textbf{FNR} \defn \forall o,\mathit{tid},\mathit{tid}' \ldotp
+  \frsh\,\mathit{tid} \in O(o) \implies
+  \itr\,\mathit{tid}' \notin O(o) \land \unlk\,\mathit{tid}' \notin O(o)
+\]
+\emph{Changed:} the original binds $x$ and never uses it.
+
+\paragraph{11.\ FPI --- Fresh Points to Iterator.\hfill\textsc{critical}}
+\[
+\textbf{FPI} \defn \forall o,f,o',\mathit{tid} \ldotp
+  \frsh\,\mathit{tid} \in O(o) \land \sigma.h(o,f) = o' \land \FType(f) = \RCU
+  \implies \itr\,\sigma.l \in O(o')
+\]
+\emph{Changed:} two independent defects.  (i) The original writes
+$(\frsh \in O(o) \land \exists_{f,o'} \ldotp h(o,f) = o') \implies (\forall
+\mathit{tid} \ldotp \itr\,\mathit{tid} \in O(o'))$, in which $o'$ is bound by an
+existential \emph{inside the antecedent} and is therefore out of scope in the
+consequent.  Both must be universally bound at the top.  (ii) $\forall
+\mathit{tid} \ldotp \itr\,\mathit{tid} \in O(o')$ asserts that \emph{every}
+thread in the system observes $o'$ as an iterator, which is far stronger than
+anything the type system establishes and is not provable.  The matching
+denotation $\llbracket \textsf{rcuFresh}\,\mathcal{N} \rrbracket_{tid}$ requires
+only $\itr\,\mathit{tid} \in O(s(x_i,\mathit{tid}))$ for the writer, so the
+consequent is weakened to $\sigma.l$.  $\FType(f) = \RCU$ added to exclude
+scalar fields.
+
+\paragraph{12.\ WNR --- Writer Is Not a Reader.\hfill\textsc{minor}}
+\[\textbf{WNR} \defn \sigma.l \notin \sigma.R\]
+\emph{Unchanged.}  Well-formed as written, since $l : \TID \uplus
+\{\textsf{unlocked}\}$ and $\textsf{unlocked} \notin \TID$.
+
+\paragraph{13.\ RITR --- Readers Make Only Iterator Observations.\hfill\textsc{critical}}
+\[
+\textbf{RITR} \defn \forall o,\mathit{tid} \ldotp \mathit{tid} \in \sigma.R \implies
+  \unlk\,\mathit{tid} \notin O(o) \land \frbl\,\mathit{tid} \notin O(o) \land \frsh\,\mathit{tid} \notin O(o)
+\]
+\emph{Changed:} the original reads
+$\forall_{\mathit{tid} \in \sigma.R,\,o} \ldotp \itr\,\mathit{tid} \in O(o)$,
+which asserts that every reader observes \emph{every} heap location as an
+iterator.  That is not merely stronger than intended, it is false in any state
+with an unlinked node, and it makes \textbf{WellFormed} unsatisfiable at exactly
+the moments the proof needs it.  The caption gives the intent --- readers make
+no observation other than \itr{} --- which is what is stated above, and which is
+only expressible under (C0).
+
+\paragraph{14.\ RINFL --- Readers in Free List Are Bounding.\hfill\textsc{major}}
+\[\textbf{RINFL} \defn \forall o,T_{r} \ldotp \sigma.F(o) = T_{r} \implies T_{r} \subseteq \sigma.B\]
+\emph{Changed:} per (C3), including the $T$ capture against the state's thread
+set.
+
+\paragraph{15.\ HD --- Heap Domain Closure.\hfill\textsc{major}}
+\[\textbf{HD} \defn \forall o,f,o' \ldotp \sigma.h(o,f) = o' \land o' \in \Loc \implies o' \in dom(\sigma.h)\]
+\emph{Changed:} the original binds $f'$ and then uses $f$.  $o' \in \Loc$ added
+to exclude scalar-valued fields, which are otherwise required to be in the
+domain of the heap.
+
+\emph{Note:} this is the invariant whose proof case is \textbf{empty} in three
+separate lemmas (\textsc{Replace}, \textsc{ReadHeap}, \textsc{WriteFreshField}).
+
+\paragraph{16.\ UNQRT --- Unique Root.\hfill\textsc{major}}
+Split into two, because the original conflates them:
+\[
+\textbf{UNQRT-a} \defn \forall o,f \ldotp \sigma.h(o,f) \neq \sigma.rt
+\]
+\[
+\textbf{UNQRT-b} \defn \forall \rho,o \ldotp h^{*}(\sigma.rt,\rho) = \lfloor o \rfloor
+  \implies \itr\,\sigma.l \in O(o) \lor \rt \in O(o)
+\]
+\emph{Changed:} the original has a free $\mathit{tid}$; asserts
+$\itr\,\mathit{tid} \in O(h^{*}(\sigma.rt,\rho))$ for all $\rho \neq \epsilon$
+without regard to whether $h^{*}$ is defined there (see C2); and offers no
+disjunct for $\rho = \epsilon$, where the reached node is the root and carries
+\rt{} rather than \itr.  \textbf{UNQRT-a} is the no-incoming-edges half, stated
+directly rather than through $h^{*}$.
+
+\paragraph{17.\ UNQR --- Unique Reachability.\hfill\textsc{critical}}
+\[
+\textbf{UNQR} \defn \forall \rho,\rho',o \ldotp
+  h^{*}(\sigma.rt,\rho) = \lfloor o \rfloor \land h^{*}(\sigma.rt,\rho') = \lfloor o \rfloor
+  \implies \rho = \rho'
+\]
+\emph{Changed:} the original states
+$h^{*}(\sigma.rt,\rho) \neq h^{*}(\sigma.rt,\rho') \implies \rho \neq \rho'$,
+which is a theorem of equality --- if $\rho = \rho'$ then the two applications
+of $h^{*}$ are equal by congruence, so the implication holds for \emph{any}
+function whatsoever, in \emph{any} state, including states whose heap is a
+cycle.  As published, \textbf{UNQR} constrains nothing.  The intended statement
+is the converse: distinct paths from the root reach distinct nodes, i.e.\ the
+structure is a tree.
+
+\emph{Why this is critical:} \textbf{UNQR} is the tree-shape invariant on which
+every framing side condition in \textsc{T-UnlinkH}, \textsc{T-Replace} and
+\textsc{T-Insert} depends --- it is what licenses concluding node disequality
+$o_x \neq o_y \neq o_z$ from path disequality $\rho \neq \rho' \neq \rho''$.
+Six lemmas contain a \textbf{UNQR} case; all six discharge it against, or appeal
+to it as, a statement with no content.  These are not restatement fixes.  They
+have to be redone.
+
+\subsection{Impact on the existing proof cases}
+\label{sec:inv-impact}
+
+The semantic changes above invalidate specific cases in Section
+\ref{lem:lematom}.  Ordered by how much work they imply.
+
+\begin{enumerate}
+\item \textbf{UNQR (\S17)} --- \textsc{Unlink}, \textsc{Replace},
+  \textsc{Insert}, \textsc{ReadHeap}, \textsc{WriteFreshField},
+  \textsc{Alloc}.  Every \textbf{UNQR} case, plus every case that cites
+  \texttt{.UNQR} as a hypothesis --- notably the \textbf{ULKR} cases of
+  \textsc{Unlink} and \textsc{Replace}, which argue ``if $o'$ were observed as
+  \itr{} that would conflict with \textbf{UNQR}''.  This is the bulk of the
+  remaining work and it is genuine proof, not transcription.
+
+\item \textbf{FR (\S8)} --- \textsc{Replace} and \textsc{Insert}.  Both use
+  \textbf{FR} for the uniqueness of the fresh node; the corrected conjunctive
+  form should make these \emph{easier}, since the first clause now says outright
+  that no heap edge targets the fresh node.
+
+\item \textbf{FPI (\S11)} --- \textsc{Replace}, \textsc{WriteFreshField},
+  \textsc{Alloc}.  The weakening from $\forall\mathit{tid}$ to $\sigma.l$ should
+  again make these easier; the scope fix is what makes them statable at all.
+
+\item \textbf{RITR (\S13)} --- cited in the composition step of
+  \textsc{WriteFreshField}.  Under the corrected statement the argument changes
+  shape, since the old version would have let one conclude anything.
+
+\item \textbf{HD (\S15)} --- \textsc{Replace}, \textsc{ReadHeap},
+  \textsc{WriteFreshField} have no proof text at all.  These need writing from
+  scratch, but each should be short: allocation extends $dom(h)$, field writes
+  store a value that \textbf{HD} already places in $dom(h)$, and \texttt{Free}
+  needs the case where the freed location was not the target of any surviving
+  edge, which is \textbf{ULKR}.
+
+\item \textbf{WULK, IFL, FLR, RINFL, UNQRT} --- restatement only, provided the
+  \textsc{open} question in \S\ref{sec:inv-open} resolves in favour of the
+  reading already used in the proofs.  Recheck each citation site rather than
+  assuming.
+\end{enumerate}
+
+\subsection{Open questions}
+\label{sec:inv-open}
+
+\paragraph{Direction of the inclusion in FLR (\S6).}
+The original concludes $\exists T' \subseteq T \ldotp F(o' \mapsto T')$: the
+predecessor's reader set is a \emph{subset} of the successor's.  We cannot
+derive which direction is intended and have deliberately left $\bowtie$
+abstract rather than guess, because the two readings give different invariants
+and one of them may be what the \textsc{Unlink} proof actually needs.
+
+The tension: a free-list entry is populated at \texttt{SyncStart} with the
+then-current reader set and shrinks as readers execute \texttt{ReadEnd}.  Along
+a chain of unlinked nodes $o' \to o$, \textbf{ULKR} says $o'$ was unlinked no
+later than $o$.  If ``no later'' means strictly earlier, $o'$ has had more time
+to drain and $T_{r}' \subseteq T_{r}$ would be the defensible direction --- the
+opposite of what is written.  If both were unlinked in the same critical section
+under one grace period they are equal.  Resolving this needs the intended
+temporal story, which only you have.
+
+\paragraph{Whether AWRT should be derived rather than assumed.}
+See \S\ref{sec:inv-iris}.
+
+\subsection{Recommendation for the Iris encoding}
+\label{sec:inv-iris}
+
+Several of these invariants exist only because the model represents the
+structure as a raw heap plus a reachability function $h^{*}$, and must then
+\emph{assert} that the result is a tree.  If the mechanization instead carries a
+representation predicate $\textsf{tree\_rep} : \Loc \to \textsf{tree} \to
+\textsf{iProp}$, with paths as positions within it, then
+
+\begin{itemize}
+\item \textbf{UNQR} (\S17) --- unique reachability --- is a property of positions
+  in an inductive tree, and is \emph{derivable};
+\item \textbf{UNQRT-a} (\S16) --- no incoming edge to the root --- likewise;
+\item \textbf{OW} (\S1) --- in-degree at most one for live nodes --- likewise;
+\item \textbf{HD} (\S15) --- domain closure --- becomes structural.
+\end{itemize}
+
+That converts the four invariants most likely to be quietly violated by a proof
+step into lemmas the representation gives you, and it removes the need to
+re-establish them by hand in every atomic-action case.  The residue --- the
+observation map $O$, the free list $F$, the grace-period invariants
+(\textbf{IFL}, \textbf{RINFL}, \textbf{FLR}) and the fresh-node invariants
+(\textbf{FR}, \textbf{WF}, \textbf{FNR}, \textbf{FPI}) --- is genuinely about
+ghost state and stays as ghost state.
+
+The cost is that unlinked-but-not-yet-freed nodes live \emph{outside} the tree
+while readers may still hold them, so the invariant becomes
+$\textsf{tree\_rep}\;rt\;t \ast \big(\ast_{o \in dom(F)} \textsf{detached}\;o\big)$
+rather than a single predicate.  That split is not incidental --- it is exactly
+the delayed ownership transfer, and having it visible in the invariant's
+structure is an argument for this encoding rather than against it.

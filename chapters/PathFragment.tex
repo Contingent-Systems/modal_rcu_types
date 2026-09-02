@@ -1,0 +1,320 @@
+%!TEX root = ../paper.tex
+%
+% The decidable path fragment.
+%
+% Companion to prototype/path_domain.cpp, which implements everything below and
+% validates it on the paths appearing in Figure \ref{fig:rculist}, Section
+% \ref{sec:eval}, and Appendix \ref{appendix:bst_del}.
+%
+\section{A Decidable Path Fragment}
+\label{sec:pathfrag}
+
+\newcommand{\pvar}{\pi}
+\newcommand{\MayAlias}{\textsf{MayAlias}}
+\newcommand{\defn}{\;\triangleq\;}
+\newcommand{\Fields}{\mathcal{F}}
+
+The type system's framing side conditions are all negated \MayAlias{} queries,
+and \textsc{T-ReIndex} is applied by hand throughout the paper.  Both must become
+algorithms before the system can be checked mechanically.  This section fixes a
+fragment of the path language on which they are, states the algorithms, and
+records what falls outside.
+
+\subsection{A gap in the notation: length indices versus word sharing}
+\label{sec:pathfrag-gap}
+
+The paper writes an abstracted traversal as $(f_1|\ldots|f_n)^{k}$ and describes
+$k$ as ``the number of loop iterations run''.  Read literally, $\rho$ constrains
+only the \emph{length} of the traversal: $(\textit{Left}|\textit{Right})^{k}$
+denotes the set of all words of length $k$ over $\{\textit{Left},
+\textit{Right}\}$, and two types mentioning $(\textit{Left}|\textit{Right})^{k}$
+are related only by agreeing on $k$.
+
+That reading is too weak for the invariants the paper relies on.  Consider the
+BST loop, at the point where the outer traversal has found its node:
+\[
+\textit{pr} : \textsf{rcuItr}\;(l|r)^{k}\;\{l|r \rightharpoonup \textit{cr}\}
+\qquad
+\textit{cr} : \textsf{rcuItr}\;(l|r)^{k}.(l|r)\;\{\}
+\]
+The field map on \textit{pr} asserts that \textit{cr} is \emph{its} child.  Under
+the length reading, \textit{pr} could sit at $l.l$ and \textit{cr} at $r.r.l$ ---
+both consistent with $k = 2$ --- and the field map would not hold.  What the
+proofs actually need is that the two occurrences of $(l|r)^{k}$ denote the
+\emph{same word}, so that \textit{cr}'s path extends \textit{pr}'s.
+
+The same gap shows up in Section \ref{sec:eval}, which describes $T_0$'s
+traversal as ``summarised as $(l|r)^{k}$'' --- summarising \emph{one} traversal,
+i.e.\ one word.  We therefore make the sharing explicit rather than leaving it to
+the reader.
+
+\paragraph{Consequences.}  This is not only a presentation matter.  Under the
+length reading, the field-map conjunct of $\llbracket \textsf{rcuItr}\,\rho\,
+\mathcal{N} \rrbracket$ is not implied by the path conjunct, and the
+\textsc{Unlink} and \textsc{Replace} lemmas' appeals to ``proper linkage'' do not
+go through.  Any mechanization has to pick a reading; it should pick this one.
+
+\subsection{Syntax}
+\label{sec:pathfrag-syntax}
+
+Let $\Fields$ be the finite set of \RCU-typed field names, which in a C program
+comes from the struct declaration and is small.
+
+\[
+\begin{array}{r@{\;}c@{\;}l@{\qquad}l}
+\rho &::=& \epsilon \mid \rho \cdot s & \text{paths} \\
+s    &::=& f                 & \text{one step along } f \in \Fields \\
+     &\mid& D                & \text{one step along some } f \in D \subseteq \Fields \\
+     &\mid& \pvar : D        & \text{the word bound to } \pvar,\ \text{which lies in } D^{*}
+\end{array}
+\]
+
+A path variable $\pvar$ replaces the paper's $(f_1|\ldots|f_n)^{k}$.  Variables
+are scoped at the type environment, not the type: every occurrence of $\pvar$
+anywhere in $\Gamma$ denotes the same word.  For the same reason its alphabet
+$D$ is a property of the \emph{variable} and not of an occurrence, so a
+well-formed environment assigns each $\pvar$ one $D$ throughout; occurrences
+carrying different alphabets denote different variables and must be renamed
+apart.  (This is not pedantry: violating it was the one thing that made our
+property tests fail, and it silently breaks reindexing, which compares segments
+up to their alphabets.)  A \emph{valuation} $\theta$ maps
+each variable to a concrete word in its alphabet, and
+\[
+\llbracket \rho \rrbracket\theta \;\subseteq\; \Fields^{*}
+\qquad
+\llbracket f \rrbracket\theta = \{f\}
+\quad
+\llbracket D \rrbracket\theta = D
+\quad
+\llbracket \pvar \rrbracket\theta = \{\theta(\pvar)\}
+\]
+extended to concatenation pointwise.  Note $\llbracket \rho \rrbracket\theta$ is
+finite: it is a product of at most $|\rho|$ finite sets.  A type environment
+denotes $\exists\theta \ldotp \bigwedge_i \exists p_i \in \llbracket \rho_i
+\rrbracket\theta \ldotp h^{*}(rt,p_i) = s(x_i,\mathit{tid})$ --- one valuation
+shared across the environment, but each variable free to resolve its own
+disjunctive steps.
+
+\subsection{The fragment}
+\label{sec:pathfrag-def}
+
+\begin{definition}[Cursor Normal Form]
+\label{def:cnf}
+A path is in \emph{CNF} when no path variable occurs in it more than once.  A
+type environment is in CNF when every path is, and the variables are drawn from a
+fixed list $\pvar_1 < \cdots < \pvar_v$ mentioned in increasing order by every
+path.
+\end{definition}
+
+$v$ is the number of simultaneously live cursors, which is the loop-nesting depth
+of the traversal: $v = 1$ for the bag, $v = 2$ for the BST delete, whose two
+loops are exactly the ``multiple cursors'' Section \ref{sec:eval} describes.  It
+is bounded statically by the program text.
+
+The restriction earns its keep by ruling out the two shapes that would force
+general word equations: a variable occurring twice ($\pvar \cdot f \cdot \pvar$),
+and misaligned variables ($\pvar \cdot a$ against $b \cdot \pvar'$, which would
+require solving $\pvar \cdot a = b \cdot \pvar'$).  We reject these rather than
+approximate them, so that a programmer can see from the syntax whether their code
+is in scope.
+
+\subsection{MayAlias}
+\label{sec:pathfrag-alias}
+
+\[
+\MayAlias(\rho,\rho') \defn
+  \exists\theta \ldotp \llbracket \rho \rrbracket\theta \cap \llbracket \rho' \rrbracket\theta \neq \emptyset
+\]
+By the corrected \textbf{UNQR} (\S\ref{sec:inv-revised}), distinct concrete paths
+from the root reach distinct nodes, so two references may alias exactly when
+their path languages can meet.
+
+The decision procedure has two stages.
+
+\paragraph{Stage 1 --- consume the maximal identical prefix.}
+While $\rho$ and $\rho'$ agree segment for segment, drop the common segment.
+This is \emph{exact}: aliasing requires the two whole words to be equal, so the
+prefixes must resolve identically, and a shared variable in the prefix therefore
+contributes the same word to both sides.
+
+\paragraph{Stage 2 --- relax and intersect.}
+On the remainders, replace each variable $\pvar : D$ by its regular constraint
+$D^{*}$, build the obvious NFA for each path, and test the product for a
+reachable accepting state.
+
+\begin{lemma}[Soundness]
+\label{lem:alias-sound}
+If the procedure answers \textsf{no}, then $\neg\MayAlias(\rho,\rho')$.
+\end{lemma}
+\begin{proof}[Proof sketch]
+Stage 1 preserves the set of solutions exactly.  Stage 2 discards the constraint
+that two occurrences of the same variable agree, which can only enlarge the
+languages being intersected; so a \emph{no} on the relaxed problem is a \emph{no}
+on the original.
+\end{proof}
+
+Soundness in this direction is what the type system needs: every use of
+\MayAlias{} in \textsc{T-UnlinkH}, \textsc{T-Replace} and \textsc{T-Insert} is
+under a negation, so over-approximating aliasing makes the checker reject safe
+programs but never accept unsafe ones.
+
+The procedure is not complete --- after the prefix diverges, sharing is
+forgotten.  It is exact whenever the shared variables align, which covers every
+path in the paper; \S\ref{sec:pathfrag-eval} lists what was checked.
+
+Stage 1 is linear.  Stage 2 is a product construction over
+$(|\rho|+1)\times(|\rho'|+1)$ states with $|\Fields|$ letters, so the whole
+procedure is $O(|\rho|\cdot|\rho'|\cdot|\Fields|)$.
+
+\subsection{Join}
+\label{sec:pathfrag-join}
+
+Merging two branches computes a segment-wise least upper bound, which is exactly
+\textsc{T-PSub1}/\textsc{T-PSub2} ($\rho.f_1 \prec: \rho.f_1|f_2$): concrete and
+disjunctive steps join by union of their field sets; a variable joins only with
+itself.  When the shapes do not line up the join is undefined and the type system
+falls back to \textsc{T-TSub} ($\textsf{rcuItr}\,\_ \prec: \textsf{undef}$),
+which is sound and merely imprecise.  This is the operation that turns Figure
+\ref{fig:altfield}'s two branches into $\textit{Left}|\textit{Right}$.
+
+\subsection{Reindexing}
+\label{sec:pathfrag-reindex}
+
+\textsc{T-ReIndex} closes a loop's back edge.  Automating it is first-order
+matching: find a single substitution $\sigma$ with $\sigma(\Gamma_{\mathit{entry}})
+= \Gamma_{\mathit{exit}}$.  Restricting $\sigma$ to suffix extension,
+$\sigma(\pvar) = \pvar \cdot w$, covers every loop in the paper and makes
+matching linear --- locate the variable, read off the spliced segments, then
+verify the candidate against the rest of the environment.
+
+The verification step is where the paper's side condition lands.  Section
+\ref{subsection:typwrt} argues reindexing is sound because ``either all are
+reindexed, or none''; requiring one $\sigma$ to validate the whole environment
+is precisely that condition, discharged by construction.
+
+For the bag this yields $\sigma(k) = k.\textit{Next}$, mapping lines 19--20 of
+Figure \ref{fig:rculist} to lines 23--24.  For the BST inner loop it yields
+$\sigma(m) = m.\textit{Left}$ and leaves $k$ untouched --- the two cursors are
+reindexed independently, which is what lets the two unlinks at different depths
+be framed apart.
+
+\subsection{Widening}
+\label{sec:pathfrag-widen}
+
+Reindexing closes a back edge only once a variable exists to extend.  On first
+arrival there is none --- the bag enters its loop with
+$\textit{par} : \epsilon$ and $\textit{cur} : \textit{Next}$ --- so the variable
+must be \emph{introduced}.  This is also what makes path length bounded: it
+grows without limit along a loop, so the domain has no finite height and
+reindexing alone gives no termination argument.
+
+The essential constraint is that \textbf{widening cannot be done path by path.}
+Generalising each path at its own longest common prefix turns the bag into
+\[
+\textit{par} : (\textit{Next})^{k}
+\qquad
+\textit{cur} : \textit{Next}.(\textit{Next})^{k}
+\]
+which denotes the right \emph{language} but asserts that \textit{cur} is
+\textit{par} with a step \emph{prepended}.  The relational structure ---
+\textit{cur} is \textit{par}'s child --- is destroyed, and with it every field
+map that depends on it.  Over a single-field alphabet the two forms happen to
+coincide, so the bag alone would not expose the error; the BST, where
+$(l|r).(l|r)^{k}$ and $(l|r)^{k}.(l|r)$ differ, does.
+
+So a single fresh variable is inserted at one common position across the whole
+environment.  Writing $\Gamma(x)$ for $x$'s path, find the smallest $i$ and a
+single chunk $w$ with
+\[
+\Gamma_{\mathit{exit}}(x) \;=\; \Gamma_{\mathit{entry}}(x)[0,i) \cdot w \cdot \Gamma_{\mathit{entry}}(x)[i,\cdot)
+\qquad\text{for every \emph{moving} } x
+\]
+and replace $w$ by a fresh $\pvar : D$, where $D$ is the union of the alphabets
+of $w$'s segments.  Paths the loop leaves alone --- those with
+$\Gamma_{\mathit{entry}}(x) = \Gamma_{\mathit{exit}}(x)$, such as the outer
+cursors during the BST's inner loop --- pass through untouched.  Cursors that
+advance by different amounts are refused, as outside the fragment.
+
+\begin{lemma}[Widening is an upper bound]
+\label{lem:widen-sound}
+$\theta(\pvar) = \epsilon$ recovers $\Gamma_{\mathit{entry}}$ exactly, and
+$\theta(\pvar)$ ranging over the words of $w$ covers $\Gamma_{\mathit{exit}}$.
+\end{lemma}
+\begin{proof}[Proof sketch]
+Immediate from the displayed equation, since all moving paths share one $w$, so
+a single valuation serves the whole environment simultaneously.
+\end{proof}
+
+This is how one \emph{infers} $(\textit{Next})^{k}$ rather than being handed it.
+The loop analysis is then: apply the body; if the edge closes by equality or by
+reindexing, that is the invariant; otherwise widen and retry, to a fixed bound.
+
+\subsection{What this does and does not settle}
+\label{sec:pathfrag-decid}
+
+It does not make the declarative type system decidable; the concession in the
+authors' response stands, because a declarative derivation may insert
+\textsc{T-Conseq} anywhere.  What it gives is a decidable \emph{algorithmic}
+presentation: with a canonical join at merges, reindexing-by-matching at back
+edges, and \MayAlias{} decided as above, subsumption is applied only at fixed
+points, and checking a critical section becomes a terminating forward dataflow
+over CNF environments.  The fragment is the class of programs that algorithm is
+complete for.
+
+This distinction is the honest answer to Reviewer 2's decidability objection and
+to Reviewer 3's automation question, and it is the property the Clang frontend
+needs: \textsf{Sema} has no symbolic execution to fall back on, so the check must
+be deterministic and terminating on its own.
+
+\subsection{Status}
+\label{sec:pathfrag-eval}
+
+\texttt{prototype/path\_domain.h} implements CNF membership, \MayAlias{}, join,
+substitution, reindexing, widening and the loop fixpoint in dependency-free
+C++17, structured to be lifted into \textsf{Sema}.
+\texttt{prototype/path\_domain\_test.cpp} passes 30/30.
+
+\paragraph{Unit tests} use only paths that appear in the paper.
+\begin{itemize}
+\item \textbf{Bag.}  $\textit{par} : (\textit{Next})^{k}$ and $\textit{cur} :
+  (\textit{Next})^{k}.\textit{Next}$ are correctly found non-aliasing --- the
+  case a plain regular-language intersection gets wrong, and the one Stage 1
+  exists for.
+\item \textbf{BST.}  The two-cursor environment is in CNF; the cursors are found
+  non-aliasing, both with each other and with the outer cursor \textit{cr}.
+\item \textbf{Join.}  $\textit{Left}.\textit{Left} \sqcup
+  \textit{Right}.\textit{Right} = (\textit{Left}|\textit{Right}).(\textit{Left}|\textit{Right})$,
+  reproducing Figure \ref{fig:altfield}'s merge.
+\item \textbf{Invariant inference.}  Starting from the environment on entry to
+  each loop and applying only the body, the analysis \emph{derives} the paper's
+  hand-written invariants.  The bag converges in one widening to exactly
+  $(\textit{Next})^{k}$ and $(\textit{Next})^{k}.\textit{Next}$ --- lines 19--20
+  of Figure \ref{fig:rculist}.  The BST outer loop converges to $(l|r)^{k}$ and
+  $(l|r)^{k}.(l|r)$.  The BST inner loop converges with the outer cursors left
+  frozen, reindexing $m$ alone, and the inferred invariant still separates the
+  two cursors --- the property the two unlinks at different depths depend on.
+\item \textbf{Boundary.}  $\pvar . l . \pvar$ is rejected as outside CNF, and
+  unevenly advancing cursors are refused rather than approximated.
+\end{itemize}
+
+\paragraph{Property tests} check the abstract operations against the concrete
+semantics by enumerating valuations up to a length bound.  Over $2\times10^{5}$
+random path pairs across five seeds:
+\begin{itemize}
+\item \textbf{P1} \MayAlias{} never misses a real alias --- the soundness
+  direction of Lemma \ref{lem:alias-sound}.  Roughly $31\%$ of random pairs do
+  alias, so the test is not vacuous.  Measured imprecision is $4.2\%$ of pairs
+  answered conservatively \textsf{yes}; raising the enumeration bound from $3$
+  to $5$ reclassifies about $6\%$ of those as genuine aliases, so the residue is
+  Stage 2 forgetting sharing.
+\item \textbf{P2} join over-approximates both operands.
+\item \textbf{P3} widening is an upper bound, in both directions of Lemma
+  \ref{lem:widen-sound}.
+\item \textbf{P4} reindexing recovers any suffix-extension substitution.
+\end{itemize}
+
+\paragraph{Outstanding.}  A completeness characterisation for Stage 2: we claim
+only soundness and exactness-when-aligned, and the measured $4.2\%$ is an upper
+bound on what a sharing-aware Stage 2 could recover.  Whether CNF alignment
+makes Stage 2 exact outright is open, and worth settling before the imprecision
+shows up as a false positive in a compiler diagnostic.
