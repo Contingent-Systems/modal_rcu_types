@@ -82,11 +82,12 @@ m\in \mathcal{M}
 m\in \mathcal{M}
 &(\textsf{fresh}\in  O(s(x,tid)) \land x \notin U  \land s(x,tid) \notin dom(F))\\
 &(\forall_{f_i\in dom(\N), x_i\in codom(\N) } \ldotp s(x_i,tid) = h(s(x,tid), f_i) \\
-&\land \textsf{iterator}\,tid \in O(s(x_i,tid)) \land s(x_i,tid) \notin dom(F)) 
+&\land \textsf{iterator}\,tid \in O(s(x_i,tid)) \land s(x_i,tid) \notin dom(F)) \\
+&\land (\forall_{g} \ldotp \textsf{FType}(g)=\textsf{RCU} \land g \notin dom(\N) \implies h(s(x,tid),g) = \textsf{null})
 \end{array}
 \right\}
 \\
-\llbracket  x : \textsf{undef}\rrbracket_{tid} 
+\llbracket  x : \textsf{undef}\rrbracket_{tid}
 &
 \left\{
 \begin{array}{l|l}
@@ -857,8 +858,10 @@ From assumptions in the type rule of \textsc{T-Replace} we assume that
     \label{ahu4f} \\
 \N' = \N''
 \label{ahu5f} \\
+\forall_{f''} \ldotp \textsf{FType}(f'')=\textsf{RCU} \implies f'' \in dom(\N')
+\label{ahu5bf} \\
 \begin{aligned}
-\forall_{x \in \Gamma, \N''', \rho'',f',y} \ldotp (x:\textsf{rcuItr}\,\rho''\,\N'''([f'\rightharpoonup y])) \implies (\neg\mathsf{MayAlias}(\rho'',\{\rho,\rho'\}) \land (y\neq o  ))  
+\forall_{x \in \Gamma, \N''', \rho'',f',y} \ldotp (x:\textsf{rcuItr}\,\rho''\,\N'''([f'\rightharpoonup y])) \implies (\neg\mathsf{MayAlias}(\rho'',\{\rho,\rho'\}) \land (y\neq o  ))
 \label{ahu6f}
   \end{aligned}
 \end{gather}
