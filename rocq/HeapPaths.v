@@ -593,6 +593,47 @@ Proof.
     rewrite Hs. reflexivity.
 Qed.
 
+(** ** Discharging the no-back-edge side conditions
+
+    [UNQR_insert] and [UNQR_unlink] both take a "nothing below the write can
+    reach back above it" hypothesis.  Neither is an extra obligation on the
+    caller: both follow from the tree shape together with the fact that the
+    written node is reachable, which is what the type rules supply.  Stating the
+    theorems that way keeps the composition machine-checked rather than
+    asserted. *)
+
+Corollary UNQR_insert_reachable : forall h root P f o n f4 rho,
+  UNQR_h h root ->
+  PointsOnlyAt h n f4 o ->
+  hstar h root rho = Some P ->
+  h P f = Some (VLoc o) ->
+  (forall sigma, hstar h root sigma <> Some n) ->
+  UNQR_h (upd h P f (VLoc n)) root.
+Proof.
+  intros h root P f o n f4 rho HU Hn Hrho HPf Hfresh.
+  apply (UNQR_insert h root P f o n f4 HU Hn).
+  - (* n <> P: n is unreachable, P is reached by rho *)
+    intros <-. exact (Hfresh rho Hrho).
+  - exact HPf.
+  - exact (UNQR_no_back_edge h root P f o rho HU Hrho HPf).
+  - exact Hfresh.
+Qed.
+
+Corollary UNQR_unlink_reachable : forall h root X f1 z f2 r rho,
+  UNQR_h h root ->
+  hstar h root rho = Some X ->
+  h X f1 = Some (VLoc z) ->
+  h z f2 = Some (VLoc r) ->
+  UNQR_h (upd h X f1 (VLoc r)) root.
+Proof.
+  intros h root X f1 z f2 r rho HU Hrho HXf1 Hzf2.
+  apply (UNQR_unlink h root X f1 z f2 r HU HXf1 Hzf2).
+  apply (UNQR_no_back h root X rho [f1; f2] r HU Hrho).
+  - discriminate.
+  - rewrite hstar_app, Hrho. simpl. rewrite HXf1. simpl. rewrite Hzf2.
+    reflexivity.
+Qed.
+
 (** ** Status
 
     All three heap-mutating rules preserve the tree shape, each discharged
@@ -612,5 +653,7 @@ Print Assumptions hstar_upd_char.
 Print Assumptions UNQR_replace.
 Print Assumptions UNQR_insert.
 Print Assumptions UNQR_unlink.
+Print Assumptions UNQR_insert_reachable.
+Print Assumptions UNQR_unlink_reachable.
 Print Assumptions UNQR_no_back.
 Print Assumptions UNQR_h_upd_unreachable.

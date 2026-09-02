@@ -504,6 +504,14 @@ excluded in \textsc{T-Insert} and \textsc{T-UnlinkH}, but not in
 rewritten one; ruling it out is why the characterisation must record that the
 unchanged path does not traverse the written edge.
 
+Both \textsc{T-Insert} and \textsc{T-UnlinkH} need a side condition saying that
+nothing below the write can reach back above it.  Neither is an extra proof
+obligation: both follow from \textbf{UNQR} itself together with the reachability
+of the written node, which is what the rules supply, and the mechanization
+discharges them (\texttt{UNQR\_insert\_reachable},
+\texttt{UNQR\_unlink\_reachable}) so that the composition is checked rather than
+asserted.
+
 The residue --- the observation map $O$, the free list $F$, the grace-period
 invariants (\textbf{IFL}, \textbf{RINFL}, \textbf{FLR}) and the fresh-node
 invariants (\textbf{FR}, \textbf{WF}, \textbf{FNR}, \textbf{FPI}) --- is

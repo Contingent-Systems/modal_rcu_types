@@ -54,7 +54,9 @@ MAKEIDX = makeindex
 
 # Build the list of symbols for the project. The file nomencl.ist is temporary and
 # the name is unimportant.
-BUILDSYMBOLS = $(MAKEIDX) $(PROJECT).nlo -s nomencl.ist -o $(PROJECT).nls 
+# The paper does not currently load nomencl, so no .nlo is emitted; skip the step
+# rather than failing the build when it is absent.
+BUILDSYMBOLS = [ -f $(PROJECT).nlo ] && $(MAKEIDX) $(PROJECT).nlo -s nomencl.ist -o $(PROJECT).nls || true
 
 # Commmand to build the latex project into PDF (or DVI according to $(TEX).
 BUILDTEX = $(TEX) $(PROJECT).tex

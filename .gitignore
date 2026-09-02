@@ -1,0 +1,38 @@
+# Rocq / Coq build products
+*.vo
+*.vok
+*.vos
+*.glob
+*.aux
+.lia.cache
+.nia.cache
+.csdp.cache
+.coq-native/
+_CoqProject.d
+*.d
+
+# LaTeX intermediates
+# NOTE: *.pdf is deliberately NOT ignored -- cc-by.pdf, orcid.pdf, rcu_plan.pdf
+# and figures/*.pdf are tracked assets.  Delete build PDFs by hand if unwanted.
+*.log
+*.out
+*.toc
+*.bbl
+*.blg
+*.brf
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.nav
+*.snm
+*.vrb
+
+# Prototype build output
+prototype/*.o
+prototype/path_domain
+prototype/path_domain_test
+
+# macOS
+.DS_Store
