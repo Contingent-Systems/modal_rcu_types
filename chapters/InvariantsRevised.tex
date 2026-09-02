@@ -418,6 +418,26 @@ temporal story, which only you have.
 \paragraph{Whether AWRT should be derived rather than assumed.}
 See \S\ref{sec:inv-iris}.
 
+\paragraph{$\N_1 = \N_2$ in \textsc{T-Replace} is weaker than the proof needs.}
+Found while mechanizing the \textsc{T-Replace} case
+(\texttt{rocq/HeapPaths.v}).  Preserving \textbf{UNQR} across the replacement
+requires that the fresh node's subtree \emph{be} the old node's subtree, i.e.\
+$\forall g \ldotp \sigma.h(n,g) = \sigma.h(o,g)$ on \RCU{} fields.  The rule
+supplies $\N_1 = \N_2$, equality of the two \emph{field maps}.  That is not the
+same thing: a field map records only fields that have been read or set, and
+neither $\llbracket \textsf{rcuItr}\,\rho\,\N \rrbracket$ nor $\llbracket
+\textsf{rcuFresh}\,\N \rrbracket$ constrains a field outside $dom(\N)$ --- so
+the two subtrees may differ on an untracked field while $\N_1 = \N_2$ holds.
+
+Section \ref{sec:tslbl} says ``we presume all objects contain all fields'',
+which suggests the intended reading is that $\N$ is total on \RCU{} fields at
+the point of the rule, but nothing in the system enforces it.  Either
+\textsc{T-Replace} needs that as an explicit side condition, or the denotations
+need strengthening so that $\N$ determines the object's full \RCU{} footprint.
+The mechanization takes the semantic property as a hypothesis
+(\texttt{Mirrors}) and proves the case from it, so the choice is yours and
+nothing downstream depends on it.
+
 \subsection{The encoding: raw heap plus $h^{*}$}
 \label{sec:inv-iris}
 
