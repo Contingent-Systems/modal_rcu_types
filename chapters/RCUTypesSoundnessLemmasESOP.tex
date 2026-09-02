@@ -733,35 +733,40 @@ $\sigma'_1$ is determined by operational semantics. The undefined map, free list
 In the rest of the proof, we prove \ref{phu10}, \ref{phu11} and show the composition of $(\sigma'_1, O'_1, U'_1,T'_1,F'_1)$ and  $(\sigma'_2, O'_2, U'_2,T'_2,F'_2)$. To prove \ref{phu10}, we need to show that each of the memory axioms in Section \ref{sec:memaxioms} holds for the state $(\sigma',O'_1,U_1',T_1',F'_1)$.
 
 Let $o_x$ be $\sigma.s(x,tid)$, $o_y$ be $\sigma.s(y,tid)$ and $o_z$ be $\sigma.s(z,tid)$.
-\begin{case}\label{unqr} - \textbf{UNQR} \ref{ahus3} and \ref{ahus4} follow from framing assumption(\ref{ahu4}-\ref{ahu6}), denotations of the precondition(\ref{ahu11}) and \ref{ahu16}.\textbf{UNQR}
-  \begin{gather}\label{ahus3}
-    \rho \neq \rho' \neq \rho'' 
-  \end{gather}
-and   
-  \begin{gather}\label{ahus4}
-    o_x \neq o_y \neq o_z 
-  \end{gather}
-  where $o_x$, $o_y$ and $o_z$ are equal to $\sigma.h^{*}(\sigma.rt,\rho)$, $\sigma.h^{*}(\sigma.rt,\rho,f_1)$ and $\sigma.h^{*}(\sigma.rt,\rho.f_1.f_2)$ respectively and they($o_x,o_y,o_z$ and $\rho,\rho'$) are unique.
+\begin{case}\label{unqr} - \textbf{UNQR}
+Let $o_x$, $o_y$ and $o_z$ be $\sigma.h^{*}(\sigma.rt,\rho)$,
+$\sigma.h^{*}(\sigma.rt,\rho.f_1)$ and $\sigma.h^{*}(\sigma.rt,\rho.f_1.f_2)$
+respectively.
 
-We must prove 
-\begin{gather}\label{phuc1}
-     h'^{*}(\sigma.rt,\rho) \neq h'^{*}(\sigma.rt, \rho.f_1)  \implies \rho \neq \rho.f_1 
-\end{gather}
-to show that uniqueness is preserved.
+\textbf{UNQR} quantifies over \emph{every} location reachable from the root, so
+checking that the three paths in the footprint remain distinct is not sufficient:
+the write $x.f_1 := r$ shortens by one segment every path that passed through the
+rewritten edge, and the obligation is that no such path collides with any other.
+The argument is the general one about a single field update, mechanized as
+\texttt{UNQR\_unlink} (and \texttt{UNQR\_unlink\_reachable}, which discharges its
+side condition from reachability) in \texttt{rocq/HeapPaths.v}, over the same
+$h^{*}$ on a raw heap used here.  It needs only the following, all of which the
+rule and the precondition supply.
 
-We know from operational semantics that root has not changed so
-\[\sigma.rt = \sigma'.rt\]
+\begin{enumerate}
+\item \textbf{UNQR} holds before the write --- \ref{ahu16}.\textbf{UNQR}.
+\item $o_x$ is reachable, at $\rho$ --- denotation of $x:\textsf{rcuItr}\,\rho\,\N$
+  in \ref{ahu11}.
+\item $\sigma.h(o_x,f_1) = o_y$ and $\sigma.h(o_y,f_2) = o_z$ --- \ref{ahu4}
+  ($\N(f_1) = z$ and $\N'(f_2) = r$) with the denotations of $x$ and $z$.
+\end{enumerate}
 
-From denotations (\ref{phu5}) we know that all heap locations reached by following $\rho$ and $\rho.f_1$ are observed as $\textsf{iterator}\, tid$ including the final reached heap locations($\textsf{iterator}\,tid \in O'_1(\sigma'.h^{*}(\sigma.rt,\rho))$ and $\textsf{iterator}\,tid \in O_1'(\sigma'.h^{*}(\sigma.rt,\rho.f_1))$). \ref{phuN} is determined directly by operational semantics.
-
-$\textsf{unlinked}\in O'_1(o_y)$ follows from \ref{ahus1} and \ref{ahus} which makes path $\rho.f_1.f_2$ invalid(from denotation(\ref{phu5}), all heap locations reaching to  $O_1'(o_r)$ from root($\sigma.rt$) are observed as  $\textsf{iterator}\, tid$ so this proves that  $\textsf{unlinked}\in O'_1(o_y)$)  cannot be observed on the path to the $o_r$ which implies that $f_2$ cannot be part of the path and uniqueness of the paths to $o_x$ and $o_r$ is preserved. So we conclude \ref{ahus5} and \ref{ahus6}
-  \begin{gather}\label{ahus5}
-    \rho \neq \rho'
-  \end{gather}
-    \begin{gather}\label{ahus6}
-    o_x \neq o_y \neq o_z 
-  \end{gather}
-from which \ref{phuc1} follows.
+Root is unchanged, $\sigma.rt = \sigma'.rt$, by operational semantics.  Two things
+are worth recording.  First, unlinking needs \emph{fewer} hypotheses than
+replacement or insertion: there is no fresh node, so nothing to mirror and no
+fields-are-null condition.  In particular \ref{ahu5}
+($\forall_{f\in dom(\N')}\ldotp f\neq f_2 \implies \N'(f) = \textsf{null}$) plays
+no part here --- it bounds how much of the structure becomes unreachable, which is
+\textbf{ULKR}'s business, not \textbf{UNQR}'s.  Second, the case that has to be
+excluded is a collision between a path left \emph{unchanged} by the write and one
+that was shortened by it; ruling it out is why the mechanized characterisation
+records that an unchanged path does not traverse the rewritten edge, and it is the
+step the path-distinctness argument alone does not reach.
 \end{case}
 \begin{case} - \textbf{OW} By \ref{ahu16}.\textbf{OW}, \ref{ahus}, \ref{ahus1}.
 \end{case}
@@ -949,36 +954,47 @@ Let $T'_1$ be $T_1$, $F'_1$ be $F_1$ and $\sigma'_1$ be determined by operationa
 
 In the rest of the proof, we prove \ref{phu10f}, \ref{phu11f} and show the composition of $(\sigma'_1, O'_1, U'_1,T'_1,F'_1)$ and  $(\sigma'_2, O'_2, U'_2,T'_2,F'_2)$. To prove \ref{phu10f}, we need to show that each of the memory axioms in Section \ref{sec:memaxioms} holds for the state $(\sigma',O'_1,U_1',T_1',F'_1)$.
 
-\begin{case}\label{unqrf} - \textbf{UNQR} 
-Let $o_p$ be $\sigma.s(p,tid)$, $o_r$ be $\sigma.s(r,tid)$ and $o_n$ be $\sigma.s(n,tid)$. 
-  \ref{ahus3f} and \ref{ahus4f} follow from framing assumption(\ref{ahu3f}-\ref{ahu6f}), denotations of the precondition(\ref{ahu11f}), \ref{ahu16}.\textbf{FR} and \ref{ahu16f}.\textbf{UNQR}
-  \begin{gather}\label{ahusbf}
-    \rho \neq \rho.f \neq \forall_{\N'([f_i \rightharpoonup x_i])}\ldotp \rho.f.f_i
-  \end{gather}
-and   
-  \begin{gather}\label{ahus4f}
-    o_p \neq o_r \neq o_n \neq o_i \text{  where  } o_i=h(o_r,f_i)
-  \end{gather}
-where $o_p$,  $o_r$ are  $\sigma.h^{*}(\sigma.rt,\rho)$, $\sigma.h^{*}(\sigma.rt,\rho.f)$ respectively and they(heap locations in \ref{ahus4f} and paths in \ref{ahusbf}) are unique(From \ref{ahu16f}.\textbf{FR}, we assume that there exists no field alias/path alias to heap location freshly allocated $o_n$). 
+\begin{case}\label{unqrf} - \textbf{UNQR}
+Let $o_p$ be $\sigma.s(p,tid)$, $o_r$ be $\sigma.s(r,tid)$ and $o_n$ be
+$\sigma.s(n,tid)$, so that $o_p$ and $o_r$ are $\sigma.h^{*}(\sigma.rt,\rho)$ and
+$\sigma.h^{*}(\sigma.rt,\rho.f)$.
 
-We must prove 
-\begin{gather}\label{phuc1f}
-    \rho \neq \rho.f \neq \rho.f.f_i \iff \sigma'.h^{*}(\sigma.rt,\rho) \neq \sigma'.h^{*}(\sigma.rt, \rho.f) )  \neq \sigma'.h^{*}(\sigma.rt, \rho.f.f_i) )
-\end{gather}
+\textbf{UNQR} quantifies over \emph{every} location reachable from the root, so it
+is not enough to check that the paths in the footprint stay distinct: the write
+$p.f := n$ can affect any path that passes through the rewritten edge.  The
+argument is the general one about a single field update, mechanized as
+\texttt{UNQR\_replace} in \texttt{rocq/HeapPaths.v} over the same $h^{*}$ on a raw
+heap used here.  Its hypotheses are discharged as follows.
 
-We know from operational semantics that root has not changed so
-\[\sigma.rt = \sigma'.rt\]
+\begin{enumerate}
+\item \textbf{UNQR} holds before the write --- \ref{ahu16f}.\textbf{UNQR}.
+\item $\sigma.h(o_p,f) = o_r$ --- \ref{ahu4f} ($\N(f) = r$) with the denotation of
+  $p:\textsf{rcuItr}\,\rho\,\N$ in \ref{ahu11f}.
+\item $o_n$ agrees with $o_r$ on every \textsf{RCU} field.  This is where
+  \ref{ahu5f} ($\N' = \N''$) alone is too weak, since a field map constrains only
+  $dom(\N)$.  With the side condition \ref{ahu5bf}, $dom(\N')$ exhausts the
+  \textsf{RCU} fields, so $\N' = \N''$ together with the denotations of
+  $r:\textsf{rcuItr}\,\rho'\,\N'$ and $n:\textsf{rcuFresh}\,\N''$ pins
+  $\sigma.h(o_r,f_i)$ and $\sigma.h(o_n,f_i)$ to the same location at every such
+  $f_i$, which is the mirroring the mechanized proof requires.
+\item $o_n$ is unreachable from the root, and in particular $o_n \neq o_p$ ---
+  \ref{ahu16f}.\textbf{FR}, whose corrected form says outright that no heap edge
+  targets the freshly allocated $o_n$; a location that nothing points to and that
+  is not the root cannot be reached.  This step is mechanized as
+  \texttt{no\_incoming\_unreachable}.
+\item $o_p$ is not reachable from $o_r$.  This is the tree shape rather than a new
+  assumption: $o_p$ is reached at $\rho$ and $o_r$ at $\rho.f$, so a path from
+  $o_r$ back to $o_p$ would give $o_p$ two distinct paths from the root and
+  contradict \ref{ahu16f}.\textbf{UNQR}.  Mechanized as
+  \texttt{UNQR\_no\_back\_edge}.
+\end{enumerate}
 
-From denotations (\ref{phu5f}) we know that all heap locations reached by following $\rho$ and $\rho.f$ are observed as $\textsf{iteartor}\,tid$ including the final reached heap locations($\textsf{iterator}\,tid \in O'_1(\sigma'.h^{*}(\sigma.rt,\rho))$, $\textsf{iterator}\,tid \in O'_1(\sigma'.h^{*}(\sigma.rt,\rho.f))$ and $\textsf{iterator}\,tid \in O'_1(\sigma'.h^{*}(\sigma.rt,\rho.f.f_i))$). The preservation of uniqueness follows from \ref{ahus1f}, \ref{ahus2f}, \ref{ahusf} and \ref{ahu16f}.\textbf{FR}.
-
-from which we conclude \ref{ahus5f} and \ref{ahus6f}
-  \begin{gather}\label{ahus5f}
-    \rho \neq \rho.f \neq \rho.f.f_i
-  \end{gather}
-    \begin{gather}\label{ahus6f}
-    o_p \neq o_n \neq o_r 
-  \end{gather}
-from which \ref{phuc1f} follows.
+Root is unchanged, $\sigma.rt = \sigma'.rt$, by operational semantics.  Replacement
+is the mildest of the three mutations for \textbf{UNQR}: because $o_n$ mirrors
+$o_r$, paths through the rewritten edge are preserved in length with $o_n$
+substituted for $o_r$, so no unchanged path can collide with a rewritten one and
+the case analysis closes without the exclusion that \textsc{Insert} and
+\textsc{UnlinkH} need.
 \end{case}
 \begin{case} - \textbf{OW} By \ref{ahu16f}.\textbf{OW}, \ref{ahusf}, \ref{ahus1f} and \ref{ahus2f}.
 \end{case}
@@ -1164,7 +1180,43 @@ Let $T'_1$ be $T_1$, $F'_1$ be $F_1$ and $\sigma'_1$ be determined by operationa
 
 In the rest of the proof, we prove \ref{phu10flk}, \ref{phu11flk} and show the composition of $(\sigma'_1, O'_1, U'_1,T'_1,F'_1)$ and  $(\sigma'_2, O'_2, U'_2,T'_2,F'_2)$. To prove \ref{phu10flk}, we need to show that each of the memory axioms in Section \ref{sec:memaxioms} holds for the state $(\sigma',O'_1,U_1',T_1',F'_1)$.
 
-Proofs for \textbf{OW}, \textbf{RWOW}, \textbf{AWRT}, \textbf{IFL}, \textbf{WULK}, \textbf{FLR}, \textbf{FPI}, \textbf{WF}, \textbf{FR}, \textbf{HD}, \textbf{WNR}, \textbf{RINFL} and \textbf{ULKR}. The proof of \textbf{UNQR} is similar to the ones  we did for Lemma  \ref{lemma:linkf} and Lemma \ref{lemma:unlink} with a simpler fact to prove: we assume framing conditions \ref{ahu3flk}-\ref{ahu6flk} together with the \ref{ahu16flk}.\textbf{UNQR} and \ref{ahu16flk}.\textbf{FR} which makes \ref{phu10flk}\textbf{UNQR} trivial.
+Proofs for \textbf{OW}, \textbf{RWOW}, \textbf{AWRT}, \textbf{IFL}, \textbf{WULK}, \textbf{FLR}, \textbf{FPI}, \textbf{WF}, \textbf{FR}, \textbf{HD}, \textbf{WNR}, \textbf{RINFL} and \textbf{ULKR} follow the corresponding cases of Lemma \ref{lemma:linkf} and Lemma \ref{lemma:unlink}.
+
+\begin{case} - \textbf{UNQR}
+Let $o_p$, $o_r$ and $o_n$ be $\sigma.s(p,tid)$, $\sigma.s(r,tid)$ and
+$\sigma.s(n,tid)$.  This case is \emph{not} simpler than the corresponding cases
+of Lemma \ref{lemma:linkf} and Lemma \ref{lemma:unlink}, and it does not follow
+from the framing conditions and \textbf{FR} alone.  Insertion is the one mutation
+that \emph{lengthens} paths: what was reached by $\rho.f.\tau$ before the write is
+reached by $\rho.f.f_4.\tau$ after it, so an unchanged path and a lengthened one
+are different objects, and the obligation is to rule out a collision between them.
+The argument is mechanized as \texttt{UNQR\_insert} (and
+\texttt{UNQR\_insert\_reachable}, which discharges its side condition from
+reachability) in \texttt{rocq/HeapPaths.v}.  Its hypotheses are discharged as
+follows.
+
+\begin{enumerate}
+\item \textbf{UNQR} holds before the write --- \ref{ahu16flk}.\textbf{UNQR}.
+\item $o_p$ is reachable at $\rho$ and $\sigma.h(o_p,f) = o_r$ --- \ref{ahu4flk}
+  ($\rho.f = \rho_1$ and $\N(f) = r$) with the denotation of
+  $p:\textsf{rcuItr}\,\rho\,\N$ in \ref{ahu11flk}.
+\item $o_n$'s only outgoing \textsf{RCU} edge is $f_4$, and it points at $o_r$.
+  The rule gives $\N(f) = \N_1(f_4)$ and, by \ref{ahu5flk}, that every
+  \emph{tracked} field of $\N_1$ other than $f_4$ is \textsf{null}.  On its own
+  that leaves a field outside $dom(\N_1)$ free to point anywhere, which would give
+  the inserted node a second child; it is closed by the clause of
+  $\llbracket \textsf{rcuFresh}\,\N \rrbracket$ requiring every \textsf{RCU} field
+  outside $dom(\N)$ to be \textsf{null}, established by Lemma \ref{lemma:alloc}
+  and preserved by Lemma \ref{lemma:writef}.
+\item $o_n$ is unreachable from the root, and in particular $o_n \neq o_p$ ---
+  \ref{ahu16flk}.\textbf{FR}, via \texttt{no\_incoming\_unreachable} as in
+  Lemma \ref{lemma:linkf}.
+\item $o_p$ is not reachable from $o_r$ --- the tree shape, as in
+  Lemma \ref{lemma:linkf}, mechanized as \texttt{UNQR\_no\_back\_edge}.
+\end{enumerate}
+
+Root is unchanged, $\sigma.rt = \sigma'.rt$, by operational semantics.
+\end{case}
 
 To prove \ref{phu6flk}, we need to show  interference relation
 \[(\sigma, O_2, U_2, T_2,F_2) \mathcal{R} (\sigma', O'_2, U'_2, T'_2,F'_2)  \]
