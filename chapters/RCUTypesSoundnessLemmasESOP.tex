@@ -361,6 +361,15 @@ This follows from the fact that none of the possible $\alpha$s modifies the glob
 \end{proof}
 \subsection{Complete Memory Axioms}
 \label{sec:memaxioms}
+
+\emph{These figures are superseded by Appendix \ref{sec:inv-revised}, which
+states each invariant in corrected form and records what changed and why.  Five
+of the versions below --- \textbf{UNQR}, \textbf{RITR}, \textbf{FR},
+\textbf{FPI} and \textbf{ULKR} --- are defective in ways that are machine
+checked: vacuous, unsatisfiable, or too weak to support the uses the proofs make
+of them.  They are retained here as the published statements; where a proof case
+below appeals to an invariant by name, it is the corrected version of Appendix
+\ref{sec:inv-revised} that is meant.}
 \begin{enumerate}
 \item{Ownership} invariant in Figure \ref{fig:ownership} invariant asserts that none of the heap nodes can be observed as undefined by any of those threads.
 \begin{figure}[!htb]

@@ -7,10 +7,10 @@
 %   (b) the Clang frontend type checker.
 %
 % This file supersedes the invariant figures in Section \ref{sec:memaxioms} of
-% chapters/RCUTypesSoundnessLemmasESOP.tex. It is NOT yet folded into that
-% appendix: several changes below alter the meaning of an invariant and
-% therefore invalidate proof cases that cite it by name. See Section
-% \ref{sec:inv-impact} for which ones.
+% chapters/RCUTypesSoundnessLemmasESOP.tex, and is now part of the paper: it is
+% the first appendix section, ahead of the soundness lemmas, whose proof cases
+% cite the revised invariants. Section \ref{sec:inv-impact} records which cases
+% each change touched and the state of each.
 %
 \section{\textsf{WellFormed}, Revised}
 \label{sec:inv-revised}
@@ -433,15 +433,33 @@ The semantic changes above invalidate specific cases in Section
   site rather than assuming.
 \end{enumerate}
 
-\paragraph{Machine-checked status.}  Of the claims above, five are mechanized in
+\paragraph{Machine-checked status.}  Five of the defects above are mechanized in
 \texttt{rocq/WellFormed.v}: \texttt{UNQR\_orig\_vacuous} and
 \texttt{UNQR\_orig\_admits\_non\_trees};
 \texttt{RITR\_orig\_contradicts\_fresh};
 \texttt{FR\_orig\_admits\_writer\_local\_alias};
 \texttt{FPI\_orig\_contradicts\_FNR}; and \texttt{ULKR\_does\_not\_chain}
-together with its repair \texttt{ULKR\_closed\_reaches}.  The remaining
-\textsc{major} and \textsc{minor} items are restatements whose defects are
-syntactic (capture, scope, unused binders) and are visible without proof.
+together with its repair \texttt{ULKR\_closed\_reaches}.  A sixth,
+\texttt{FPI\_not\_preserved\_by\_replace}, is a defect in \textsc{T-Replace} and
+\textsc{T-UnlinkH} rather than in an invariant statement; both rules now carry
+the repairing premise.  The remaining \textsc{major} and \textsc{minor} items
+are restatements whose defects are syntactic (capture, scope, unused binders)
+and are visible without proof.
+
+Two of the six were found by attempting a proof rather than by reading ---
+\textbf{ULKR}'s failure to chain, and \textbf{FPI}'s failure to survive
+unlinking --- and both are cases the report calls trivial.
+
+The corrected invariants are also satisfiable
+(\texttt{WellFormed\_satisfiable}), and the positive results the proof cases now
+rest on are machine checked in \texttt{rocq/HeapPaths.v}: tree-shape
+preservation for all three heap mutations (\texttt{UNQR\_replace},
+\texttt{UNQR\_insert}, \texttt{UNQR\_unlink}), heap-domain closure for every
+action that touches the heap (\texttt{HD\_h\_upd}, \texttt{HD\_h\_alloc},
+\texttt{HD\_h\_free}), and the two chaining results
+(\texttt{ULKR\_closed\_reaches}, \texttt{FLR\_chains}) that together keep a node
+awaiting reclamation unreachable from the root.  The whole development is
+axiom-free.
 
 \subsection{Open questions}
 \label{sec:inv-open}
