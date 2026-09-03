@@ -64,11 +64,25 @@ Proof. reflexivity. Qed.
     observation is recorded at [o], and nothing else changes.  Together they are
     what lets an action lemma reason about the post-state's observations. *)
 
+(** Destructing the map lookup directly does not work here: the occurrence the
+    rewrite leaves in the goal elaborates at the camera level and is not the
+    term [destruct] abstracts.  Stating the case analysis over a bound variable
+    sidesteps it, and unification bridges the two. *)
+Lemma option_op_mem (x : gset obs) (my : option (gset obs)) (ob : obs) :
+  ob ∈ x -> match Some x ⋅ my with Some s => ob ∈ s | None => False end.
+Proof. intros Hin. destruct my as [y|]; simpl; rewrite ?gset_op; set_solver. Qed.
+
+Lemma option_op_mem_r (x : gset obs) (my : option (gset obs)) (ob : obs) :
+  match my with Some s => ob ∈ s | None => False end ->
+  match Some x ⋅ my with Some s => ob ∈ s | None => False end.
+Proof. destruct my as [y|]; simpl; [rewrite ?gset_op; set_solver | done]. Qed.
+
 Lemma to_LState_obs_added m O U T F o ob :
   obsv (to_LState m ({[o := {[ob]}]} ⋅ O) U T F) o ob.
 Proof.
-  simpl. rewrite lookup_op lookup_singleton.
-  destruct (O !! o) as [s|]; set_solver.
+  unfold to_LState; simpl.
+  rewrite lookup_op lookup_singleton_eq.
+  apply option_op_mem. set_solver.
 Qed.
 
 Lemma to_LState_obs_kept m O U T F o ob x :
@@ -87,8 +101,7 @@ Lemma to_LState_obs_mono m O U T F o ob x obx :
   obsv (to_LState m ({[o := {[ob]}]} ⋅ O) U T F) x obx.
 Proof.
   simpl. destruct (decide (x = o)) as [->|Hne].
-  - rewrite lookup_op lookup_singleton.
-    destruct (O !! o) as [s|]; [| done]. set_solver.
+  - rewrite lookup_op lookup_singleton_eq. apply option_op_mem_r.
   - rewrite lookup_op lookup_singleton_ne //. by rewrite left_id.
 Qed.
 
@@ -142,7 +155,7 @@ Section actions.
   Proof.
     intros s HU Hx Hz Hstkx Hstkz Hstkw Hf1 Hf2.
     rewrite to_LState_write_hp to_LState_write_rt.
-    exact (unlink_preserves_UNQR FType s t xx xz xw f1 f2 rho Nx Nz ox oz ow
+    exact (unlink_preserves_UNQR s t xx xz xw f1 f2 rho Nx Nz ox oz ow
              HU Hx Hz Hstkx Hstkz Hstkw Hf1 Hf2).
   Qed.
 
