@@ -200,6 +200,133 @@ Section Denotations.
     - exfalso. exact (Hdom g (Hall g) Hng).
   Qed.
 
+
+  (** ** Type environments
+
+      The environment denotation is the *intersection* of the individual
+      variables' denotations, not a separating conjunction.  That is faithful to
+      the figure, and it is not an incidental choice: it is what allows two
+      variables to denote overlapping structure, which is how a rcuFresh
+      reference can come to point at the node T-Replace unlinks.  The
+      counterexample is [FPI_not_preserved_by_replace] in WellFormed.v; here the
+      definition simply records that nothing in the environment's shape rules it
+      out. *)
+
+  Inductive Ty :=
+  | TItr   (rho : list FName) (N : FieldMap)
+  | TFresh (N : FieldMap)
+  | TUnlinked
+  | TFreeable
+  | TUndef
+  | TRoot.
+
+  Definition D_ty (s : LState) (t : TID) (x : Var) (T : Ty) : Prop :=
+    match T with
+    | TItr rho N => D_rcuItr s t x rho N
+    | TFresh N   => D_rcuFresh s t x N
+    | TUnlinked  => D_unlinked s t x
+    | TFreeable  => D_freeable s t x
+    | TUndef     => D_undef s t x
+    | TRoot      => D_rcuRoot s t x
+    end.
+
+  Definition Env := list (Var * Ty).
+
+  Definition D_env (s : LState) (t : TID) (G : Env) : Prop :=
+    forall x T, In (x, T) G -> D_ty s t x T.
+
+  (** ** From FR to the two unreachability facts UNQR_replace needs *)
+
+  (** FR's first clause: nothing in the heap points at a fresh node. *)
+  Lemma fresh_no_incoming s t x N n :
+    FR s -> D_rcuFresh s t x N -> stk (ms s) x t = Some n ->
+    forall o f, hp (ms s) o f <> Some (VLoc n).
+  Proof.
+    intros HFR [n' (Hstk & Hfresh & _)] Hstkn o f Hedge.
+    rewrite Hstk in Hstkn. injection Hstkn as <-.
+    destruct (HFR t x n' Hstk Hfresh) as [Hno _].
+    exact (Hno o f Hedge).
+  Qed.
+
+  (** FR's second clause: no other variable aliases a fresh node.  The root is
+      held by a rcuRoot reference, so a fresh node is never the root. *)
+  Lemma fresh_not_root s t xr xn N n :
+    FR s -> D_rcuRoot s t xr -> D_rcuFresh s t xn N ->
+    stk (ms s) xn t = Some n -> xr <> xn -> rt (ms s) <> n.
+  Proof.
+    intros HFR [Hrstk _] [n' (Hstk & Hfresh & _)] Hstkn Hne Heq.
+    rewrite Hstk in Hstkn. injection Hstkn as <-.
+    destruct (HFR t xn n' Hstk Hfresh) as [_ Halias].
+    apply (Halias xr t).
+    - intros Hpair. apply Hne. congruence.
+    - rewrite Hrstk, Heq. reflexivity.
+  Qed.
+
+  (** A fresh node is unreachable from the root. *)
+  Lemma fresh_unreachable s t xr xn N n :
+    FR s -> D_rcuRoot s t xr -> D_rcuFresh s t xn N ->
+    stk (ms s) xn t = Some n -> xr <> xn ->
+    forall sigma, hstar (hp (ms s)) (rt (ms s)) sigma <> Some n.
+  Proof.
+    intros HFR Hroot Hfresh Hstkn Hne.
+    apply no_incoming_unreachable.
+    - exact (fresh_no_incoming s t xn N n HFR Hfresh Hstkn).
+    - exact (fresh_not_root s t xr xn N n HFR Hroot Hfresh Hstkn Hne).
+  Qed.
+
+  (** ** An atomic-action lemma
+
+      T-Replace preserves the tree shape.  This is the UNQR case of the Replace
+      lemma of the appendix, assembled from the pieces rather than argued: the
+      denotations supply the mirroring and the two unreachability facts, and
+      [UNQR_replace] does the path reasoning.
+
+      Every hypothesis here is either an invariant of the pre-state or a premise
+      of the rule.  Nothing is assumed about the heap directly. *)
+  Theorem replace_preserves_UNQR s t xr xp xo xn f rho rho1 N Np op oo on :
+    (forall g, FType g = RCUField) ->
+    (* pre-state invariants *)
+    UNQR_h (hp (ms s)) (rt (ms s)) ->
+    FR s ->
+    (* the environment *)
+    D_rcuRoot  s t xr ->
+    D_rcuItr   s t xp rho  Np ->
+    D_rcuItr   s t xo rho1 N ->
+    D_rcuFresh s t xn N ->
+    stk (ms s) xp t = Some op ->
+    stk (ms s) xo t = Some oo ->
+    stk (ms s) xn t = Some on ->
+    xr <> xn ->
+    (* rule premises: p.f is o, and N covers every RCU field *)
+    Np f = Some (FVar xo) ->
+    (forall g, FType g = RCUField -> N g <> None) ->
+    UNQR_h (upd (hp (ms s)) op f (VLoc on)) (rt (ms s)).
+  Proof.
+    intros Hall HU HFR Hroot Hp Ho Hn Hstkp Hstko Hstkn Hne Hpf Hdom.
+    (* the written edge *)
+    assert (Hedge : hp (ms s) op f = Some (VLoc oo)).
+    { destruct Hp as [op' (Hstkp' & _ & _ & Hfields & _)].
+      rewrite Hstkp in Hstkp'. injection Hstkp' as <-.
+      destruct (Hfields f (FVar xo) Hpf) as [oy (Hy & He & _ & _)].
+      rewrite Hstko in Hy. injection Hy as <-. exact He. }
+    (* the fresh node is unreachable, hence distinct from p *)
+    assert (Hfresh : forall sigma,
+              hstar (hp (ms s)) (rt (ms s)) sigma <> Some on)
+      by exact (fresh_unreachable s t xr xn N on HFR Hroot Hn Hstkn Hne).
+    assert (Hnp : on <> op).
+    { intros ->. apply (Hfresh rho).
+      exact (itr_reaches s t xp rho Np op Hp Hstkp). }
+    apply (UNQR_replace (hp (ms s)) (rt (ms s)) op f oo on HU).
+    - exact (replace_denot_Mirrors s t xn xo rho1 N on oo
+                                   Hall Hn Ho Hstkn Hstko Hdom).
+    - exact Hnp.
+    - exact Hedge.
+    - (* no path from o back to p: the tree shape *)
+      exact (UNQR_no_back_edge (hp (ms s)) (rt (ms s)) op f oo rho HU
+               (itr_reaches s t xp rho Np op Hp Hstkp) Hedge).
+    - exact Hfresh.
+  Qed.
+
 End Denotations.
 
 (** ** Status
@@ -223,3 +350,5 @@ End Denotations.
 Print Assumptions itr_not_unlinked.
 Print Assumptions fresh_denot_PointsOnlyAt.
 Print Assumptions replace_denot_Mirrors.
+Print Assumptions fresh_unreachable.
+Print Assumptions replace_preserves_UNQR.
