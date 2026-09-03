@@ -19,17 +19,20 @@
 #                 three heap-mutation rules.
 #   IrisGhost.v   the observation map and free list as Iris ghost state, and
 #                 the invariant tying them to the pure layer.
+#   Denotations.v the type denotations, and the proofs that they supply the
+#                 hypotheses HeapPaths takes for T-Replace and T-Insert.
 
 ROCQ      ?= rocq
 ROCQFLAGS := -R . RCU
 
-VFILES  := WellFormed.v HeapPaths.v IrisGhost.v
+VFILES  := WellFormed.v HeapPaths.v IrisGhost.v Denotations.v
 VOFILES := $(VFILES:.v=.vo)
 
 all: $(VOFILES)
 
 HeapPaths.vo: WellFormed.vo
 IrisGhost.vo: WellFormed.vo
+Denotations.vo: WellFormed.vo HeapPaths.vo
 
 %.vo: %.v
 	$(ROCQ) compile $(ROCQFLAGS) $<
