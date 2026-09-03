@@ -24,10 +24,12 @@
         [inv N (exists s, phys * ghost * |-WellFormed s-|)].
 
     What is *not* here, and it is the bulk of the remaining work: the
-    denotations of the types, the atomic-action lemmas as Hoare triples, and the
-    update lemma for growing an observation set that already exists (see the
-    LIMITATION note on [obs_alloc_at]).  This file is the substrate those will
-    be stated over, not a proof of any of them.
+    denotations of the types and the atomic-action lemmas as Hoare triples.
+    This file is the substrate those will be stated over, not a proof of any of
+    them.  The ghost state itself is complete for their purposes: observations
+    and free-list entries can be introduced ([obs_alloc_at], [fl_alloc_at]) and
+    grown ([obs_add]), and ownership can be read back as a fact about the
+    authority ([obs_frag_subset], [observes_mem]).
 
     What it does establish is that the substrate is sound and usable: the
     cameras are well formed, the invariant is allocatable, ownership of a
@@ -207,16 +209,7 @@ Section ghost.
   (** Recording the first observation on a location, and the first free-list
       entry for one.  These are the fresh-key updates: [o] is not yet in the
       map, so [alloc_singleton_local_update] applies and the fragment falls out
-      of [auth_update_alloc].
-
-      LIMITATION: growing an *existing* entry -- adding a second observation to
-      a location that already has one -- is not proved here.  In [gsetUR] the
-      operation is union, so it should be an instance of the same pattern with
-      [op_local_update_discrete], but the fragment side needs the composition
-      [z . eps] rather than [z] and I did not get the unification to go
-      through.  Every action that changes an observation rather than
-      introducing one will need it, so it is the first thing the next milestone
-      has to settle. *)
+      of [auth_update_alloc]. *)
   Lemma obs_alloc_at γ O o ob :
     O !! o = None ->
     obs_auth γ O ==∗ obs_auth γ (<[o := {[ob]}]> O) ∗ observes γ o ob.
@@ -226,6 +219,47 @@ Section ghost.
            with "Ha") as "[Ha Hf]".
     { by apply auth_update_alloc, alloc_singleton_local_update. }
     iModIntro. iFrame.
+  Qed.
+
+  (** Adding an observation to a location that already has some.  This is the
+      update every action needs that *changes* an observation rather than
+      introducing one -- unlinking, synchronising, linking.
+
+      The route matters.  Going through [auth_update_alloc] from the empty
+      fragment forces a validity obligation on the whole composed [gmap], which
+      is awkward here: the goal's map lookup elaborates at the camera level and
+      does not match the one [destruct] abstracts, so the usual pointwise
+      argument will not go through.  Going through [auth_update] with a
+      fragment the caller already holds avoids it entirely --
+      [singleton_local_update] reduces the obligation to a *gset* local update,
+      where validity is trivially [True].  That is also the better interface:
+      the type denotations hold fragments, so a caller adding an observation to
+      a location has one to hand. *)
+  Lemma obs_add γ O o s s0 ob :
+    O !! o = Some s ->
+    obs_auth γ O -∗ obs_frag γ o s0 ==∗
+      obs_auth γ (<[o := {[ob]} ∪ s]> O) ∗ obs_frag γ o ({[ob]} ∪ s0).
+  Proof.
+    iIntros (Hlk) "Ha Hf".
+    iMod (own_update_2 _ _ _
+            (● (<[o := {[ob]} ∪ s]> O) ⋅ ◯ {[o := {[ob]} ∪ s0]})
+           with "Ha Hf") as "[Ha Hf]".
+    { apply auth_update. rewrite -!gset_op.
+      apply singleton_local_update with (x := s); [exact Hlk |].
+      apply (op_local_update _ _ {[ob]}). done. }
+    iModIntro. iFrame.
+  Qed.
+
+  (** The single-observation form: having added [ob], the caller can hand out
+      the [observes] witness for it, since [{[ob]}] is included in the fragment
+      it now holds. *)
+  Lemma obs_frag_weaken γ o s0 ob :
+    ob ∈ s0 -> obs_frag γ o s0 -∗ observes γ o ob.
+  Proof.
+    iIntros (Hin) "H". unfold observes, obs_frag.
+    iApply (own_mono with "H").
+    apply auth_frag_mono, singleton_included_mono.
+    apply gset_included. set_solver.
   Qed.
 
   Lemma fl_alloc_at γ F o s :
@@ -339,5 +373,7 @@ Print Assumptions obs_frag_subset.
 Print Assumptions observes_mem.
 Print Assumptions fl_frag_subset.
 Print Assumptions obs_alloc_at.
+Print Assumptions obs_add.
+Print Assumptions obs_frag_weaken.
 Print Assumptions fl_alloc_at.
 Print Assumptions initial_ghost_obsv.
