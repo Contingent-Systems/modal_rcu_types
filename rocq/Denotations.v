@@ -327,6 +327,71 @@ Section Denotations.
     - exact Hfresh.
   Qed.
 
+
+  (** T-UnlinkH preserves the tree shape.  Notably shorter than Replace: there
+      is no fresh node, so nothing to mirror and no unreachability side
+      condition -- the rule's fields-are-null premise plays no part here either,
+      since it bounds how much becomes unreachable, which is ULKR's business. *)
+  Theorem unlink_preserves_UNQR s t xx xz xw f1 f2 rho Nx Nz ox oz ow :
+    UNQR_h (hp (ms s)) (rt (ms s)) ->
+    D_rcuItr s t xx rho Nx ->
+    D_rcuItr s t xz (rho ++ [f1]) Nz ->
+    stk (ms s) xx t = Some ox ->
+    stk (ms s) xz t = Some oz ->
+    stk (ms s) xw t = Some ow ->
+    Nx f1 = Some (FVar xz) ->
+    Nz f2 = Some (FVar xw) ->
+    UNQR_h (upd (hp (ms s)) ox f1 (VLoc ow)) (rt (ms s)).
+  Proof.
+    intros HU Hx Hz Hstkx Hstkz Hstkw Hf1 Hf2.
+    assert (He1 : hp (ms s) ox f1 = Some (VLoc oz)).
+    { destruct Hx as [ox' (Hstkx' & _ & _ & Hfields & _)].
+      rewrite Hstkx in Hstkx'. injection Hstkx' as <-.
+      destruct (Hfields f1 (FVar xz) Hf1) as [oy (Hy & He & _ & _)].
+      rewrite Hstkz in Hy. injection Hy as <-. exact He. }
+    assert (He2 : hp (ms s) oz f2 = Some (VLoc ow)).
+    { destruct Hz as [oz' (Hstkz' & _ & _ & Hfields & _)].
+      rewrite Hstkz in Hstkz'. injection Hstkz' as <-.
+      destruct (Hfields f2 (FVar xw) Hf2) as [oy (Hy & He & _ & _)].
+      rewrite Hstkw in Hy. injection Hy as <-. exact He. }
+    exact (UNQR_unlink_reachable (hp (ms s)) (rt (ms s)) ox f1 oz f2 ow rho
+             HU (itr_reaches s t xx rho Nx ox Hx Hstkx) He1 He2).
+  Qed.
+
+  (** T-Insert preserves the tree shape.  This is the case that needs
+      [PointsOnlyAt], and so the case that needs the clause added to the
+      rcuFresh denotation: without it the inserted node could acquire a second
+      child through an untracked field. *)
+  Theorem insert_preserves_UNQR s t xr xp xo xn f f4 rho N1 Np op oo on :
+    (forall g, FType g = RCUField) ->
+    UNQR_h (hp (ms s)) (rt (ms s)) ->
+    FR s ->
+    D_rcuRoot  s t xr ->
+    D_rcuItr   s t xp rho Np ->
+    D_rcuFresh s t xn N1 ->
+    stk (ms s) xp t = Some op ->
+    stk (ms s) xo t = Some oo ->
+    stk (ms s) xn t = Some on ->
+    xr <> xn ->
+    Np f  = Some (FVar xo) ->
+    N1 f4 = Some (FVar xo) ->
+    (forall g, N1 g <> None -> g <> f4 -> N1 g = Some FNull) ->
+    UNQR_h (upd (hp (ms s)) op f (VLoc on)) (rt (ms s)).
+  Proof.
+    intros Hall HU HFR Hroot Hp Hn Hstkp Hstko Hstkn Hne Hpf Hnf4 Hother.
+    assert (Hedge : hp (ms s) op f = Some (VLoc oo)).
+    { destruct Hp as [op' (Hstkp' & _ & _ & Hfields & _)].
+      rewrite Hstkp in Hstkp'. injection Hstkp' as <-.
+      destruct (Hfields f (FVar xo) Hpf) as [oy (Hy & He & _ & _)].
+      rewrite Hstko in Hy. injection Hy as <-. exact He. }
+    apply (UNQR_insert_reachable (hp (ms s)) (rt (ms s)) op f oo on f4 rho HU).
+    - exact (fresh_denot_PointsOnlyAt s t xn N1 on f4 xo oo
+               Hall Hn Hstkn Hnf4 Hstko Hother).
+    - exact (itr_reaches s t xp rho Np op Hp Hstkp).
+    - exact Hedge.
+    - exact (fresh_unreachable s t xr xn N1 on HFR Hroot Hn Hstkn Hne).
+  Qed.
+
 End Denotations.
 
 (** ** Status
@@ -344,11 +409,26 @@ End Denotations.
     So both repairs are load-bearing here, not bookkeeping: each is the step
     that makes its proof close.
 
-    What remains for milestone 4 is the environment denotation and the
-    atomic-action lemmas as Hoare triples over [rcu_inv]. *)
+    All three heap-mutating rules now have their UNQR case proved from the
+    denotations rather than argued: [replace_preserves_UNQR],
+    [unlink_preserves_UNQR], [insert_preserves_UNQR].  Each takes only
+    invariants of the pre-state and premises of its rule, and each is assembly
+    -- the reasoning about paths happens once, in HeapPaths.
+
+    The shape of the three matches what the write-up claims about them.
+    Unlinking needs the fewest hypotheses: no fresh node, so nothing to mirror
+    and no unreachability condition.  Replacement needs mirroring, and so the
+    T-Replace side condition.  Insertion needs [PointsOnlyAt], and so the clause
+    added to the rcuFresh denotation.
+
+    What remains for milestone 4 is lifting these from "the post-state satisfies
+    UNQR" to Hoare triples over [rcu_inv], which means joining them to the ghost
+    updates of IrisGhost.v, and the remaining invariants for each action. *)
 
 Print Assumptions itr_not_unlinked.
 Print Assumptions fresh_denot_PointsOnlyAt.
 Print Assumptions replace_denot_Mirrors.
 Print Assumptions fresh_unreachable.
 Print Assumptions replace_preserves_UNQR.
+Print Assumptions unlink_preserves_UNQR.
+Print Assumptions insert_preserves_UNQR.
