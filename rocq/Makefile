@@ -21,11 +21,13 @@
 #                 the invariant tying them to the pure layer.
 #   Denotations.v the type denotations, and the proofs that they supply the
 #                 hypotheses HeapPaths takes for T-Replace and T-Insert.
+#   Actions.v     joins the ghost updates to the pure state: to_LState
+#                 commutes with a field write and with an observation update.
 
 ROCQ      ?= rocq
 ROCQFLAGS := -R . RCU
 
-VFILES  := WellFormed.v HeapPaths.v IrisGhost.v Denotations.v
+VFILES  := WellFormed.v HeapPaths.v IrisGhost.v Denotations.v Actions.v
 VOFILES := $(VFILES:.v=.vo)
 
 all: $(VOFILES)
@@ -33,6 +35,7 @@ all: $(VOFILES)
 HeapPaths.vo: WellFormed.vo
 IrisGhost.vo: WellFormed.vo
 Denotations.vo: WellFormed.vo HeapPaths.vo
+Actions.vo: WellFormed.vo HeapPaths.vo IrisGhost.vo Denotations.vo
 
 %.vo: %.v
 	$(ROCQ) compile $(ROCQFLAGS) $<
