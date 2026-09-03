@@ -363,18 +363,34 @@ The semantic changes above invalidate specific cases in Section
   the \textbf{ULKR} cases that cite \texttt{.UNQR}, which turn on the
   observation map rather than on reachability.
 
-\item \textbf{FR (\S8)} --- \textsc{Replace} and \textsc{Insert}.  Both use
-  \textbf{FR} for the uniqueness of the fresh node; the corrected conjunctive
-  form should make these \emph{easier}, since the first clause now says outright
-  that no heap edge targets the fresh node.
+\item \textbf{FR (\S8)} --- \emph{done.}  The corrected conjunctive form does
+  make these easier, as expected, but neither is the ``trivial'' the report
+  claims: the action \emph{does} create an edge to the fresh node, and the case
+  turns on the observation changing from \frsh{} to \itr{} in the same step, so
+  that \textbf{FR}'s hypothesis stops applying to it.
 
-\item \textbf{FPI (\S11)} --- \textsc{Replace}, \textsc{WriteFreshField},
-  \textsc{Alloc}.  The weakening from $\forall\mathit{tid}$ to $\sigma.l$ should
-  again make these easier; the scope fix is what makes them statable at all.
+\item \textbf{FPI (\S11)} --- \emph{does not hold; the rules need
+  strengthening.}  Expected to be among the easiest items, this is instead the
+  sixth defect.  \textsc{T-Replace} and \textsc{T-UnlinkH} both make a node
+  \unlk, which by \textbf{WULK} costs it its \itr{} observation; if a
+  \textsf{rcuFresh} variable in $\Gamma$ has a field pointing at that node,
+  \textbf{FPI} holds before the write and fails after.  The rules' aliasing
+  premises quantify only over \textsf{rcuItr} variables, and $\llbracket \Gamma
+  \rrbracket$ is an intersection rather than a separating conjunction, so
+  nothing excludes it; \textsc{T-WriteFH} is what makes the state reachable.
+  The failure is not confined to \textbf{FPI}: $\llbracket
+  \textsf{rcuFresh}\,\mathcal{N}\rrbracket$ carries the same requirement, so the
+  affected lemmas fail to establish the denotation of their own
+  post-environment.  Repair: extend the aliasing premise of both rules to fresh
+  variables.  \textsc{Insert} is unaffected --- it unlinks nothing.  Machine
+  checked as \texttt{FPI\_not\_preserved\_by\_replace}.
 
-\item \textbf{RITR (\S13)} --- cited in the composition step of
-  \textsc{WriteFreshField}.  Under the corrected statement the argument changes
-  shape, since the old version would have let one conclude anything.
+\item \textbf{RITR (\S13)} --- \emph{done.}  The composition step of
+  \textsc{WriteFreshField} now uses the corrected statement in the only form
+  that carries information: not ``every reader observes every location as
+  \itr'', which lets one conclude anything, but ``a reader observes nothing as
+  \unlk, \frbl{} or \frsh'', which with \textbf{WNR} puts the written node
+  outside the readers' fragment.
 
 \item \textbf{HD (\S15)} --- \emph{done.}  The empty cases were \textsc{Replace},
   \textsc{ReadHeap}, \textsc{WriteFreshField} and also \textsc{Alloc}, which this

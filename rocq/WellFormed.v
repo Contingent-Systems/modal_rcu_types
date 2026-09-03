@@ -134,11 +134,16 @@ Section WellFormedness.
     forall t o Tr,
       obsv s o (Oiter t) -> flist s o = Some Tr -> Tr t.
 
-  (** 5. ULKR -- Unlinked reachability.  One step; the transitive form is a
-      derived lemma, [ULKR_star] below, not a separate invariant. *)
+  (** 5. ULKR -- Unlinked reachability, with the hypothesis closed under the
+      disjunction (change 5 of InvariantsRevised.tex).  This is the corrected
+      invariant, and it is the one WellFormed carries: the published one-step
+      form is kept below as [ULKR_orig], where [ULKR_does_not_chain] shows it
+      cannot support the reachability property the proofs appeal to.  The
+      transitive form is the derived lemma [ULKR_closed_reaches], not a separate
+      invariant. *)
   Definition ULKR (s : LState) : Prop :=
     forall o o' f' t,
-      obsv s o (Ounlk t) -> Edge s o' f' o ->
+      (obsv s o (Ounlk t) \/ obsv s o (Ofree t)) -> Edge s o' f' o ->
       obsv s o' (Ounlk t) \/ obsv s o' (Ofree t).
 
   (** 6. FLR -- Free-list reachability.
@@ -261,10 +266,16 @@ End WellFormedness.
 
     The repair is to close the hypothesis under the disjunction. *)
 
-Definition ULKR_closed (s : LState) : Prop :=
+(** The published one-step form, retained only to exhibit the defect.  It is
+    [ULKR] with the hypothesis *not* closed under the disjunction. *)
+Definition ULKR_orig (s : LState) : Prop :=
   forall o o' f' t,
-    (obsv s o (Ounlk t) \/ obsv s o (Ofree t)) -> Edge s o' f' o ->
+    obsv s o (Ounlk t) -> Edge s o' f' o ->
     obsv s o' (Ounlk t) \/ obsv s o' (Ofree t).
+
+(** [ULKR_closed] is now just [ULKR]; kept as a name because the write-up cites
+    [ULKR_closed_reaches]. *)
+Definition ULKR_closed (s : LState) : Prop := ULKR s.
 
 (** The reachability form, which is what the proofs actually use. *)
 Definition ULKR_reach (s : LState) : Prop :=
@@ -284,6 +295,106 @@ Proof.
       apply (HC o' o f t (or_introl Hunl)). unfold Edge. exact Hf.
     + assert (Hne' : g :: p' <> []) by discriminate.
       apply (HC o1 o f t (IH o1 o' t Hunl Hreach Hne')). unfold Edge. exact Hf.
+Qed.
+
+(** * T-Replace and T-UnlinkH do not preserve FPI
+
+    A sixth defect, again found by attempting a proof case rather than by
+    reading -- the report calls this case "trivial" in both lemmas.
+
+    This one is not confined to FPI.  The denotation of [rcuFresh N] itself
+    requires every target in [codom(N)] to be observed as [iterator]; so if a
+    fresh variable in Gamma points at the node being unlinked, the post-state
+    fails the denotation of its *own* type environment, and the Axiom Soundness
+    lemma for the action is false as stated.  FPI is simply where it shows up
+    first.  The consequence it guards against is concrete: linking such a fresh
+    node in afterwards would splice a node already scheduled for reclamation
+    back into the structure.
+
+    Both rules that produce an [unlinked] observation are affected.  The repair
+    is the same for each -- extend the aliasing premise, which today quantifies
+    only over [rcuItr] variables, to exclude fresh predecessors of the node
+    being unlinked ([y <> o] for T-Replace, [y <> z] for T-UnlinkH).
+    T-Insert needs nothing: it unlinks nothing, so no observation is lost.
+
+    FPI says a fresh node's RCU fields point at locations the writer observes as
+    [iterator].  T-Replace unlinks [o], which costs [o] its [iterator]
+    observation (WULK makes [iterator] and [unlinked] exclusive).  So if any
+    *fresh* node has a field pointing at [o], FPI held before the write and
+    fails after it.
+
+    Nothing rules that out.  The rule's aliasing premise quantifies over
+    [x:rcuItr rho N3([f1 |-> y])] and concludes [y <> o]; a variable typed
+    [rcuFresh] is not an [rcuItr] and so is not covered.  Nor does the shape of
+    the environment help: the denotation of a type environment is the
+    *intersection* of the individual variables' denotations, not a separating
+    conjunction, so two variables may denote overlapping structure.  And the
+    state is reachable -- T-WriteFH sets a fresh node's field to an [rcuItr]
+    target, which is exactly what [o] is until the replacement happens.
+
+    Below, node 4 is fresh with an RCU edge to node 1; the write replaces 1 with
+    2 under the root, unlinking 1. *)
+
+Definition fpi_before : LState :=
+  {| ms := {| stk := fun _ _ => None;
+              hp  := fun o f => if Nat.eqb f 0
+                                then (if Nat.eqb o 4 then Some (VLoc 1)
+                                      else if Nat.eqb o 0 then Some (VLoc 1)
+                                      else if Nat.eqb o 1 then Some VNull
+                                      else None)
+                                else None;
+              lk  := Some 9;
+              rt  := 0;
+              rds := fun _ => False;
+              bnd := fun _ => False |};
+     obsv  := fun o ob => (o = 0 /\ ob = Oiter 9)
+                          \/ (o = 1 /\ ob = Oiter 9)
+                          \/ (o = 4 /\ ob = Ofresh 9);
+     undf  := fun _ _ => False;
+     thrd  := fun t => t = 9;
+     flist := fun _ => None |}.
+
+Definition fpi_after : LState :=
+  {| ms := {| stk := fun _ _ => None;
+              hp  := fun o f => if Nat.eqb f 0
+                                then (if Nat.eqb o 4 then Some (VLoc 1)
+                                      else if Nat.eqb o 0 then Some (VLoc 2)
+                                      else if Nat.eqb o 1 then Some VNull
+                                      else if Nat.eqb o 2 then Some VNull
+                                      else None)
+                                else None;
+              lk  := Some 9;
+              rt  := 0;
+              rds := fun _ => False;
+              bnd := fun _ => False |};
+     obsv  := fun o ob => (o = 0 /\ ob = Oiter 9)
+                          \/ (o = 1 /\ ob = Ounlk 9)
+                          \/ (o = 2 /\ ob = Oiter 9)
+                          \/ (o = 4 /\ ob = Ofresh 9);
+     undf  := fun _ _ => False;
+     thrd  := fun t => t = 9;
+     flist := fun _ => None |}.
+
+Lemma FPI_not_preserved_by_replace :
+  FPI (fun _ => RCUField) fpi_before
+  /\ ~ FPI (fun _ => RCUField) fpi_after.
+Proof.
+  split.
+  - intros o f o' t lw Hfresh Hedge _ Hlk.
+    simpl in Hlk. injection Hlk as <-.
+    simpl in Hfresh.
+    (* the only fresh node is 4, and its only edge goes to 1 *)
+    destruct Hfresh as [[-> Heq] | [[-> Heq] | [-> Heq]]]; try discriminate.
+    unfold Edge in Hedge. simpl in Hedge.
+    destruct f as [|f0]; simpl in Hedge; [| discriminate].
+    injection Hedge as <-.
+    simpl. right; left. split; reflexivity.
+  - intros HF.
+    assert (Hfresh : obsv fpi_after 4 (Ofresh 9))
+      by (simpl; right; right; right; split; reflexivity).
+    assert (Hedge : Edge fpi_after 4 0 1) by reflexivity.
+    destruct (HF 4 0 1 9 9 Hfresh Hedge eq_refl eq_refl)
+      as [[H _] | [[_ H] | [[H _] | [H _]]]]; try discriminate.
 Qed.
 
 (** * FLR chains
@@ -343,7 +454,7 @@ Definition chain : LState :=
      thrd  := fun t => t = 9;
      flist := fun _ => None |}.
 
-Lemma ULKR_does_not_chain : ULKR chain /\ ~ ULKR_reach chain.
+Lemma ULKR_does_not_chain : ULKR_orig chain /\ ~ ULKR_reach chain.
 Proof.
   split.
   - intros o o' f' t Hunl Hedge.
@@ -551,7 +662,10 @@ Lemma initial_IFL : IFL initial.
 Proof. intros t o Tr H1 H2. simpl in H2. discriminate H2. Qed.
 
 Lemma initial_ULKR : ULKR initial.
-Proof. intros o o' f' t H1 H2. simpl in H1. destruct H1 as [_ H]. discriminate H. Qed.
+Proof.
+  intros o o' f' t H1 H2. simpl in H1.
+  destruct H1 as [[_ H] | [_ H]]; discriminate H.
+Qed.
 
 Lemma initial_FLR : FLR initial.
 Proof. intros o o' f' Tr H1 H2. simpl in H1. discriminate H1. Qed.
@@ -637,3 +751,4 @@ Print Assumptions WellFormed_satisfiable.
 Print Assumptions corrected_but_not_published.
 Print Assumptions ULKR_closed_reaches.
 Print Assumptions FLR_chains.
+Print Assumptions FPI_not_preserved_by_replace.

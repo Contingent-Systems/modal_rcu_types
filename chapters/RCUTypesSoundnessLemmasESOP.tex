@@ -778,7 +778,16 @@ step the path-distinctness argument alone does not reach.
 \end{case}
 \begin{case} - \textbf{WULK} By \ref{phu5},  \ref{ahus1} and \ref{ahus2}.
 \end{case}
-\begin{case} - \textbf{WF}, \textbf{FPI} and \textbf{FR} Trivial.
+\begin{case} - \textbf{WF} and \textbf{FR} Trivial.
+\end{case}
+\begin{case} - \textbf{FPI} \emph{This case does not go through; see the
+corresponding case of Lemma \ref{lemma:linkf}.}  \textsc{T-UnlinkH} makes $o_y$
+\textsf{unlinked}, which costs it $\textsf{iterator}\,\sigma.l$ by
+\textbf{WULK}, and \ref{ahu6} constrains only $\textsf{rcuItr}$ variables, so a
+$\textsf{rcuFresh}$ variable in $\Gamma$ with a field pointing at $o_y$ makes
+\textbf{FPI} --- and the denotation of that variable's own type --- fail in
+$\sigma'$.  The repair is to extend \ref{ahu6} to fresh variables with $y \neq
+z$.
 \end{case}
 \begin{case} - \textbf{AWRT} By \ref{phu5}.
 \end{case}
@@ -1006,11 +1015,60 @@ the case analysis closes without the exclusion that \textsc{Insert} and
 \end{case}
 \begin{case} - \textbf{FLR} By choice of $F'_1$ and \ref{ahu16f}. 
 \end{case}
-\begin{case} - \textbf{FPI} By \ref{phu5f}.
+\begin{case} - \textbf{FPI} \emph{This case does not go through, and the rule
+needs an additional premise.}
+
+\textbf{FPI} requires every \textsf{RCU} field of a \textsf{fresh} node to point
+at a location the writer observes as \textsf{iterator}.  The action makes $o_r$
+\textsf{unlinked}, and by \textbf{WULK} it therefore loses
+$\textsf{iterator}\,\sigma.l$.  So if any location observed as \textsf{fresh}
+has a field pointing at $o_r$, \textbf{FPI} holds in $\sigma$ and fails in
+$\sigma'$.
+
+Nothing excludes that.  The rule's aliasing premise \ref{ahu6f} ranges over
+$x:\textsf{rcuItr}\,\rho''\,\N'''([f'\rightharpoonup y])$ and concludes $y \neq
+r$; a variable typed $\textsf{rcuFresh}$ is not an $\textsf{rcuItr}$, so it is
+not covered.  Nor does the environment's shape help: $\llbracket \Gamma
+\rrbracket$ is the \emph{intersection} of the individual variables' denotations,
+not a separating conjunction, so two variables may denote overlapping structure.
+And the state is reachable: \textsc{T-WriteFH} sets a fresh node's field to an
+$\textsf{rcuItr}$ target, which is exactly what $r$ is until the replacement.
+
+The failure is not confined to \textbf{FPI}.  $\llbracket
+\textsf{rcuFresh}\,\N\rrbracket$ itself requires every target in $codom(\N)$ to
+be observed as \textsf{iterator}, so such a $\Gamma$ fails the denotation of its
+own post-environment and this lemma is false as stated.  What it guards against
+is concrete: linking that fresh node in afterwards would splice a node already
+scheduled for reclamation back into the structure.
+
+The repair is to extend \ref{ahu6f} to fresh variables,
+\[\forall_{x \in \Gamma, \N''', f', y} \ldotp
+  (x:\textsf{rcuFresh}\,\N'''([f'\rightharpoonup y])) \implies y \neq r\]
+after which the case is immediate: no \textsf{fresh} node points at $o_r$, every
+other \textsf{fresh} node's targets are untouched, and \textbf{FPI} is inherited
+from \ref{ahu16f}.\textbf{FPI}.  The counterexample is machine checked as
+\texttt{FPI\_not\_preserved\_by\_replace} in \texttt{rocq/WellFormed.v}.
+\textsc{T-UnlinkH} has the same defect for the same reason and takes the same
+repair with $y \neq z$; \textsc{T-Insert} is unaffected, since it unlinks
+nothing and so costs no location its \textsf{iterator} observation.
 \end{case}
 \begin{case} - \textbf{WULK} Determined by operational semantics By \ref{ahu16f}.\textbf{WULK}, \ref{ahus1f}, \ref{ahus2f} and operational semantics.
 \end{case}
-\begin{case} - \textbf{WF} and \textbf{FR} Trivial.
+\begin{case} - \textbf{WF} Trivial.
+\end{case}
+\begin{case} - \textbf{FR}
+Not quite trivial, though short.  The action \emph{does} create an edge to
+$o_n$, namely $\sigma'.h(o_p,f) = o_n$, so if $o_n$ were still observed as
+\textsf{fresh} in $\sigma'$ the first clause of \textbf{FR} would fail outright.
+It is not: the post-environment types $n$ as $\textsf{rcuItr}\,\rho'\,\N''$, and
+by \ref{phu5f} the observation changes from \textsf{fresh} to
+$\textsf{iterator}\,tid$ in the same step, so \textbf{FR}'s hypothesis no longer
+applies to $o_n$.  For any other location observed as \textsf{fresh} in
+$\sigma'$, the action adds no edge targeting it and no stack alias to it, so
+both clauses are inherited from \ref{ahu16f}.\textbf{FR}.  The corrected
+conjunctive form is what makes this argument available --- the published
+disjunction is satisfied by its own hypothesis, so it would carry no
+information here.
 \end{case}
 \begin{case} - \textbf{HD}
 The action writes $o_n$ into $o_p.f$ and changes no other field, so the only new
@@ -1720,7 +1778,7 @@ To prove all relations (\ref{phu17wf}-\ref{phu23wf}) we assume \ref{ahus2wf} whi
 
 $O'_1 \bullet O'_2 $ follows from \ref{ahu13wf}, \ref{ahus1wf} and choice of $O_2$. 
 
-We assume $\sigma_1.h \bullet \sigma_2.h$. We know from \ref{ahu4wf} that $f \notin dom(\N')$. From \ref{phu5wf}, \ref{phu10wf}-\ref{phu11wf}.\textbf{FNR}, \ref{phu10wf}-\ref{phu11wf}.\textbf{RITR} and \ref{phu10wf}-\ref{phu11wf}.\textbf{WNR} we show $\sigma'_1.h \bullet \sigma'_2.h$ (with choices for other maps in the machine state we show \ref{ahusighr'}). All compositions shown  let us to derive conclusion for $(\sigma'_1, O'_1, U'_1, T'_1,F'_1) \bullet (\sigma'_2, O'_2, U'_2, T'_2,F'_2) $.
+We assume $\sigma_1.h \bullet \sigma_2.h$. We know from \ref{ahu4wf} that $f \notin dom(\N')$.  The appeal to \textbf{RITR} here changes shape under the corrected statement.  The published version reads $\forall_{t,o}\ldotp t \in R \implies \textsf{iterator}\,t \in O(o)$ --- every reader observes \emph{every} location as \textsf{iterator} --- from which one can conclude anything, and which is outright contradictory in any state with a reader and a fresh node (\texttt{RITR\_orig\_contradicts\_fresh}); it cannot be what the step needs.  The corrected form instead says what a reader may \emph{not} observe: for $t \in R$, no location is observed by $t$ as \textsf{unlinked}, \textsf{freeable} or \textsf{fresh}.  That is the form used here, and it is enough: the location whose field is written is observed \textsf{fresh} by the writer, so by the corrected \textbf{RITR} no reader observes it at all, and by \ref{phu10wf}-\ref{phu11wf}.\textbf{WNR} the writer is not itself a reader.  The write therefore falls entirely outside the readers' fragment and cannot disturb the composition.  With that, and \ref{phu5wf} and \ref{phu10wf}-\ref{phu11wf}.\textbf{FNR}, we show $\sigma'_1.h \bullet \sigma'_2.h$ (with choices for other maps in the machine state we show \ref{ahusighr'}). All compositions shown  let us to derive conclusion for $(\sigma'_1, O'_1, U'_1, T'_1,F'_1) \bullet (\sigma'_2, O'_2, U'_2, T'_2,F'_2) $.
  \end{proof}
 \begin{lemma}[\textsc{Sycn}]
    \label{lemma:syncstop}
