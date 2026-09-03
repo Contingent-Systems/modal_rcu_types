@@ -143,17 +143,27 @@ Section WellFormedness.
 
   (** 6. FLR -- Free-list reachability.
 
-      The direction of the inclusion is the one open question of
-      InvariantsRevised.tex 6.4, so we take it as a parameter rather than guess.
-      The published statement is [exists T' subset-of T. F(o') = T'], but along a
-      chain of unlinked nodes ULKR puts o' no later than o, and an entry
-      populated earlier has had longer to drain, which argues the other way.
-      Instantiate [incl] once the intended temporal story is settled. *)
-  Definition FLR (incl : (TID -> Prop) -> (TID -> Prop) -> Prop) (s : LState)
-    : Prop :=
+      The direction of the inclusion was previously left as a parameter, on the
+      grounds that the temporal story argued against the published statement.
+      It does not: the published direction is forced.
+
+      [Edge s o' f' o] puts o' above o, and ULKR (child unlinked implies parent
+      unlinked) means o' must already be unlinked when o becomes unlinked, so o'
+      is unlinked no later than o.  Grace periods cannot overlap -- T-Sync types
+      [SyncStart; SyncStop] as one compound statement, and there is a single
+      writer -- so only two cases arise.  If o' and o were unlinked in different
+      write critical sections, the earlier grace period has completed, o' is
+      freeable and F(o') is empty.  If in the same one, both entries were
+      populated at the same SyncStart from one snapshot and are equal.  Either
+      way F(o') is contained in F(o), which is what the report writes.
+
+      That also disposes of the worry that two entries created at different
+      SyncStarts snapshot unrelated thread sets and need not nest: non-overlapping
+      grace periods mean two live snapshots are never compared. *)
+  Definition FLR (s : LState) : Prop :=
     forall o o' f' Tr,
       flist s o = Some Tr -> Edge s o' f' o ->
-      exists Tr', flist s o' = Some Tr' /\ incl Tr Tr'.
+      exists Tr', flist s o' = Some Tr' /\ (forall t, Tr' t -> Tr t).
 
   (** 7. WULK -- Writer unlink.  [iterator] and [unlinked]/[freeable]
       observations of one location are mutually exclusive.  (The published
@@ -229,9 +239,8 @@ Section WellFormedness.
 
   (** ** WellFormed *)
 
-  Definition WellFormed (incl : (TID -> Prop) -> (TID -> Prop) -> Prop)
-                        (s : LState) : Prop :=
-    OW s /\ RWOW s /\ AWRT s /\ IFL s /\ ULKR s /\ FLR incl s /\ WULK s
+  Definition WellFormed (s : LState) : Prop :=
+    OW s /\ RWOW s /\ AWRT s /\ IFL s /\ ULKR s /\ FLR s /\ WULK s
     /\ FR s /\ WFresh s /\ FNR s /\ FPI s /\ WNR s /\ RITR s /\ RINFL s
     /\ HD s /\ UNQRT_a s /\ UNQRT_b s /\ UNQR s.
 
@@ -275,6 +284,40 @@ Proof.
       apply (HC o' o f t (or_introl Hunl)). unfold Edge. exact Hf.
     + assert (Hne' : g :: p' <> []) by discriminate.
       apply (HC o1 o f t (IH o1 o' t Hunl Hreach Hne')). unfold Edge. exact Hf.
+Qed.
+
+(** * FLR chains
+
+    With the direction settled, FLR gives the free-list analogue of
+    [ULKR_reach]: anything that reaches a free-list entry is itself a free-list
+    entry, with a set contained in it.  Unlike ULKR the one-step form already
+    chains -- its hypothesis and conclusion are the same predicate -- so no
+    repair is needed, only the induction.
+
+    This is the half of Section 6.4's claim that belongs to FLR: together with
+    [ULKR_closed_reaches] it is what keeps a node awaiting reclamation
+    unreachable from the root, since the root is on neither the free list nor
+    the unlinked set. *)
+
+Definition FLR_reach (s : LState) : Prop :=
+  forall p a b Tb,
+    flist s b = Some Tb -> hstar (hp (ms s)) a p = Some b -> p <> [] ->
+    exists Ta, flist s a = Some Ta /\ (forall t, Ta t -> Tb t).
+
+Lemma FLR_chains : forall s, FLR s -> FLR_reach s.
+Proof.
+  intros s HF p. induction p as [|f p IH]; intros a b Tb Hb Hreach Hne.
+  - exfalso. apply Hne. reflexivity.
+  - simpl in Hreach.
+    destruct (hp (ms s) a f) as [[a1|]|] eqn:Hf; try discriminate.
+    destruct p as [|g p'].
+    + simpl in Hreach. injection Hreach as Heq. subst a1.
+      destruct (HF b a f Tb Hb Hf) as [Ta [Hta Hsub]].
+      exists Ta. split; [exact Hta | exact Hsub].
+    + assert (Hne' : g :: p' <> []) by discriminate.
+      destruct (IH a1 b Tb Hb Hreach Hne') as [Ta1 [Hta1 Hsub1]].
+      destruct (HF a1 a f Ta1 Hta1 Hf) as [Ta [Hta Hsub]].
+      exists Ta. split; [exact Hta | intros t Ht; exact (Hsub1 t (Hsub t Ht))].
 Qed.
 
 (** As published it does not.  Witness: a chain [2 -> 1 -> 0] in which 0 is
@@ -510,8 +553,8 @@ Proof. intros t o Tr H1 H2. simpl in H2. discriminate H2. Qed.
 Lemma initial_ULKR : ULKR initial.
 Proof. intros o o' f' t H1 H2. simpl in H1. destruct H1 as [_ H]. discriminate H. Qed.
 
-Lemma initial_FLR : forall incl, FLR incl initial.
-Proof. intros incl o o' f' Tr H1 H2. simpl in H1. discriminate H1. Qed.
+Lemma initial_FLR : FLR initial.
+Proof. intros o o' f' Tr H1 H2. simpl in H1. discriminate H1. Qed.
 
 Lemma initial_WULK : WULK initial.
 Proof. intros lw o t H1 H2. simpl in H2. destruct H2 as [_ H]. discriminate H. Qed.
@@ -561,11 +604,9 @@ Proof.
 Qed.
 
 Theorem WellFormed_satisfiable :
-  forall (FType : FName -> FieldKind)
-         (incl : (TID -> Prop) -> (TID -> Prop) -> Prop),
-    WellFormed FType incl initial.
+  forall (FType : FName -> FieldKind), WellFormed FType initial.
 Proof.
-  intros FType incl. unfold WellFormed.
+  intros FType. unfold WellFormed.
   (* [repeat split] is too eager: it descends through binders and splits the
      conjunction inside [obsv initial] itself.  [apply conj] matches only a
      literal [and] head, so it decomposes exactly the seventeen conjuncts. *)
@@ -582,15 +623,17 @@ Qed.
 (** The corrected set is satisfiable; the published RITR makes it not, in any
     state with a reader and a fresh node -- which every [add] produces. *)
 Corollary corrected_but_not_published :
-  (exists s FType incl, WellFormed FType incl s)
+  (exists s FType, WellFormed FType s)
   /\ (forall s t o tf,
         RITR_orig s -> FNR s -> rds (ms s) t -> obsv s o (Ofresh tf) -> False).
 Proof.
   split.
-  - exists initial, (fun _ => RCUField), (fun _ _ => True).
+  - exists initial, (fun _ => RCUField).
     apply WellFormed_satisfiable.
   - intros s t o tf. apply (RITR_orig_contradicts_fresh s t o tf).
 Qed.
 
 Print Assumptions WellFormed_satisfiable.
 Print Assumptions corrected_but_not_published.
+Print Assumptions ULKR_closed_reaches.
+Print Assumptions FLR_chains.

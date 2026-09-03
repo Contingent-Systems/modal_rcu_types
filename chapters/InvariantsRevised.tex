@@ -183,15 +183,17 @@ reaching an unlinked node.  Both the repair and the counterexample are machine
 checked: see \texttt{ULKR\_closed\_reaches} and \texttt{ULKR\_does\_not\_chain}
 in \texttt{rocq/WellFormed.v}.
 
-\paragraph{6.\ FLR --- Free List Reachability.\hfill\textsc{major}, \textsc{open}}
+\paragraph{6.\ FLR --- Free List Reachability.\hfill\textsc{major}}
 \[
 \textbf{FLR} \defn \forall o,o',f',T_{r} \ldotp
   \sigma.F(o) = T_{r} \land \sigma.h(o',f') = o
   \implies \exists T_{r}' \ldotp \sigma.F(o') = T_{r}' \land T_{r} \bowtie T_{r}'
 \]
-\emph{Changed:} per (C3), including the $T$ capture.  \textbf{The direction of
-$\bowtie$ needs your adjudication and is left open} --- see Section
-\ref{sec:inv-open}.
+\emph{Changed:} per (C3), including the $T$ capture.  $\bowtie$ is $\supseteq$:
+$T_{r}' \subseteq T_{r}$, the predecessor's reader set contained in the
+successor's, which is the direction the report already writes.  It was briefly
+left open; the argument that it is in fact forced is in
+Section \ref{sec:inv-open}.
 
 \paragraph{7.\ WULK --- Writer Unlink.\hfill\textsc{major}}
 \[
@@ -350,8 +352,16 @@ The semantic changes above invalidate specific cases in Section
   \textsc{Alloc}.  Every \textbf{UNQR} case, plus every case that cites
   \texttt{.UNQR} as a hypothesis --- notably the \textbf{ULKR} cases of
   \textsc{Unlink} and \textsc{Replace}, which argue ``if $o'$ were observed as
-  \itr{} that would conflict with \textbf{UNQR}''.  This is the bulk of the
-  remaining work and it is genuine proof, not transcription.
+  \itr{} that would conflict with \textbf{UNQR}''.
+
+  \emph{Done for the mutations.}  The three heap-mutating cases are discharged
+  against \S\ref{sec:inv-iris}'s dichotomy rather than by the local
+  path-distinctness arguments the report gives, which proved something strictly
+  weaker than the invariant.  \textsc{ReadHeap} mutates no edge, and
+  \textsc{WriteFreshField} and \textsc{Alloc} write only an unreachable node, so
+  all three are the unconditional case.  What is left of this item is its tail:
+  the \textbf{ULKR} cases that cite \texttt{.UNQR}, which turn on the
+  observation map rather than on reachability.
 
 \item \textbf{FR (\S8)} --- \textsc{Replace} and \textsc{Insert}.  Both use
   \textbf{FR} for the uniqueness of the fresh node; the corrected conjunctive
@@ -378,12 +388,16 @@ The semantic changes above invalidate specific cases in Section
   harder in the antecedent.  What must be revisited is Section
   \ref{sec:lemmas}'s claim that \textbf{ULKR} and \textbf{FLR} together keep
   unlinked nodes unreachable from the root: that is the transitive form, and it
-  needs the corrected invariant.
+  needs the corrected invariant.  Both halves of it are now machine checked ---
+  \texttt{ULKR\_closed\_reaches} and \texttt{FLR\_chains} --- so what remains at
+  that citation site is to state the consequence in terms of them rather than of
+  the one-step formulas.
 
-\item \textbf{WULK, IFL, FLR, RINFL, UNQRT} --- restatement only, provided the
-  \textsc{open} question in \S\ref{sec:inv-open} resolves in favour of the
-  reading already used in the proofs.  Recheck each citation site rather than
-  assuming.
+\item \textbf{WULK, IFL, FLR, RINFL, UNQRT} --- restatement only.  This was
+  conditional on the \textbf{FLR} direction; that question is now settled in
+  favour of the reading already used in the proofs
+  (\S\ref{sec:inv-open}), so the condition is discharged.  Recheck each citation
+  site rather than assuming.
 \end{enumerate}
 
 \paragraph{Machine-checked status.}  Of the claims above, five are mechanized in
@@ -399,21 +413,41 @@ syntactic (capture, scope, unused binders) and are visible without proof.
 \subsection{Open questions}
 \label{sec:inv-open}
 
-\paragraph{Direction of the inclusion in FLR (\S6).}
+\paragraph{Direction of the inclusion in FLR (\S6) --- resolved.}
 The original concludes $\exists T' \subseteq T \ldotp F(o' \mapsto T')$: the
-predecessor's reader set is a \emph{subset} of the successor's.  We cannot
-derive which direction is intended and have deliberately left $\bowtie$
-abstract rather than guess, because the two readings give different invariants
-and one of them may be what the \textsc{Unlink} proof actually needs.
+predecessor's reader set is a \emph{subset} of the successor's.  This was
+initially left open, on the stated grounds that the temporal story argued
+\emph{against} what the report writes.  That was an error --- the two agree, and
+the direction is forced rather than a matter of adjudication.
 
-The tension: a free-list entry is populated at \texttt{SyncStart} with the
-then-current reader set and shrinks as readers execute \texttt{ReadEnd}.  Along
-a chain of unlinked nodes $o' \to o$, \textbf{ULKR} says $o'$ was unlinked no
-later than $o$.  If ``no later'' means strictly earlier, $o'$ has had more time
-to drain and $T_{r}' \subseteq T_{r}$ would be the defensible direction --- the
-opposite of what is written.  If both were unlinked in the same critical section
-under one grace period they are equal.  Resolving this needs the intended
-temporal story, which only you have.
+A free-list entry is populated at \texttt{SyncStart} with the then-current
+reader set and shrinks as readers execute \texttt{ReadEnd}.  Since
+$\sigma.h(o',f') = o$ puts $o'$ above $o$, and \textbf{ULKR} propagates upward
+--- an unlinked child forces an unlinked parent --- $o'$ must already be
+unlinked at the instant $o$ becomes unlinked, so $o'$ is unlinked no later than
+$o$.  Grace periods cannot overlap: \textsc{T-Sync} types
+\texttt{SyncStart};\texttt{SyncStop} as a single compound statement and there is
+one writer.  So there are only two cases.  If $o'$ and $o$ were unlinked in
+different write critical sections, the earlier grace period has already
+completed, $o'$ is \frbl{} and $F(o') = \emptyset$.  If in the same one, both
+entries were populated at the same \texttt{SyncStart} from a single snapshot and
+are equal.  Either way $T_{r}' \subseteq T_{r}$.
+
+Non-overlapping grace periods are also what answers the obvious objection, that
+entries created at different \texttt{SyncStart}s snapshot unrelated sets of
+threads and so need not nest at all: two \emph{live} snapshots are never
+compared, because the earlier one has drained to $\emptyset$ before the later
+one is taken.
+
+With the direction fixed, \textbf{FLR} chains, and the one-step form needs no
+repair --- unlike \textbf{ULKR}, its hypothesis and conclusion are the same
+predicate, so only the induction is required.  The result is
+\texttt{FLR\_chains} in \texttt{rocq/WellFormed.v}: anything reaching a
+free-list entry is itself one, with a contained set.  Together with
+\texttt{ULKR\_closed\_reaches} this is what keeps a node awaiting reclamation
+unreachable from the root, the root being on neither the free list nor the
+unlinked set.  \texttt{WellFormed} is correspondingly no longer parameterised by
+the inclusion.
 
 \paragraph{Whether AWRT should be derived rather than assumed.}
 See \S\ref{sec:inv-iris}.
