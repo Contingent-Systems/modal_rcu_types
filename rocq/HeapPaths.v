@@ -652,6 +652,125 @@ Proof.
     reflexivity.
 Qed.
 
+(** ** HD -- heap domain closure
+
+    HD says every location stored in a field is allocated.  Its proof case is
+    empty in four separate lemmas of the technical report (Replace, ReadHeap,
+    WriteFreshField, Alloc) and dismissed as trivial along with everything else
+    in Free -- where it is in fact the one case that is not trivial, since Free
+    is the only action that *removes* a location.
+
+    On the raw heap, "allocated" is "some field of it is defined", matching
+    [InHeap] in WellFormed.v. *)
+
+Definition InHeap_h (h : Heap) (o : Loc) : Prop := exists g v, h o g = Some v.
+
+Definition HD_h (h : Heap) : Prop :=
+  forall o f o', h o f = Some (VLoc o') -> InHeap_h h o'.
+
+(** A field write preserves HD as long as what it stores is already allocated.
+    This is every write in the system: T-UnlinkH, T-Replace and T-Insert all
+    store a location that the precondition types as [rcuItr] or [rcuFresh], and
+    T-WriteFH stores an [rcuItr].  Writing null is the degenerate case. *)
+Lemma HD_h_upd : forall h P f w,
+  HD_h h -> InHeap_h h w -> HD_h (upd h P f (VLoc w)).
+Proof.
+  intros h P f w HD Hw o g o' Hedge.
+  assert (Hin : InHeap_h h o').
+  { unfold upd in Hedge.
+    destruct (Nat.eq_dec o P) as [->|Hne].
+    - destruct (Nat.eq_dec g f) as [->|Hgf].
+      + injection Hedge as <-. exact Hw.
+      + exact (HD P g o' Hedge).
+    - exact (HD o g o' Hedge). }
+  destruct Hin as [g0 [v0 Hv0]].
+  (* the update only ever adds a field, so [o'] is still allocated *)
+  destruct (Nat.eq_dec o' P) as [->|Hne'].
+  - exists f, (VLoc w). apply upd_same.
+  - exists g0, v0. rewrite upd_other; [exact Hv0 |].
+    intro HH. injection HH as HH1 _. contradiction.
+Qed.
+
+Lemma HD_h_upd_null : forall h P f, HD_h h -> HD_h (upd h P f VNull).
+Proof.
+  intros h P f HD o g o' Hedge.
+  assert (Hin : InHeap_h h o').
+  { unfold upd in Hedge.
+    destruct (Nat.eq_dec o P) as [->|Hne].
+    - destruct (Nat.eq_dec g f) as [->|Hgf]; [discriminate |].
+      exact (HD P g o' Hedge).
+    - exact (HD o g o' Hedge). }
+  destruct Hin as [g0 [v0 Hv0]].
+  destruct (Nat.eq_dec o' P) as [->|Hne'].
+  - exists f, VNull. apply upd_same.
+  - exists g0, v0. rewrite upd_other; [exact Hv0 |].
+    intro HH. injection HH as HH1 _. contradiction.
+Qed.
+
+(** Allocation.  [alloc h n] gives [n] every field, all null -- the [nullmap] of
+    the Alloc lemma.  It contributes no edges, and it only enlarges the domain,
+    so HD survives.  Note no freshness hypothesis is needed for HD: overwriting
+    an existing node with nulls would also preserve it. *)
+Definition alloc (h : Heap) (n : Loc) : Heap :=
+  fun o f => if Nat.eq_dec o n then Some VNull else h o f.
+
+Lemma HD_h_alloc : forall h n, HD_h h -> HD_h (alloc h n).
+Proof.
+  intros h n HD o f o' Hedge. unfold alloc in Hedge.
+  destruct (Nat.eq_dec o n) as [->|Hne]; [discriminate |].
+  destruct (HD o f o' Hedge) as [g0 [v0 Hv0]].
+  unfold InHeap_h, alloc.
+  destruct (Nat.eq_dec o' n) as [->|Hne'].
+  - exists f, VNull. destruct (Nat.eq_dec n n); [reflexivity | contradiction].
+  - exists g0, v0. destruct (Nat.eq_dec o' n); [contradiction | exact Hv0].
+Qed.
+
+(** Free.  This is the case the report calls trivial.  Removing [d] from the
+    domain breaks HD exactly when some surviving edge still points at [d], so
+    the hypothesis is unavoidable -- and it is what ULKR, in its transitive
+    form, is there to supply: a freeable node is reachable only from other
+    unlinked or freeable nodes, and by the time it is freed nothing points at
+    it. *)
+Definition free (h : Heap) (d : Loc) : Heap :=
+  fun o f => if Nat.eq_dec o d then None else h o f.
+
+Lemma HD_h_free : forall h d,
+  HD_h h ->
+  (forall o f, h o f <> Some (VLoc d)) ->
+  HD_h (free h d).
+Proof.
+  intros h d HD Hno o f o' Hedge. unfold free in Hedge.
+  destruct (Nat.eq_dec o d) as [->|Hne]; [discriminate |].
+  assert (Hne' : o' <> d) by (intros ->; exact (Hno o f Hedge)).
+  destruct (HD o f o' Hedge) as [g0 [v0 Hv0]].
+  exists g0, v0. unfold free.
+  destruct (Nat.eq_dec o' d); [contradiction | exact Hv0].
+Qed.
+
+(** Without that hypothesis it genuinely fails: one node pointing at the freed
+    one is a counterexample, so the report's "trivial" cannot be repaired by
+    being more careful. *)
+Definition dangling : Heap :=
+  fun o f => if Nat.eq_dec o 0 then Some (VLoc 1)
+             else if Nat.eq_dec o 1 then Some VNull
+             else None.
+
+Lemma HD_h_free_needs_no_incoming : HD_h dangling /\ ~ HD_h (free dangling 1).
+Proof.
+  split.
+  - intros o f o' Hedge. unfold dangling in Hedge.
+    destruct (Nat.eq_dec o 0) as [->|H0].
+    + injection Hedge as <-. exists 0, VNull. unfold dangling. simpl.
+      destruct (Nat.eq_dec 1 0); [discriminate | reflexivity].
+    + destruct (Nat.eq_dec o 1) as [->|H1]; discriminate.
+  - intros HD.
+    assert (Hedge : free dangling 1 0 0 = Some (VLoc 1)).
+    { unfold free, dangling. destruct (Nat.eq_dec 0 1); [discriminate |].
+      destruct (Nat.eq_dec 0 0); [reflexivity | contradiction]. }
+    destruct (HD 0 0 1 Hedge) as [g [v Hv]].
+    unfold free in Hv. destruct (Nat.eq_dec 1 1); [discriminate | contradiction].
+Qed.
+
 (** ** Status
 
     All three heap-mutating rules preserve the tree shape, each discharged
@@ -675,3 +794,7 @@ Print Assumptions UNQR_insert_reachable.
 Print Assumptions UNQR_unlink_reachable.
 Print Assumptions UNQR_no_back.
 Print Assumptions UNQR_h_upd_unreachable.
+Print Assumptions HD_h_upd.
+Print Assumptions HD_h_alloc.
+Print Assumptions HD_h_free.
+Print Assumptions HD_h_free_needs_no_incoming.

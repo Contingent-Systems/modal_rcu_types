@@ -1012,7 +1012,15 @@ the case analysis closes without the exclusion that \textsc{Insert} and
 \end{case}
 \begin{case} - \textbf{WF} and \textbf{FR} Trivial.
 \end{case}
-\begin{case} - \textbf{HD} 
+\begin{case} - \textbf{HD}
+The action writes $o_n$ into $o_p.f$ and changes no other field, so the only new
+edge is $\sigma'.h(o_p,f) = o_n$ and \textbf{HD} reduces to $o_n \in
+dom(\sigma'.h)$.  That holds because $n$ is typed $\textsf{rcuFresh}\,\N''$ in
+\ref{ahu11f}, and the denotation of $\textsf{rcuFresh}$ places
+$\sigma.s(n,tid)$ in the heap; a field write does not shrink the domain, so it
+is still there in $\sigma'$.  Every other edge is inherited from $\sigma$, where
+\ref{ahu16f}.\textbf{HD} applies.  Mechanized as \texttt{HD\_h\_upd} in
+\texttt{rocq/HeapPaths.v}.
 \end{case}
 \begin{case} - \textbf{WNR} By \ref{ahus3f} and operational semantics.
 \end{case}
@@ -1493,7 +1501,10 @@ To prove \ref{phu6hr}, we need to show that each of the memory axioms in Section
 \end{case}
 \begin{case} - \textbf{WF}, \textbf{FNR}, \textbf{FPI} and \textbf{FR} Trivial.
 \end{case}
-\begin{case} - \textbf{HD} 
+\begin{case} - \textbf{HD}
+\textsc{ReadHeap} writes no field: the operational semantics change only the
+stack, so $\sigma.h = \sigma'.h$.  \textbf{HD} is a property of the heap alone
+and transfers unchanged from \ref{ahu16hr}.\textbf{HD}.
 \end{case}
 \begin{case} - \textbf{WNR} By \ref{ahus2hr} and operational semantics($\sigma.l = \sigma.l'$).
 \end{case}
@@ -1663,7 +1674,13 @@ In the rest of the proof, we prove \ref{phu10wf} and \ref{phu11wf} and show the 
 \end{case}
 \begin{case} - \textbf{FPI} By \ref{ahu16wf}.\textbf{FPI}, \ref{ahu11wf} and \ref{ahu4wf}
 \end{case} 
-\begin{case} - \textbf{HD} 
+\begin{case} - \textbf{HD}
+The action writes $o_z$ into $o_p.f$, so the only new edge is
+$\sigma'.h(o_p,f) = o_z$ and \textbf{HD} reduces to $o_z \in dom(\sigma'.h)$.
+The rule requires $z:\textsf{rcuItr}\,\rho.f\,\_$, and the denotation of
+$\textsf{rcuItr}$ places $o_z$ in the heap --- indeed reachable from the root,
+which is stronger than needed here.  All other edges are inherited, where
+\ref{ahu16wf}.\textbf{HD} applies.  Mechanized as \texttt{HD\_h\_upd}.
 \end{case}
 \begin{case} - \textbf{WNR} By \ref{ahus2wf} and operational semantics($\sigma.l = \sigma.l'$).
 \end{case}
@@ -1952,7 +1969,15 @@ In the rest of the proof, we prove \ref{phu10alc}, \ref{phu11alc} and $(\sigma'_
 \end{case}
 \begin{case} - \textbf{FPI} By \ref{phu5alc} and $\N_{f,\emptyset}$.
 \end{case} 
-\begin{case} - \textbf{HD} 
+\begin{case} - \textbf{HD}
+Allocation only enlarges the domain.  By \ref{phu5alc} the new location $\ell$
+is mapped to \textsf{nullmap}, so it introduces no edge of its own and cannot
+violate \textbf{HD}; and since $dom(\sigma'.h) = dom(\sigma.h) \cup \{\ell\}$,
+every edge inherited from $\sigma$ still lands in the domain by
+\ref{ahu16alc}.\textbf{HD}.  Note that freshness of $\ell$ is not what is doing
+the work here --- it is needed for \textbf{FR} and \textbf{UNQR}, but
+\textbf{HD} would survive even a re-initialisation.  Mechanized as
+\texttt{HD\_h\_alloc}.
 \end{case}
 \begin{case} - \textbf{WNR} By \ref{ahus2alc}.
 \end{case}
@@ -2083,7 +2108,9 @@ From operational semantics we know that
 Let $T'_1$ to be $T_1$. All \ref{ahusfree}-\ref{ahus4free} show(\ref{phu5free}) that $(\sigma',O'_1,U_1',T_1',F'_1)$ is in denotation of  
 \[\llbracket  x:\textsf{undef}  \rrbracket \]
 
-In the rest of the proof, we prove \ref{phu10free}, \ref{phu11free} and show the composition of $(\sigma'_1, O'_1, U'_1,T'_1,F'_1)$ and  $(\sigma'_2, O'_2, U'_2,T'_2,F'_2)$.. To prove \ref{phu10free}, we need to show that each of the memory axioms in Section \ref{sec:memaxioms} holds for the state $(\sigma',O'_1,U_1',T_1',F'_1)$ and it it trivial by \ref{ahusfree}-\ref{ahus4free} and \ref{phu5free}.
+In the rest of the proof, we prove \ref{phu10free}, \ref{phu11free} and show the composition of $(\sigma'_1, O'_1, U'_1,T'_1,F'_1)$ and  $(\sigma'_2, O'_2, U'_2,T'_2,F'_2)$.. To prove \ref{phu10free}, we need to show that each of the memory axioms in Section \ref{sec:memaxioms} holds for the state $(\sigma',O'_1,U_1',T_1',F'_1)$.  All but one are immediate from \ref{ahusfree}-\ref{ahus4free} and \ref{phu5free}, since the action removes a location and adds nothing: an invariant whose quantifiers range over edges or over observations can only lose witnesses.
+
+\textbf{HD} is the exception and needs its own argument, because \texttt{Free} is the only action that \emph{shrinks} $dom(\sigma.h)$, and \textbf{HD} constrains the target of every surviving edge.  Writing $o_d$ for the freed location, we need that no edge of $\sigma'.h$ points at $o_d$.  This does not follow from the operational semantics --- a state with a surviving pointer to the freed node satisfies \textbf{HD} before the free and violates it after, so the obligation is real (the counterexample is \texttt{HD\_h\_free\_needs\_no\_incoming} in \texttt{rocq/HeapPaths.v}).  It follows instead from the reachability form of \textbf{ULKR}: $x$ is typed \textsf{freeable}, so by \ref{ahu16free}.\textbf{ULKR} every predecessor of $o_d$ is itself \textsf{unlinked} or \textsf{freeable}, and by \ref{ahu16free}.\textbf{FLR} every such predecessor is on the free list.  By \ref{ahu16free}.\textbf{IFL} the free list is disjoint from the reachable structure, so no surviving edge of the data structure targets $o_d$.  Given that, \textbf{HD} is preserved; this is \texttt{HD\_h\_free}.
 
 To prove \ref{phu6free}, we need to show interference relation
 \[(\sigma, O_2, U_2, T_2,F_2) \mathcal{R} (\sigma', O'_2, U'_2, T'_2,F'_2)  \]

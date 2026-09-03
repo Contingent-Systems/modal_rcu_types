@@ -376,12 +376,25 @@ The semantic changes above invalidate specific cases in Section
   \textsc{WriteFreshField}.  Under the corrected statement the argument changes
   shape, since the old version would have let one conclude anything.
 
-\item \textbf{HD (\S15)} --- \textsc{Replace}, \textsc{ReadHeap},
-  \textsc{WriteFreshField} have no proof text at all.  These need writing from
-  scratch, but each should be short: allocation extends $dom(h)$, field writes
-  store a value that \textbf{HD} already places in $dom(h)$, and \texttt{Free}
-  needs the case where the freed location was not the target of any surviving
-  edge, which is \textbf{ULKR}.
+\item \textbf{HD (\S15)} --- \emph{done.}  The empty cases were \textsc{Replace},
+  \textsc{ReadHeap}, \textsc{WriteFreshField} and also \textsc{Alloc}, which this
+  list previously missed; \textsc{Free} was worse than empty, folding
+  \textbf{HD} into a blanket claim that all seventeen axioms are trivial.  Each
+  is short, as expected: \textsc{ReadHeap} writes no field at all, the two field
+  writes store a location the precondition already types as
+  $\textsf{rcuItr}$ or $\textsf{rcuFresh}$ and hence already places in $dom(h)$,
+  and \textsc{Alloc} only enlarges the domain with a node whose fields are all
+  \textsf{null}.
+
+  \textsc{Free} is the one that is not trivial, and it was the one dismissed as
+  such: it is the only action that \emph{shrinks} $dom(h)$, so it must establish
+  that no surviving edge points at the freed location.  That obligation is real
+  rather than an artefact --- a state with a dangling predecessor satisfies
+  \textbf{HD} before the free and violates it after
+  (\texttt{HD\_h\_free\_needs\_no\_incoming}) --- and it is discharged from the
+  transitive \textbf{ULKR} together with \textbf{FLR} and \textbf{IFL}.  The
+  four preservation arguments are machine checked as \texttt{HD\_h\_upd},
+  \texttt{HD\_h\_alloc} and \texttt{HD\_h\_free} in \texttt{rocq/HeapPaths.v}.
 
 \item \textbf{ULKR (\S5)} --- the \textbf{ULKR} cases themselves are unaffected,
   since they establish the one-step form and the closed hypothesis is only
