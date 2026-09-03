@@ -21,6 +21,8 @@
     Checked with Rocq 9.2, axiom-free. *)
 
 From iris.algebra Require Import auth gmap gset.
+From iris.base_logic.lib Require Import own.
+From iris.proofmode Require Import proofmode.
 From stdpp Require Import gmap sets.
 From RCU Require Import WellFormed HeapPaths IrisGhost Denotations.
 
@@ -185,6 +187,53 @@ Section actions.
 
 End actions.
 
+(** ** A limitation of the observation camera, found by attempting FPI
+
+    The next invariant to discharge for these actions is FPI, and it does not
+    go through -- not because of the rules, which were repaired, but because of
+    the ghost state chosen in [IrisGhost.v].
+
+    Unlinking has to *revoke* an observation: the replaced node loses
+    [iterator] and gains [unlinked], and WULK makes the two exclusive.  But the
+    value camera is [gsetUR], whose operation is union.  Its elements are all
+    [CoreId], so [obs_frag] is persistent -- an observation, once handed out,
+    is held forever, and by [observes_mem] the authority must keep recording it
+    forever too.
+
+    The lemma below is that fact stated precisely: while any thread holds the
+    iterator fragment for a location, WULK forbids that location from being
+    observed unlinked.  Since the fragment is persistent it is still held in
+    the post-state, so no action that unlinks such a location can re-establish
+    the invariant.
+
+    This is a real defect in milestone 3, not a missing lemma.  The union
+    camera is right for a quantity that only grows; observations are not one.
+    Fixing it is a design choice with consequences for how readers and the
+    writer share observations -- an exclusive or fractional per-location entry
+    would allow revocation but would stop readers sharing an observation
+    freely, which is what [observes] is for -- so it is recorded here rather
+    than guessed at. *)
+
+Section limitation.
+  Context `{!rcuG Σ}.
+
+  Lemma iter_frag_blocks_unlink m O U T F γ o lw :
+    lk m = Some lw ->
+    WULK (to_LState m O U T F) ->
+    obs_auth γ O -∗ observes γ o (Oiter lw) -∗
+      ⌜forall t', ~ obsv (to_LState m O U T F) o (Ounlk t')⌝.
+  Proof.
+    iIntros (Hlk HW) "Ha Hf".
+    iDestruct (observes_mem with "Ha Hf") as %[s [Hlkp Hin]].
+    iPureIntro. intros t' Hunl.
+    assert (Hiter : obsv (to_LState m O U T F) o (Oiter lw))
+      by (simpl; rewrite Hlkp; exact Hin).
+    destruct (HW lw o t' Hlk Hiter) as [Hno _].
+    exact (Hno Hunl).
+  Qed.
+
+End limitation.
+
 (** ** Status
 
     The two representations are lined up: a field write is transparent to
@@ -203,3 +252,4 @@ Print Assumptions to_LState_obs_kept.
 Print Assumptions replace_post_UNQR.
 Print Assumptions unlink_post_UNQR.
 Print Assumptions insert_post_UNQR.
+Print Assumptions iter_frag_blocks_unlink.
