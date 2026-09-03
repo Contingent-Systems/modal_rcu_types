@@ -1,9 +1,51 @@
 We thank the reviewers for their careful attention and feedback. We will take into consideration all of your comments about the presentation when we revise the paper.
 
 > R1: Presentation 
-Thanks for pointing out the detailed presentation issues. We have early versions which capture many those, but we will consider binding T-Replace to Figure 7, the introduction of invariants after the logical state in Section 6.2 carefully.
+Thanks for pointing out the detailed presentation issues. We have early versions which capture many those, but we will consider binding T-Replace to Figure 7 carefully. On the ordering point in Section 6: we agree. In the revision the logical state and the observation map are introduced before any invariant that refers to them, and the discussion of the invariants as a group now follows the individual statements rather than preceding them.
 
     
+> All reviewers: Mechanization, and corrections to the published invariants
+
+
+Since submission we have mechanized the global invariants and the reachability
+core of the soundness argument in Rocq (about 1900 lines, 78 lemmas, axiom-free).
+This turned up more than we expected, and we think it materially strengthens the
+paper.
+
+Five of the WellFormed invariants as published are defective:
+
+- Unique-Reachable is vacuous as written, and admits heaps that are not trees.
+- Readers-Iterators-Only is contradictory in any state containing both a reader
+  and a freshly allocated node, so it can be used to derive anything.
+- Fresh-Reachable is satisfied by its own hypothesis, and so constrains nothing.
+- Fresh-Points-Iterator contradicts Fresh-Not-Reader.
+- Unlinked-Reachability does not chain: its conclusion is weaker than its
+  hypothesis, so the induction along a path stalls at the first freeable
+  predecessor.
+
+The last is the consequential one, and it is discussed under Delayed Ownership
+Transfer below.
+
+A sixth defect is in the type rules rather than in an invariant. Neither
+T-Replace nor T-UnlinkH prevents a rcuFresh reference in the environment from
+holding a field that points at the node the rule unlinks; the aliasing premises
+quantify only over rcuItr references, and the denotation of a type environment
+is an intersection rather than a separating conjunction, so nothing else
+excludes it. The resulting state breaks Fresh-Points-Iterator and the denotation
+of the fresh reference's own type, and linking that reference in afterwards
+would splice a node already scheduled for reclamation back into the structure.
+Both rules now carry a premise excluding it. Both worked examples still type
+check unchanged, since the fresh node each builds points at the children of the
+node being replaced rather than at that node.
+
+Two of the six were found by attempting the proofs rather than by reading, and
+both are cases whose proof the technical report calls trivial. Every defect has
+a machine-checked proof or counterexample, the corrected set is machine-checked
+satisfiable, and the development has no axioms. The corrected statements now
+appear as an appendix, with the published ones retained alongside for
+comparison.
+
+
 > R2: Emphasis on not appealing to implementation details 
 
 
@@ -48,7 +90,33 @@ interact with the subtyping judgment.  We can and should make this more explicit
 > R2: Delayed Ownership Transfer
 
 
-We can expand on this in Section 6.1: Once an object is observed as *unlinked* by the writer in the *observation-map* of the logical state, it waits for all other threads’ mappings to *iterator* observation dropped (object is mapped to *freeable* for the writer), and reclaim it.
+We agree this is the most delicate part of the proof, and we can now say
+considerably more than we could at submission.
+
+The mechanism is as you describe: once an object is observed as *unlinked* by
+the writer in the observation map of the logical state, it waits for all other
+threads' *iterator* observations to be dropped (the object becomes *freeable*
+for the writer) before being reclaimed.
+
+What makes that safe is the property that a node awaiting reclamation is never
+reachable from the root, and this is exactly where the published
+Unlinked-Reachability fails. It is stated one step, with hypothesis "unlinked"
+and conclusion "unlinked or freeable", so an induction along a path stalls at
+the first freeable predecessor, where no invariant applies. The Unlink proof
+appeals to it in the reachability form regardless. Closing the hypothesis under
+the disjunction repairs it; we have machine-checked both the repair and a
+counterexample to the published form, along with the corresponding chaining
+property for the free list. Together those two are what keep a newly arrived
+reader away from a node scheduled for reclamation.
+
+We have also mechanized the Free case of heap-domain closure. Free is the only
+action that removes a location, so it is the only place where the obligation --
+that no surviving edge points at the freed node -- is real; we give a
+counterexample showing it cannot be dispensed with. The technical report
+discharges that case, and the whole group of memory axioms for that action, as
+"trivial".
+
+We will expand Section 6 along these lines.
 
 
 
