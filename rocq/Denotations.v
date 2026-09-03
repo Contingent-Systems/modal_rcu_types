@@ -392,6 +392,63 @@ Section Denotations.
     - exact (fresh_unreachable s t xr xn N1 on HFR Hroot Hn Hstkn Hne).
   Qed.
 
+
+  (** ** Heap-domain closure for the three mutations
+
+      [HD_h_upd] asks that the location written be allocated already.  Where
+      that comes from differs by rule, and the differences are informative. *)
+
+  (** Unlink writes a node the structure already points at, so HD itself
+      supplies the obligation.  Shortest of the three. *)
+  Theorem unlink_preserves_HD s ox f1 oz f2 ow :
+    HD_h (hp (ms s)) ->
+    hp (ms s) oz f2 = Some (VLoc ow) ->
+    HD_h (upd (hp (ms s)) ox f1 (VLoc ow)).
+  Proof. intros HD He. apply HD_h_upd; [exact HD | exact (HD oz f2 ow He)]. Qed.
+
+  (** Insert writes a fresh node, which nothing points at, so HD cannot supply
+      it -- the fresh node's own field map does.  [f4] is set, so the node has a
+      defined field and is allocated. *)
+  Theorem insert_preserves_HD s t xn xo N1 f4 op f on oo :
+    HD_h (hp (ms s)) ->
+    D_rcuFresh s t xn N1 ->
+    stk (ms s) xn t = Some on ->
+    N1 f4 = Some (FVar xo) ->
+    stk (ms s) xo t = Some oo ->
+    HD_h (upd (hp (ms s)) op f (VLoc on)).
+  Proof.
+    intros HD Hn Hstkn Hf4 Hstko.
+    apply HD_h_upd; [exact HD |].
+    destruct Hn as [n' (Hstk & _ & _ & _ & Hfields & _)].
+    rewrite Hstk in Hstkn. injection Hstkn as <-.
+    destruct (Hfields f4 (FVar xo) Hf4) as [oy (_ & He & _ & _)].
+    exists f4, (VLoc oy). exact He.
+  Qed.
+
+  (** Replace also writes a fresh node, but here the mirroring does the work:
+      the replaced node is pointed at, so HD allocates it, and the fresh node
+      agrees with it on every field.  So this case rests on the same side
+      condition as its UNQR case. *)
+  Theorem replace_preserves_HD s t xn xo rho1 N op f oo on :
+    (forall g, FType g = RCUField) ->
+    HD_h (hp (ms s)) ->
+    hp (ms s) op f = Some (VLoc oo) ->
+    D_rcuFresh s t xn N ->
+    D_rcuItr   s t xo rho1 N ->
+    stk (ms s) xn t = Some on ->
+    stk (ms s) xo t = Some oo ->
+    (forall g, FType g = RCUField -> N g <> None) ->
+    HD_h (upd (hp (ms s)) op f (VLoc on)).
+  Proof.
+    intros Hall HD Hedge Hn Ho Hstkn Hstko Hdom.
+    apply HD_h_upd; [exact HD |].
+    assert (Hmir : Mirrors (hp (ms s)) on oo)
+      by exact (replace_denot_Mirrors s t xn xo rho1 N on oo
+                  Hall Hn Ho Hstkn Hstko Hdom).
+    destruct (HD op f oo Hedge) as [g [v Hv]].
+    exists g, v. rewrite (Hmir g). exact Hv.
+  Qed.
+
 End Denotations.
 
 (** ** Status
@@ -432,3 +489,6 @@ Print Assumptions fresh_unreachable.
 Print Assumptions replace_preserves_UNQR.
 Print Assumptions unlink_preserves_UNQR.
 Print Assumptions insert_preserves_UNQR.
+Print Assumptions unlink_preserves_HD.
+Print Assumptions insert_preserves_HD.
+Print Assumptions replace_preserves_HD.
