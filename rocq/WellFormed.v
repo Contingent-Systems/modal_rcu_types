@@ -311,19 +311,14 @@ Qed.
     node in afterwards would splice a node already scheduled for reclamation
     back into the structure.
 
-    Both rules that produce an [unlinked] observation are affected.  The repair
-    is the same for each -- extend the aliasing premise, which today quantifies
-    only over [rcuItr] variables, to exclude fresh predecessors of the node
-    being unlinked ([y <> o] for T-Replace, [y <> z] for T-UnlinkH).
-    T-Insert needs nothing: it unlinks nothing, so no observation is lost.
-
     FPI says a fresh node's RCU fields point at locations the writer observes as
     [iterator].  T-Replace unlinks [o], which costs [o] its [iterator]
     observation (WULK makes [iterator] and [unlinked] exclusive).  So if any
     *fresh* node has a field pointing at [o], FPI held before the write and
     fails after it.
 
-    Nothing rules that out.  The rule's aliasing premise quantifies over
+    Nothing in the published rules ruled that out.  The aliasing premise
+    quantifies over
     [x:rcuItr rho N3([f1 |-> y])] and concludes [y <> o]; a variable typed
     [rcuFresh] is not an [rcuItr] and so is not covered.  Nor does the shape of
     the environment help: the denotation of a type environment is the
@@ -331,6 +326,17 @@ Qed.
     conjunction, so two variables may denote overlapping structure.  And the
     state is reachable -- T-WriteFH sets a fresh node's field to an [rcuItr]
     target, which is exactly what [o] is until the replacement happens.
+
+    Both rules that produce an [unlinked] observation were affected, and both
+    now carry the repair: an extra premise excluding fresh predecessors of the
+    node being unlinked ([y <> o] for T-Replace, [m' <> z] for T-UnlinkH),
+    alongside the aliasing premise that covers only [rcuItr] variables.
+    T-Insert needs nothing: it unlinks nothing, so no observation is lost.
+
+    The state below is what those premises exclude, kept as the witness that
+    they are not redundant.  The BST deletion still type checks under them: the
+    fresh node it builds points at the children of the node being replaced,
+    never at that node.
 
     Below, node 4 is fresh with an RCU edge to node 1; the write replaces 1 with
     2 under the root, unlinking 1. *)

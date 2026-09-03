@@ -642,6 +642,8 @@ From assumptions in the type rule of \textsc{T-UnlinkH} we assume that
     \label{ahu4} \\
 \forall_{f\in dom(\N')} \ldotp f\neq f_2 \implies  \N'(f) = \textsf{null}
       \label{ahu5} \\
+\forall_{w \in \Gamma, \N_4, f_3, m'} \ldotp (w:\textsf{rcuFresh}\,\N_4([f_3\rightharpoonup m'])) \implies m' \neq z
+      \label{ahu5b} \\
 \begin{array}{l}\footnotesize
 \forall_{n\in \Gamma,m,\N''', p''',f}\ldotp n:\textsf{rcuItr}\,\rho'''\,\N'''([f\rightharpoonup m]) \implies %\arcr
 \left\{\begin{array}{l}
@@ -780,14 +782,15 @@ step the path-distinctness argument alone does not reach.
 \end{case}
 \begin{case} - \textbf{WF} and \textbf{FR} Trivial.
 \end{case}
-\begin{case} - \textbf{FPI} \emph{This case does not go through; see the
-corresponding case of Lemma \ref{lemma:linkf}.}  \textsc{T-UnlinkH} makes $o_y$
-\textsf{unlinked}, which costs it $\textsf{iterator}\,\sigma.l$ by
-\textbf{WULK}, and \ref{ahu6} constrains only $\textsf{rcuItr}$ variables, so a
-$\textsf{rcuFresh}$ variable in $\Gamma$ with a field pointing at $o_y$ makes
-\textbf{FPI} --- and the denotation of that variable's own type --- fail in
-$\sigma'$.  The repair is to extend \ref{ahu6} to fresh variables with $y \neq
-z$.
+\begin{case} - \textbf{FPI}
+\textsc{T-UnlinkH} makes $o_y$ \textsf{unlinked}, which costs it
+$\textsf{iterator}\,\sigma.l$ by \textbf{WULK}, so as in the corresponding case
+of Lemma \ref{lemma:linkf} everything turns on no \textsf{fresh} node pointing
+at $o_y$.  That is \ref{ahu5b}.  It does not follow from \ref{ahu6}, which
+constrains only $\textsf{rcuItr}$ variables, and without it both \textbf{FPI}
+and the denotation of the offending variable's own $\textsf{rcuFresh}$ type fail
+in $\sigma'$.  With it the case is immediate, exactly as for
+Lemma \ref{lemma:linkf}.
 \end{case}
 \begin{case} - \textbf{AWRT} By \ref{phu5}.
 \end{case}
@@ -874,6 +877,8 @@ From assumptions in the type rule of \textsc{T-Replace} we assume that
 \label{ahu5f} \\
 \forall_{f''} \ldotp \textsf{FType}(f'')=\textsf{RCU} \implies f'' \in dom(\N')
 \label{ahu5bf} \\
+\forall_{w \in \Gamma, \N_4, f_3, y'} \ldotp (w:\textsf{rcuFresh}\,\N_4([f_3\rightharpoonup y'])) \implies y' \neq r
+\label{ahu5cf} \\
 \begin{aligned}
 \forall_{x \in \Gamma, \N''', \rho'',f',y} \ldotp (x:\textsf{rcuItr}\,\rho''\,\N'''([f'\rightharpoonup y])) \implies (\neg\mathsf{MayAlias}(\rho'',\{\rho,\rho'\}) \land (y\neq r  ))
 \label{ahu6f}
@@ -1015,42 +1020,34 @@ the case analysis closes without the exclusion that \textsc{Insert} and
 \end{case}
 \begin{case} - \textbf{FLR} By choice of $F'_1$ and \ref{ahu16f}. 
 \end{case}
-\begin{case} - \textbf{FPI} \emph{This case does not go through, and the rule
-needs an additional premise.}
-
+\begin{case} - \textbf{FPI}
 \textbf{FPI} requires every \textsf{RCU} field of a \textsf{fresh} node to point
 at a location the writer observes as \textsf{iterator}.  The action makes $o_r$
 \textsf{unlinked}, and by \textbf{WULK} it therefore loses
-$\textsf{iterator}\,\sigma.l$.  So if any location observed as \textsf{fresh}
-has a field pointing at $o_r$, \textbf{FPI} holds in $\sigma$ and fails in
-$\sigma'$.
+$\textsf{iterator}\,\sigma.l$; so the case turns entirely on no \textsf{fresh}
+node pointing at $o_r$.
 
-Nothing excludes that.  The rule's aliasing premise \ref{ahu6f} ranges over
-$x:\textsf{rcuItr}\,\rho''\,\N'''([f'\rightharpoonup y])$ and concludes $y \neq
-r$; a variable typed $\textsf{rcuFresh}$ is not an $\textsf{rcuItr}$, so it is
-not covered.  Nor does the environment's shape help: $\llbracket \Gamma
-\rrbracket$ is the \emph{intersection} of the individual variables' denotations,
-not a separating conjunction, so two variables may denote overlapping structure.
-And the state is reachable: \textsc{T-WriteFH} sets a fresh node's field to an
-$\textsf{rcuItr}$ target, which is exactly what $r$ is until the replacement.
+That is exactly \ref{ahu5cf}, and it is why the rule carries that premise.  It
+is not implied by \ref{ahu6f}, which ranges only over
+$x:\textsf{rcuItr}\,\rho''\,\N'''([f'\rightharpoonup y])$ --- a
+$\textsf{rcuFresh}$ variable is not an $\textsf{rcuItr}$ --- nor by the shape of
+the environment, since $\llbracket \Gamma \rrbracket$ is the \emph{intersection}
+of the individual variables' denotations rather than a separating conjunction,
+so two variables may denote overlapping structure.  Without it the lemma is
+false: \textsc{T-WriteFH} sets a fresh node's field to an $\textsf{rcuItr}$
+target, which is what $r$ is until the replacement, and the resulting state
+satisfies \textbf{FPI} before the write and violates it after
+(\texttt{FPI\_not\_preserved\_by\_replace} in \texttt{rocq/WellFormed.v}).  The
+same state also fails $\llbracket \textsf{rcuFresh}\,\N''\rrbracket$ itself,
+which requires every target in $codom(\N'')$ to be observed as
+\textsf{iterator}, so the premise is needed for the post-environment's own
+denotation and not only for \textbf{FPI}.
 
-The failure is not confined to \textbf{FPI}.  $\llbracket
-\textsf{rcuFresh}\,\N\rrbracket$ itself requires every target in $codom(\N)$ to
-be observed as \textsf{iterator}, so such a $\Gamma$ fails the denotation of its
-own post-environment and this lemma is false as stated.  What it guards against
-is concrete: linking that fresh node in afterwards would splice a node already
-scheduled for reclamation back into the structure.
-
-The repair is to extend \ref{ahu6f} to fresh variables,
-\[\forall_{x \in \Gamma, \N''', f', y} \ldotp
-  (x:\textsf{rcuFresh}\,\N'''([f'\rightharpoonup y])) \implies y \neq r\]
-after which the case is immediate: no \textsf{fresh} node points at $o_r$, every
-other \textsf{fresh} node's targets are untouched, and \textbf{FPI} is inherited
-from \ref{ahu16f}.\textbf{FPI}.  The counterexample is machine checked as
-\texttt{FPI\_not\_preserved\_by\_replace} in \texttt{rocq/WellFormed.v}.
-\textsc{T-UnlinkH} has the same defect for the same reason and takes the same
-repair with $y \neq z$; \textsc{T-Insert} is unaffected, since it unlinks
-nothing and so costs no location its \textsf{iterator} observation.
+Given \ref{ahu5cf} the case is immediate: no \textsf{fresh} node points at
+$o_r$, the targets of every other \textsf{fresh} node are untouched by the
+write, and \textbf{FPI} is inherited from \ref{ahu16f}.\textbf{FPI}.
+\textsc{T-Insert} needs no such premise, since it unlinks nothing and so costs
+no location its \textsf{iterator} observation.
 \end{case}
 \begin{case} - \textbf{WULK} Determined by operational semantics By \ref{ahu16f}.\textbf{WULK}, \ref{ahus1f}, \ref{ahus2f} and operational semantics.
 \end{case}

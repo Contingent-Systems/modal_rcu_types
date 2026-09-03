@@ -369,9 +369,8 @@ The semantic changes above invalidate specific cases in Section
   turns on the observation changing from \frsh{} to \itr{} in the same step, so
   that \textbf{FR}'s hypothesis stops applying to it.
 
-\item \textbf{FPI (\S11)} --- \emph{does not hold; the rules need
-  strengthening.}  Expected to be among the easiest items, this is instead the
-  sixth defect.  \textsc{T-Replace} and \textsc{T-UnlinkH} both make a node
+\item \textbf{FPI (\S11)} --- \emph{done, after repairing two rules.}  Expected
+  to be among the easiest items, this was instead the sixth defect.  \textsc{T-Replace} and \textsc{T-UnlinkH} both make a node
   \unlk, which by \textbf{WULK} costs it its \itr{} observation; if a
   \textsf{rcuFresh} variable in $\Gamma$ has a field pointing at that node,
   \textbf{FPI} holds before the write and fails after.  The rules' aliasing
@@ -381,9 +380,14 @@ The semantic changes above invalidate specific cases in Section
   The failure is not confined to \textbf{FPI}: $\llbracket
   \textsf{rcuFresh}\,\mathcal{N}\rrbracket$ carries the same requirement, so the
   affected lemmas fail to establish the denotation of their own
-  post-environment.  Repair: extend the aliasing premise of both rules to fresh
-  variables.  \textsc{Insert} is unaffected --- it unlinks nothing.  Machine
-  checked as \texttt{FPI\_not\_preserved\_by\_replace}.
+  post-environment.  Both rules now carry the repair --- a premise excluding
+  \textsf{rcuFresh} predecessors of the node being unlinked, $y \neq o$ for
+  \textsc{T-Replace} and $m' \neq z$ for \textsc{T-UnlinkH} --- and with it both
+  cases are immediate.  \textsc{Insert} needs nothing, since it unlinks nothing.
+  The binary search tree deletion still type checks: the fresh node it builds
+  points at the children of the node being replaced, never at that node.  The
+  counterexample showing the premise is not redundant is machine checked as
+  \texttt{FPI\_not\_preserved\_by\_replace}.
 
 \item \textbf{RITR (\S13)} --- \emph{done.}  The composition step of
   \textsc{WriteFreshField} now uses the corrected statement in the only form
