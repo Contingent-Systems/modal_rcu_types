@@ -27,9 +27,11 @@
     denotations of the types and the atomic-action lemmas as Hoare triples.
     This file is the substrate those will be stated over, not a proof of any of
     them.  The ghost state itself is complete for their purposes: observations
-    and free-list entries can be introduced ([obs_alloc_at], [fl_alloc_at]) and
-    grown ([obs_add]), and ownership can be read back as a fact about the
-    authority ([obs_frag_subset], [observes_mem]).
+    and free-list entries can be introduced ([obs_alloc_at]) and *replaced*
+    ([obs_set], [fl_set]), and control of an entry tells you exactly what the
+    authority records there ([obs_ctl_agree], [observes_mem]).  Replacement is
+    the operation the first version of this file could not express; see the
+    note on the value camera below.
 
     What it does establish is that the substrate is sound and usable: the
     cameras are well formed, the invariant is allocatable, ownership of a
@@ -39,7 +41,7 @@
 
     Checked with Rocq 9.2 against the Iris in the bluerock switch. *)
 
-From iris.algebra Require Import auth gmap gset.
+From iris.algebra Require Import auth excl gmap gset local_updates.
 From iris.base_logic.lib Require Import invariants own.
 From iris.proofmode Require Import proofmode.
 From stdpp Require Import gmap sets.
@@ -107,12 +109,25 @@ Definition to_LState
 
     [gsetUR] has union as its operation and subset as its order, so a fragment
     [{[o := s]}] is included in the authority exactly when the authority records
-    a superset of [s] at [o].  That is the property [obs_frag_subset] below, and
-    it is what makes "thread [t] observes [o] as [iterator]" a resource rather
-    than a side condition. *)
+    exactly the entry at [o].  That is [obs_ctl_agree] below, and it is what
+    makes "the writer observes [o] as [iterator]" a resource rather than a side
+    condition -- and, unlike a shared fragment, one that can be given up. *)
 
-Definition obsUR : ucmra := authUR (gmapUR Loc (gsetUR obs)).
-Definition flUR  : ucmra := authUR (gmapUR Loc (gsetUR TID)).
+(** The value camera is [exclR], not [gsetUR].
+
+    [gsetUR] was the first choice, and it was wrong.  Its operation is union, so
+    all its elements are [CoreId] and every fragment is persistent: an
+    observation once handed out could never be withdrawn.  Unlinking has to
+    withdraw one -- the replaced node loses [iterator] and gains [unlinked], and
+    WULK makes those exclusive -- so no action that unlinks could re-establish
+    the invariant.  The union camera is right for a quantity that only grows,
+    and observations are not one.
+
+    Exclusive control of a location's observation set supports withdrawal.  The
+    authority still holds the same logical map, so [to_LState] and everything
+    stated over it are unaffected. *)
+Definition obsUR : ucmra := authUR (gmapUR Loc (exclR (leibnizO (gset obs)))).
+Definition flUR  : ucmra := authUR (gmapUR Loc (exclR (leibnizO (gset TID)))).
 
 Class rcuG (Σ : gFunctors) := RcuG {
   rcu_obsG :: inG Σ obsUR;
@@ -129,148 +144,139 @@ Proof. solve_inG. Qed.
 Section ghost.
   Context `{!rcuG Σ}.
 
+  (** The authority holds the logical map; a fragment is *exclusive* control of
+      one location's entry.  Control is what makes withdrawal possible, and it
+      is the writer's relationship to a location's observations. *)
   Definition obs_auth (γ : gname) (O : gmap Loc (gset obs)) : iProp Σ :=
-    own γ (● O).
-  Definition obs_frag (γ : gname) (o : Loc) (s : gset obs) : iProp Σ :=
-    own γ (◯ {[ o := s ]}).
+    own γ (● (Excl <$> O : gmap Loc (excl (leibnizO (gset obs))))).
+  Definition obs_ctl (γ : gname) (o : Loc) (s : gset obs) : iProp Σ :=
+    own γ (◯ {[ o := Excl (s : leibnizO (gset obs)) ]}).
 
   Definition fl_auth (γ : gname) (F : gmap Loc (gset TID)) : iProp Σ :=
-    own γ (● F).
-  Definition fl_frag (γ : gname) (o : Loc) (s : gset TID) : iProp Σ :=
-    own γ (◯ {[ o := s ]}).
+    own γ (● (Excl <$> F : gmap Loc (excl (leibnizO (gset TID))))).
+  Definition fl_ctl (γ : gname) (o : Loc) (s : gset TID) : iProp Σ :=
+    own γ (◯ {[ o := Excl (s : leibnizO (gset TID)) ]}).
 
-  (** A single observation, the form the type denotations will use. *)
-  Definition observes (γ : gname) (o : Loc) (ob : obs) : iProp Σ :=
-    obs_frag γ o {[ ob ]}.
-
-  Global Instance obs_frag_persistent γ o s : Persistent (obs_frag γ o s).
-  Proof. apply own_core_persistent, _. Qed.
-
-  Global Instance observes_persistent γ o ob : Persistent (observes γ o ob).
-  Proof. apply _. Qed.
+  (** Control is exclusive: two threads cannot both hold a location's entry.
+      That is the property [gsetUR] could not express. *)
+  Lemma obs_ctl_exclusive γ o s s' :
+    obs_ctl γ o s -∗ obs_ctl γ o s' -∗ False.
+  Proof.
+    iIntros "H1 H2".
+    iDestruct (own_valid_2 with "H1 H2") as %Hv.
+    iPureIntro. rewrite auth_frag_op_valid singleton_op singleton_valid in Hv.
+    by apply exclusive_l in Hv.
+  Qed.
 
   (** Allocation: both maps start empty. *)
   Lemma obs_alloc : ⊢ |==> ∃ γ, obs_auth γ ∅.
   Proof.
-    iMod (own_alloc (● (∅ : gmap Loc (gset obs)))) as (γ) "H".
+    iMod (own_alloc (● (∅ : gmap Loc (excl (leibnizO (gset obs))))))
+      as (γ) "H".
     { by apply auth_auth_valid. }
-    iModIntro. iExists γ. iFrame.
+    iModIntro. iExists γ. unfold obs_auth. by rewrite fmap_empty.
   Qed.
 
   Lemma fl_alloc : ⊢ |==> ∃ γ, fl_auth γ ∅.
   Proof.
-    iMod (own_alloc (● (∅ : gmap Loc (gset TID)))) as (γ) "H".
+    iMod (own_alloc (● (∅ : gmap Loc (excl (leibnizO (gset TID))))))
+      as (γ) "H".
     { by apply auth_auth_valid. }
-    iModIntro. iExists γ. iFrame.
+    iModIntro. iExists γ. unfold fl_auth. by rewrite fmap_empty.
   Qed.
 
-  (** Agreement.  Holding a fragment at [o] means the authority records at
-      least it there -- the property that turns an owned observation into a
-      fact about the invariant's state. *)
-  Lemma obs_frag_subset γ O o s :
-    obs_auth γ O -∗ obs_frag γ o s -∗ ⌜∃ s', O !! o = Some s' ∧ s ⊆ s'⌝.
+  (** Agreement.  Holding a location's entry tells you exactly what the
+      authority records there -- an equality now, where the union camera could
+      only give an inclusion. *)
+  Lemma obs_ctl_agree γ O o s :
+    obs_auth γ O -∗ obs_ctl γ o s -∗ ⌜O !! o = Some s⌝.
   Proof.
     iIntros "Ha Hf".
     iDestruct (own_valid_2 with "Ha Hf") as %Hv.
     iPureIntro.
     apply auth_both_valid_discrete in Hv as [Hincl _].
-    apply singleton_included_l in Hincl as [s' [Hlk Hle]].
-    apply leibniz_equiv in Hlk.
-    exists s'. split; [exact Hlk |].
-    rewrite Some_included_total in Hle.
-    by apply gset_included in Hle.
+    apply singleton_included_l in Hincl as [y [Hlk Hle]].
+    rewrite lookup_fmap in Hlk.
+    apply fmap_Some_equiv in Hlk as [s0 [Hs0 Hy]].
+    rewrite Hs0. f_equal.
+    rewrite Hy Excl_included in Hle.
+    by apply leibniz_equiv.
   Qed.
 
-  (** The single-observation form: what the writer's [rcuItr] denotation will
-      hand to the invariant. *)
+  Lemma fl_ctl_agree γ F o s :
+    fl_auth γ F -∗ fl_ctl γ o s -∗ ⌜F !! o = Some s⌝.
+  Proof.
+    iIntros "Ha Hf".
+    iDestruct (own_valid_2 with "Ha Hf") as %Hv.
+    iPureIntro.
+    apply auth_both_valid_discrete in Hv as [Hincl _].
+    apply singleton_included_l in Hincl as [y [Hlk Hle]].
+    rewrite lookup_fmap in Hlk.
+    apply fmap_Some_equiv in Hlk as [s0 [Hs0 Hy]].
+    rewrite Hs0. f_equal.
+    rewrite Hy Excl_included in Hle.
+    by apply leibniz_equiv.
+  Qed.
+
+  (** Introducing an entry. *)
+  Lemma obs_alloc_at γ O o s :
+    O !! o = None ->
+    obs_auth γ O ==∗ obs_auth γ (<[o := s]> O) ∗ obs_ctl γ o s.
+  Proof.
+    iIntros (Hlk) "Ha".
+    iMod (own_update _ _ (● (Excl <$> (<[o := s]> O)
+                              : gmap Loc (excl (leibnizO (gset obs))))
+                          ⋅ ◯ {[o := Excl (s : leibnizO (gset obs))]})
+           with "Ha") as "[Ha Hf]".
+    { rewrite fmap_insert. apply auth_update_alloc.
+      apply alloc_singleton_local_update; [| done].
+      by rewrite lookup_fmap Hlk. }
+    iModIntro. iFrame.
+  Qed.
+
+  (** Replacing one.  This is the update the union camera could not do, and the
+      reason for the change: unlinking rewrites a location's observations
+      rather than adding to them. *)
+  Lemma obs_set γ O o s s' :
+    obs_auth γ O -∗ obs_ctl γ o s ==∗
+      obs_auth γ (<[o := s']> O) ∗ obs_ctl γ o s'.
+  Proof.
+    iIntros "Ha Hf".
+    iMod (own_update_2 _ _ _ (● (Excl <$> (<[o := s']> O)
+                                  : gmap Loc (excl (leibnizO (gset obs))))
+                              ⋅ ◯ {[o := Excl (s' : leibnizO (gset obs))]})
+           with "Ha Hf") as "[Ha Hf]".
+    { rewrite fmap_insert. apply auth_update.
+      apply singleton_local_update_any.
+      intros y _. by apply exclusive_local_update. }
+    iModIntro. iFrame.
+  Qed.
+
+  Lemma fl_set γ F o s s' :
+    fl_auth γ F -∗ fl_ctl γ o s ==∗
+      fl_auth γ (<[o := s']> F) ∗ fl_ctl γ o s'.
+  Proof.
+    iIntros "Ha Hf".
+    iMod (own_update_2 _ _ _ (● (Excl <$> (<[o := s']> F)
+                                  : gmap Loc (excl (leibnizO (gset TID))))
+                              ⋅ ◯ {[o := Excl (s' : leibnizO (gset TID))]})
+           with "Ha Hf") as "[Ha Hf]".
+    { rewrite fmap_insert. apply auth_update.
+      apply singleton_local_update_any.
+      intros y _. by apply exclusive_local_update. }
+    iModIntro. iFrame.
+  Qed.
+
+  (** Reading a single observation off the entry. *)
+  Definition observes (γ : gname) (o : Loc) (ob : obs) : iProp Σ :=
+    ∃ s, obs_ctl γ o s ∗ ⌜ob ∈ s⌝.
+
   Lemma observes_mem γ O o ob :
     obs_auth γ O -∗ observes γ o ob -∗ ⌜∃ s, O !! o = Some s ∧ ob ∈ s⌝.
   Proof.
-    iIntros "Ha Hf".
-    iDestruct (obs_frag_subset with "Ha Hf") as %[s' [Hlk Hsub]].
-    iPureIntro. exists s'. split; [exact Hlk |].
-    apply Hsub, elem_of_singleton. reflexivity.
-  Qed.
-
-  Lemma fl_frag_subset γ F o s :
-    fl_auth γ F -∗ fl_frag γ o s -∗ ⌜∃ s', F !! o = Some s' ∧ s ⊆ s'⌝.
-  Proof.
-    iIntros "Ha Hf".
-    iDestruct (own_valid_2 with "Ha Hf") as %Hv.
-    iPureIntro.
-    apply auth_both_valid_discrete in Hv as [Hincl _].
-    apply singleton_included_l in Hincl as [s' [Hlk Hle]].
-    apply leibniz_equiv in Hlk.
-    exists s'. split; [exact Hlk |].
-    rewrite Some_included_total in Hle.
-    by apply gset_included in Hle.
-  Qed.
-
-  (** Recording the first observation on a location, and the first free-list
-      entry for one.  These are the fresh-key updates: [o] is not yet in the
-      map, so [alloc_singleton_local_update] applies and the fragment falls out
-      of [auth_update_alloc]. *)
-  Lemma obs_alloc_at γ O o ob :
-    O !! o = None ->
-    obs_auth γ O ==∗ obs_auth γ (<[o := {[ob]}]> O) ∗ observes γ o ob.
-  Proof.
-    iIntros (Hlk) "Ha".
-    iMod (own_update _ _ (● (<[o := {[ob]}]> O) ⋅ ◯ {[o := {[ob]}]})
-           with "Ha") as "[Ha Hf]".
-    { by apply auth_update_alloc, alloc_singleton_local_update. }
-    iModIntro. iFrame.
-  Qed.
-
-  (** Adding an observation to a location that already has some.  This is the
-      update every action needs that *changes* an observation rather than
-      introducing one -- unlinking, synchronising, linking.
-
-      The route matters.  Going through [auth_update_alloc] from the empty
-      fragment forces a validity obligation on the whole composed [gmap], which
-      is awkward here: the goal's map lookup elaborates at the camera level and
-      does not match the one [destruct] abstracts, so the usual pointwise
-      argument will not go through.  Going through [auth_update] with a
-      fragment the caller already holds avoids it entirely --
-      [singleton_local_update] reduces the obligation to a *gset* local update,
-      where validity is trivially [True].  That is also the better interface:
-      the type denotations hold fragments, so a caller adding an observation to
-      a location has one to hand. *)
-  Lemma obs_add γ O o s s0 ob :
-    O !! o = Some s ->
-    obs_auth γ O -∗ obs_frag γ o s0 ==∗
-      obs_auth γ (<[o := {[ob]} ∪ s]> O) ∗ obs_frag γ o ({[ob]} ∪ s0).
-  Proof.
-    iIntros (Hlk) "Ha Hf".
-    iMod (own_update_2 _ _ _
-            (● (<[o := {[ob]} ∪ s]> O) ⋅ ◯ {[o := {[ob]} ∪ s0]})
-           with "Ha Hf") as "[Ha Hf]".
-    { apply auth_update. rewrite -!gset_op.
-      apply singleton_local_update with (x := s); [exact Hlk |].
-      apply (op_local_update _ _ {[ob]}). done. }
-    iModIntro. iFrame.
-  Qed.
-
-  (** The single-observation form: having added [ob], the caller can hand out
-      the [observes] witness for it, since [{[ob]}] is included in the fragment
-      it now holds. *)
-  Lemma obs_frag_weaken γ o s0 ob :
-    ob ∈ s0 -> obs_frag γ o s0 -∗ observes γ o ob.
-  Proof.
-    iIntros (Hin) "H". unfold observes, obs_frag.
-    iApply (own_mono with "H").
-    apply auth_frag_mono, singleton_included_mono.
-    apply gset_included. set_solver.
-  Qed.
-
-  Lemma fl_alloc_at γ F o s :
-    F !! o = None ->
-    fl_auth γ F ==∗ fl_auth γ (<[o := s]> F) ∗ fl_frag γ o s.
-  Proof.
-    iIntros (Hlk) "Ha".
-    iMod (own_update _ _ (● (<[o := s]> F) ⋅ ◯ {[o := s]})
-           with "Ha") as "[Ha Hf]".
-    { by apply auth_update_alloc, alloc_singleton_local_update. }
-    iModIntro. iFrame.
+    iIntros "Ha [%s [Hf %Hin]]".
+    iDestruct (obs_ctl_agree with "Ha Hf") as %Hlk.
+    iPureIntro. by exists s.
   Qed.
 
 End ghost.
@@ -369,11 +375,11 @@ Proof. reflexivity. Qed.
     logic or functional extensionality.  Keeping the bridge lemmas
     componentwise, rather than as a record equality, is what preserves this. *)
 
-Print Assumptions obs_frag_subset.
+Print Assumptions obs_ctl_agree.
+Print Assumptions fl_ctl_agree.
+Print Assumptions obs_ctl_exclusive.
 Print Assumptions observes_mem.
-Print Assumptions fl_frag_subset.
 Print Assumptions obs_alloc_at.
-Print Assumptions obs_add.
-Print Assumptions obs_frag_weaken.
-Print Assumptions fl_alloc_at.
+Print Assumptions obs_set.
+Print Assumptions fl_set.
 Print Assumptions initial_ghost_obsv.

@@ -187,52 +187,54 @@ Section actions.
 
 End actions.
 
-(** ** A limitation of the observation camera, found by attempting FPI
+(** ** Revoking an observation
 
-    The next invariant to discharge for these actions is FPI, and it does not
-    go through -- not because of the rules, which were repaired, but because of
-    the ghost state chosen in [IrisGhost.v].
+    This is where the first version of the ghost state failed, and it is worth
+    recording what the failure was, because the shape of the fix is the
+    interesting part.
 
-    Unlinking has to *revoke* an observation: the replaced node loses
-    [iterator] and gains [unlinked], and WULK makes the two exclusive.  But the
-    value camera is [gsetUR], whose operation is union.  Its elements are all
-    [CoreId], so [obs_frag] is persistent -- an observation, once handed out,
-    is held forever, and by [observes_mem] the authority must keep recording it
-    forever too.
+    Unlinking must *withdraw* an observation: the replaced node loses
+    [iterator] and gains [unlinked], and WULK makes those exclusive.  The first
+    value camera was [gsetUR], whose operation is union.  All its elements are
+    [CoreId], so every fragment was persistent -- an observation once handed out
+    was held forever, and by [observes_mem] the authority had to go on recording
+    it forever too.  No action that unlinks could then re-establish the
+    invariant.  The lemma below is the positive form of what was impossible:
+    holding a location's entry, a thread can replace it outright, and the
+    reconstructed state afterwards records the new observations and not the old.
 
-    The lemma below is that fact stated precisely: while any thread holds the
-    iterator fragment for a location, WULK forbids that location from being
-    observed unlinked.  Since the fragment is persistent it is still held in
-    the post-state, so no action that unlinks such a location can re-establish
-    the invariant.
+    The union camera is right for a quantity that only grows.  Observations are
+    not one. *)
 
-    This is a real defect in milestone 3, not a missing lemma.  The union
-    camera is right for a quantity that only grows; observations are not one.
-    Fixing it is a design choice with consequences for how readers and the
-    writer share observations -- an exclusive or fractional per-location entry
-    would allow revocation but would stop readers sharing an observation
-    freely, which is what [observes] is for -- so it is recorded here rather
-    than guessed at. *)
-
-Section limitation.
+Section revocation.
   Context `{!rcuG Σ}.
 
-  Lemma iter_frag_blocks_unlink m O U T F γ o lw :
-    lk m = Some lw ->
-    WULK (to_LState m O U T F) ->
-    obs_auth γ O -∗ observes γ o (Oiter lw) -∗
-      ⌜forall t', ~ obsv (to_LState m O U T F) o (Ounlk t')⌝.
+  (** Unlinking, at the level of the ghost state: the writer holds the entry for
+      [o], replaces its iterator observation by an unlinked one, and the
+      reconstructed state reflects exactly that. *)
+  Lemma obs_unlink_step γ O m U T F o lw t :
+    obs_auth γ O -∗ obs_ctl γ o {[Oiter lw]} ==∗
+      obs_auth γ (<[o := {[Ounlk t]}]> O)
+      ∗ obs_ctl γ o {[Ounlk t]}
+      ∗ ⌜obsv (to_LState m (<[o := {[Ounlk t]}]> O) U T F) o (Ounlk t)⌝
+      ∗ ⌜~ obsv (to_LState m (<[o := {[Ounlk t]}]> O) U T F) o (Oiter lw)⌝.
   Proof.
-    iIntros (Hlk HW) "Ha Hf".
-    iDestruct (observes_mem with "Ha Hf") as %[s [Hlkp Hin]].
-    iPureIntro. intros t' Hunl.
-    assert (Hiter : obsv (to_LState m O U T F) o (Oiter lw))
-      by (simpl; rewrite Hlkp; exact Hin).
-    destruct (HW lw o t' Hlk Hiter) as [Hno _].
-    exact (Hno Hunl).
+    iIntros "Ha Hf".
+    iMod (obs_set with "Ha Hf") as "[Ha Hf]".
+    iModIntro. iFrame. iPureIntro. split.
+    - simpl. rewrite lookup_insert_eq. set_solver.
+    - simpl. rewrite lookup_insert_eq. set_solver.
   Qed.
 
-End limitation.
+  (** Entries elsewhere are untouched, which is what lets the rest of
+      WellFormed survive the step. *)
+  Lemma obs_unlink_step_ne m O U T F o t x ob :
+    x <> o ->
+    (obsv (to_LState m (<[o := {[Ounlk t]}]> O) U T F) x ob
+     <-> obsv (to_LState m O U T F) x ob).
+  Proof. intros Hne. simpl. by rewrite lookup_insert_ne. Qed.
+
+End revocation.
 
 (** ** Status
 
@@ -252,4 +254,5 @@ Print Assumptions to_LState_obs_kept.
 Print Assumptions replace_post_UNQR.
 Print Assumptions unlink_post_UNQR.
 Print Assumptions insert_post_UNQR.
-Print Assumptions iter_frag_blocks_unlink.
+Print Assumptions obs_unlink_step.
+Print Assumptions obs_unlink_step_ne.
