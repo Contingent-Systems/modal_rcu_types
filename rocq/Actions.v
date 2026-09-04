@@ -236,6 +236,63 @@ Section revocation.
 
 End revocation.
 
+(** ** FPI for unlinking
+
+    The invariant whose failure forced the repair to T-Replace and T-UnlinkH.
+    Now that an observation can be withdrawn, the case can be stated, and the
+    repaired premise is visible as the hypothesis [Hno_fresh_pred] below: no
+    fresh node points at the node being unlinked.  Without it the conclusion is
+    false, which is what [FPI_not_preserved_by_replace] exhibits.
+
+    The other hypotheses are pre-state facts.  [Hox_not_fresh] says the node
+    written is not itself fresh -- it is an [rcuItr] in the rule -- and is what
+    rules out the newly created edge originating at a fresh node. *)
+
+Section fpi.
+
+  Variable FType : FName -> FieldKind.
+
+  Theorem unlink_preserves_FPI m O U T F lw ox f1 oz ow tz :
+    let s  := to_LState m O U T F in
+    let s' := to_LState (write_ms m ox f1 (VLoc ow))
+                        (<[oz := {[Ounlk tz]}]> O) U T F in
+    lk m = Some lw ->
+    FPI FType s ->
+    (forall tf, ~ obsv s ox (Ofresh tf)) ->
+    (forall tf, ~ obsv s oz (Ofresh tf)) ->
+    (forall op tf g, obsv s op (Ofresh tf) -> FType g = RCUField ->
+        hp m op g <> Some (VLoc oz)) ->
+    FPI FType s'.
+  Proof.
+    intros s s' Hlk HFPI Hox_not_fresh Hoz_not_fresh Hno_fresh_pred.
+    intros o f o' t lw' Hfresh Hedge HF Hlk'.
+    (* the lock is untouched by the write *)
+    simpl in Hlk'. rewrite Hlk in Hlk'. injection Hlk' as <-.
+    (* o is not the unlinked node, so its observations are the old ones *)
+    assert (Hone : o <> oz).
+    { intros ->. simpl in Hfresh. rewrite lookup_insert_eq in Hfresh.
+      set_solver. }
+    assert (Hfresh0 : obsv s o (Ofresh t)).
+    { revert Hfresh. subst s s'. simpl. by rewrite lookup_insert_ne. }
+    (* the written edge cannot start at a fresh node *)
+    assert (Hedge0 : hp m o f = Some (VLoc o')).
+    { unfold Edge in Hedge. subst s'.
+      rewrite to_LState_write_hp in Hedge.
+      destruct (Nat.eq_dec o ox) as [->|Hno].
+      - exfalso. exact (Hox_not_fresh t Hfresh0).
+      - rewrite upd_other in Hedge; [exact Hedge |].
+        intros HH. injection HH as HH1 _. contradiction. }
+    (* so the edge is one the pre-state had, and FPI applies to it *)
+    assert (Hiter0 : obsv s o' (Oiter lw))
+      by exact (HFPI o f o' t lw Hfresh0 Hedge0 HF Hlk).
+    (* and o' is not the unlinked node, by the repaired premise *)
+    assert (Ho'ne : o' <> oz)
+      by (intros ->; exact (Hno_fresh_pred o t f Hfresh0 HF Hedge0)).
+    subst s s'. simpl. by rewrite lookup_insert_ne.
+  Qed.
+
+End fpi.
+
 (** ** Status
 
     The two representations are lined up: a field write is transparent to
@@ -256,3 +313,4 @@ Print Assumptions unlink_post_UNQR.
 Print Assumptions insert_post_UNQR.
 Print Assumptions obs_unlink_step.
 Print Assumptions obs_unlink_step_ne.
+Print Assumptions unlink_preserves_FPI.
