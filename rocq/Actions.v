@@ -245,14 +245,20 @@ End revocation.
     false, which is what [FPI_not_preserved_by_replace] exhibits.
 
     The other hypotheses are pre-state facts.  [Hox_not_fresh] says the node
-    written is not itself fresh -- it is an [rcuItr] in the rule -- and is what
-    rules out the newly created edge originating at a fresh node. *)
+    written is not itself fresh -- it is an [rcuItr] in both rules -- and is
+    what rules out the newly created edge originating at a fresh node.
+
+    The argument does not depend on which rule caused the write: it needs only
+    that one field was written and one node lost its iterator observation.  So
+    it is stated once, and T-UnlinkH and T-Replace are instances -- the first
+    writing [x.f1 := r] and unlinking [z], the second writing [p.f := n] and
+    unlinking [o]. *)
 
 Section fpi.
 
   Variable FType : FName -> FieldKind.
 
-  Theorem unlink_preserves_FPI m O U T F lw ox f1 oz ow tz :
+  Theorem write_preserves_FPI m O U T F lw ox f1 oz ow tz :
     let s  := to_LState m O U T F in
     let s' := to_LState (write_ms m ox f1 (VLoc ow))
                         (<[oz := {[Ounlk tz]}]> O) U T F in
@@ -291,6 +297,32 @@ Section fpi.
     subst s s'. simpl. by rewrite lookup_insert_ne.
   Qed.
 
+  (** T-UnlinkH: writes [x.f1 := r], unlinks [z]. *)
+  Corollary unlink_preserves_FPI m O U T F lw ox f1 oz ow tz :
+    lk m = Some lw ->
+    FPI FType (to_LState m O U T F) ->
+    (forall tf, ~ obsv (to_LState m O U T F) ox (Ofresh tf)) ->
+    (forall tf, ~ obsv (to_LState m O U T F) oz (Ofresh tf)) ->
+    (forall op tf g, obsv (to_LState m O U T F) op (Ofresh tf) ->
+        FType g = RCUField -> hp m op g <> Some (VLoc oz)) ->
+    FPI FType (to_LState (write_ms m ox f1 (VLoc ow))
+                         (<[oz := {[Ounlk tz]}]> O) U T F).
+  Proof. apply write_preserves_FPI. Qed.
+
+  (** T-Replace: writes [p.f := n], unlinks [o].  Same lemma, different
+      instance -- the fresh node written is [n], and the node losing its
+      iterator observation is the one it replaces. *)
+  Corollary replace_preserves_FPI m O U T F lw op f oo on to :
+    lk m = Some lw ->
+    FPI FType (to_LState m O U T F) ->
+    (forall tf, ~ obsv (to_LState m O U T F) op (Ofresh tf)) ->
+    (forall tf, ~ obsv (to_LState m O U T F) oo (Ofresh tf)) ->
+    (forall opn tf g, obsv (to_LState m O U T F) opn (Ofresh tf) ->
+        FType g = RCUField -> hp m opn g <> Some (VLoc oo)) ->
+    FPI FType (to_LState (write_ms m op f (VLoc on))
+                         (<[oo := {[Ounlk to]}]> O) U T F).
+  Proof. apply write_preserves_FPI. Qed.
+
 End fpi.
 
 (** ** Status
@@ -313,4 +345,6 @@ Print Assumptions unlink_post_UNQR.
 Print Assumptions insert_post_UNQR.
 Print Assumptions obs_unlink_step.
 Print Assumptions obs_unlink_step_ne.
+Print Assumptions write_preserves_FPI.
 Print Assumptions unlink_preserves_FPI.
+Print Assumptions replace_preserves_FPI.
