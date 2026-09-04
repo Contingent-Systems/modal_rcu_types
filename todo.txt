@@ -1,6 +1,24 @@
-1- To appear for Meyer paper
-2- f^k
-3- conclusion
+All three items done; nothing outstanding here.
+
+  1- Meyer paper: nothing to do.  The bib entry `myr' is already
+     complete and published -- Meyer and Wolff, PACMPL 3(POPL),
+     58:1--58:31, 2019 -- and is cited in the introduction, related
+     work and conclusion.  If this line meant something other than
+     updating the reference, it has been lost.
+  2- f^k: done.  RCUProgLangNew now states explicitly that an index is
+     quantified at the level of the whole type environment rather than
+     within a type, and draws the consequence for subtyping.  This was
+     also R2's question.
+  3- conclusion: done.  Extended with the mechanization and the two
+     lessons drawn from it.
+
+Still open, but not a todo item -- it needs a decision rather than
+work: which PDF the reviewer response accompanies.  The response says
+the corrected invariants "appear as an appendix", which is true of the
+current build but not of the submitted one.
+
+The text below is draft material for the Tassarotti comparison, not a
+todo list.
 =====================================
 One well-known way of implementing RCU synchronization without hurting readers performance is \textsf{Quiescent State Based Reclamation}(QSBR) ~\cite{urcu_ieee}. In QSBR model, the writer thread and each reader thread have their own counters. Tassarotti uses \textsf{iGPS} to verify a RCU linked list under \textit{Release-Acquire} semantics ~\cite{verrcu} against. In this section we take Tassarotti's approach as a reference to understand and explain our approach with respect to the following aspects in a comparative fashion.
 
