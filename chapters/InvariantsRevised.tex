@@ -451,15 +451,10 @@ Two of the six were found by attempting a proof rather than by reading ---
 unlinking --- and both are cases the report calls trivial.
 
 The corrected invariants are also satisfiable
-(\texttt{WellFormed\_satisfiable}), and the positive results the proof cases now
-rest on are machine checked in \texttt{rocq/HeapPaths.v}: tree-shape
-preservation for all three heap mutations (\texttt{UNQR\_replace},
-\texttt{UNQR\_insert}, \texttt{UNQR\_unlink}), heap-domain closure for every
-action that touches the heap (\texttt{HD\_h\_upd}, \texttt{HD\_h\_alloc},
-\texttt{HD\_h\_free}), and the two chaining results
-(\texttt{ULKR\_closed\_reaches}, \texttt{FLR\_chains}) that together keep a node
-awaiting reclamation unreachable from the root.  The whole development is
-axiom-free.
+(\texttt{WellFormed\_satisfiable}), so the repairs are not vacuously strong.
+What the development establishes positively --- the reachability theory, the
+denotations, and the atomic-action lemmas --- is collected in
+\S\ref{sec:inv-mech}.
 
 \subsection{Open questions}
 \label{sec:inv-open}
@@ -634,3 +629,59 @@ The residue --- the observation map $O$, the free list $F$, the grace-period
 invariants (\textbf{IFL}, \textbf{RINFL}, \textbf{FLR}) and the fresh-node
 invariants (\textbf{FR}, \textbf{WF}, \textbf{FNR}, \textbf{FPI}) --- is
 genuinely about ghost state and becomes ghost state in the Iris encoding.
+
+\subsection{The ghost state, and what it had to be}
+\label{sec:inv-ghost}
+
+$O$ becomes a finite map from locations to sets of observations and $F$ a map to
+sets of thread identifiers, each under an authoritative resource algebra, so that
+the invariant
+$\textsf{inv}\;\mathcal{N}\;(\exists s \ldotp \textsf{phys} \ast \textsf{ghost}
+\ast \ulcorner \textsf{WellFormed}\;s \urcorner)$
+holds the authority while a thread holds an entry.  The pure layer is reused
+unchanged: a function reconstructs a logical state from the ghost maps, and every
+result above is stated over that reconstruction, so nothing has to be restated.
+
+One choice there is worth recording, because getting it wrong is easy and the
+symptom is remote from the cause.  The natural first reading of an observation
+map is a resource algebra whose operation is \emph{union}: a thread owns some
+observations, the authority owns at least those, and ownership is freely
+duplicable.  That is wrong, and the reason is \textbf{WULK}.  Unlinking must
+\emph{withdraw} an observation --- the replaced node loses \itr{} and gains
+\unlk, and \textbf{WULK} makes the two exclusive --- whereas under a union
+algebra every fragment is duplicable and therefore permanent, so an observation
+once handed out could never be given up and no unlinking step could re-establish
+the invariant.  Exclusive control of a location's entry is what the type system
+actually wants for the writer, and it is what we use.  The union reading is
+correct for a quantity that only grows; observations are not one.
+
+\subsection{Status of the mechanization}
+\label{sec:inv-mech}
+
+Beyond the defects, the development discharges the following, all axiom-free.
+
+The reachability theory of \S\ref{sec:inv-iris}, and heap-domain closure for
+every action that touches the heap --- including \texttt{Free}, the only action
+that removes a location and so the only one where the obligation is real; a
+counterexample shows its side condition cannot be dropped.
+
+The type denotations of Figure \ref{fig:denotingtypeenviroment}, and with them
+the two hypotheses the reachability theorems take.  That the fresh node mirrors
+the replaced one, and that its only outgoing \RCU{} edge is the one the rule
+names, are \emph{derived} from the denotations together with the rules'
+premises rather than assumed.  Both derivations depend on a repair: the first on
+the side condition added to \textsc{T-Replace}, the second on the clause added
+to $\llbracket \textsf{rcuFresh}\,\mathcal{N} \rrbracket$.  Neither proof closes
+without it, so the repairs are load-bearing rather than bookkeeping.
+
+Atomic-action lemmas for the three heap mutations: each preserves \textbf{UNQR}
+and \textbf{HD}, and unlinking preserves \textbf{FPI}.  Each takes only
+invariants of the pre-state and premises of its own rule.  The \textbf{FPI} case
+is the one whose failure forced the repair to \textsc{T-Replace} and
+\textsc{T-UnlinkH}, and the repaired premise is used exactly once in it, at the
+step that would otherwise fail --- so that defect is now closed from both ends,
+by a counterexample against the published rule and a proof for the repaired one.
+
+What remains is the rest of \textsf{WellFormed} for each action, which is
+breadth rather than depth, and the Hoare triples themselves, which wait on a
+choice of heap assertion for the object language rather than on anything here.
