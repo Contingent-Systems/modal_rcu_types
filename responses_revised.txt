@@ -58,8 +58,46 @@ We can make this clearer earlier, some comparisons to Tassarotti et al.'s progra
 Our focus in this paper, as Reviewer 1 noted, is the core reasoning principles where we chose a type system to focus on articulating those principles. As well-stated by Reviewer 2: this type system should be general enough to capture interesting programs, and likely requires less knowledge of advanced logical concepts to apply than e.g., an Iris-based logic.
 
 
-Like Reviewer 2, we suspect the system is currently undecidable.  As reviewer 3 intuits,
-while type checking the list and tree we found the choice of which rule to apply relatively straightforward, and the bookkeeping for the rules mostly tedious; so we are optimistic that *effective* automation is possible, but certainly future work.  We will be more explicit about this.
+On decidability, Reviewer 2 is right about the system as presented, and we keep
+that concession: a declarative derivation may insert T-Conseq anywhere, so the
+declarative system is not decidable as stated.  But the question we should have
+answered is the one behind it -- can the side conditions be discharged
+mechanically -- and there we can now say considerably more than "future work".
+
+Every framing side condition in the type rules is a negated MayAlias query, so
+that is where decidability is decided.  On the path language as written the
+general problem is one of word equations, because abstracted iteration lets the
+same index occur in two places.  We give instead an *algorithmic* presentation:
+a fragment of the path language (paths in which no index occurs twice, drawn
+from a fixed list in increasing order), a canonical join at control-flow merges,
+reindexing-by-matching at back edges, and a decision procedure for MayAlias that
+is linear after a prefix reduction and then a product construction.  Subsumption
+is applied only at fixed points.  Checking a critical section becomes a
+terminating forward dataflow over environments in that fragment, and the
+fragment is the class of programs the algorithm is complete for.
+
+We can also characterise its precision exactly, which we think answers the part
+of the question that matters for a diagnostic.  MayAlias is sound in the
+direction the type system needs -- every use is under a negation, so
+over-approximating rejects safe programs but never accepts unsafe ones -- and it
+is *exact* whenever no path index survives the prefix reduction in both
+arguments.  A syntactic condition guarantees that: all paths mentioning an index
+agree on the segments before it, which is what a traversal produces anyway, since
+the cursors of a loop are reindexed by the same back edge.  Measured against
+brute-force enumeration over 30,000 random pairs in the fragment, the procedure
+is exact in 27,148 of 27,148 cases where the condition holds, and no answer was
+unsound in any case.  So the residual imprecision is not spread over the domain;
+it sits entirely outside the anchored class.
+
+Reviewer 3's intuition about automation is borne out.  We have implemented the
+path domain -- fragment membership, MayAlias, join, substitution, reindexing,
+widening and the loop fixpoint -- in dependency-free C++17 structured to be
+lifted into a compiler front end, with unit tests on the paths appearing in the
+paper and property tests checking each abstract operation against the concrete
+semantics by enumeration.  It converges on both loops of the binary search tree
+delete, including the nested one.  The suite passes 35/35.
+
+This is now Appendix B, and the body points to it where MayAlias is introduced.
 
 
 > R2&R3: Decomposition of Sync, RCUWrite/Begin.
