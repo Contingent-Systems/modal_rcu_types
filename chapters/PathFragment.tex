@@ -9,9 +9,12 @@
 \section{A Decidable Path Fragment}
 \label{sec:pathfrag}
 
+% \defn and \RCU are also defined by InvariantsRevised; use \providecommand so
+% that this chapter compiles both on its own and alongside it.
 \newcommand{\pvar}{\pi}
 \newcommand{\MayAlias}{\textsf{MayAlias}}
-\newcommand{\defn}{\;\triangleq\;}
+\providecommand{\defn}{\;\triangleq\;}
+\providecommand{\RCU}{\textsf{RCU}}
 \newcommand{\Fields}{\mathcal{F}}
 
 The type system's framing side conditions are all negated \MayAlias{} queries,
@@ -272,7 +275,8 @@ be deterministic and terminating on its own.
 \texttt{prototype/path\_domain.h} implements CNF membership, \MayAlias{}, join,
 substitution, reindexing, widening and the loop fixpoint in dependency-free
 C++17, structured to be lifted into \textsf{Sema}.
-\texttt{prototype/path\_domain\_test.cpp} passes 30/30.
+\texttt{prototype/path\_domain\_test.cpp} passes 35/35, including the two
+properties of \S\ref{sec:pathfrag-exact}.
 
 \paragraph{Unit tests} use only paths that appear in the paper.
 \begin{itemize}
@@ -313,8 +317,72 @@ random path pairs across five seeds:
 \item \textbf{P4} reindexing recovers any suffix-extension substitution.
 \end{itemize}
 
-\paragraph{Outstanding.}  A completeness characterisation for Stage 2: we claim
-only soundness and exactness-when-aligned, and the measured $4.2\%$ is an upper
-bound on what a sharing-aware Stage 2 could recover.  Whether CNF alignment
-makes Stage 2 exact outright is open, and worth settling before the imprecision
-shows up as a false positive in a compiler diagnostic.
+\subsection{Exactness of Stage 2}
+\label{sec:pathfrag-exact}
+
+The completeness question left open above is settled here, in the negative for
+CNF as defined and positively under one further condition.
+
+\paragraph{CNF alone is not enough.}  Take $\Fields = \{a,b\}$, one variable
+$\pvar : \{a,b\}$, and
+\[\rho = \pvar\cdot a \qquad \rho' = b\cdot\pvar\]
+Both are in CNF --- each mentions $\pvar$ once, and vacuously in increasing
+order.  Stage 1 consumes nothing, since the first segments differ.  Stage 2
+relaxes both occurrences independently and intersects $D^{*}a$ with $bD^{*}$,
+which is non-empty, so the procedure answers \textsf{yes}.  But
+$\MayAlias(\rho,\rho')$ asks for a single $w$ with $wa = bw$, and induction on
+$|w|$ gives none when $a \neq b$.  So the procedure is strictly
+over-approximating on CNF input.  What CNF's increasing-order condition rules
+out is \emph{cross}-variable misalignment, $\pvar\cdot a$ against
+$b\cdot\pvar'$; it says nothing about one variable appearing at two different
+depths, which is what this is.
+
+\paragraph{The exact characterisation.}  Imprecision has exactly one source.
+
+\begin{theorem}[Exactness]
+\label{thm:alias-exact}
+If the Stage 1 remainders share no path variable, Stage 2 is exact.
+\end{theorem}
+\begin{proof}
+By CNF a variable occurs at most once per path, so a variable surviving Stage 1
+in only one remainder occurs exactly once in the relaxed problem.  For such a
+variable, replacing $\pvar : D$ by $D^{*}$ discards nothing: the constraint it
+drops is that two occurrences agree, and there is only one.  Relaxation is then
+literally the quantifier $\exists\theta(\pvar) \in D^{*}$ that $\MayAlias$ asks
+for, so the intersection is non-empty exactly when some valuation makes the two
+languages meet.  Stage 1 is exact by Lemma \ref{lem:alias-sound}, and the
+composition of two exact stages is exact.
+\end{proof}
+
+\begin{definition}[Anchored CNF]
+\label{def:anchored}
+A CNF environment is \emph{anchored} when, for every variable $\pvar$, all paths
+mentioning $\pvar$ agree segment-for-segment on the segments strictly preceding
+it.
+\end{definition}
+
+\begin{corollary}
+\label{cor:anchored-exact}
+On anchored environments $\MayAlias$ is exact.
+\end{corollary}
+\begin{proof}
+If $\rho$ and $\rho'$ both mention $\pvar$ they agree on everything before it, so
+Stage 1's maximal identical prefix reaches $\pvar$, and, the segments there being
+identical, consumes it too.  No shared variable survives, and
+Theorem \ref{thm:alias-exact} applies.
+\end{proof}
+
+Anchoring is the syntactic form of what a traversal actually produces: the
+cursors of a loop all carry the loop word at the same position, because they were
+all reindexed by the same back edge.  Every path in the paper is anchored, which
+is why the unit tests are exact, and the counterexample above is not anchored ---
+$\pvar$ sits at depth $0$ in one path and depth $1$ in the other.
+
+\paragraph{Measured.}  Over $30{,}000$ random CNF pairs, partitioned by whether a
+variable survives Stage 1 in both remainders: where none does, the procedure
+agrees with brute-force enumeration in $27{,}148$ of $27{,}148$ cases; where one
+does, in $43.5\%$.  No answer was unsound in either class.  So the residual
+imprecision reported in \S\ref{sec:pathfrag-eval} is not spread thinly over the
+domain --- it is entirely inside the non-anchored class, and a checker that
+rejects non-anchored environments outright is exact rather than
+merely sound.

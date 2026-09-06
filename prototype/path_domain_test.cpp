@@ -230,6 +230,64 @@ static bool subsetOf(const std::set<Word> &a, const std::set<Word> &b) {
   return true;
 }
 
+// ---------------------------------------------------------------------------
+// Exactness of Stage 2  (PathFragment.tex, Theorem "Exactness")
+// ---------------------------------------------------------------------------
+//
+// Imprecision has exactly one source: a variable surviving Stage 1 in *both*
+// remainders.  Where none does, the procedure is exact, not merely sound.
+
+// Stage 1: drop the maximal identical prefix.
+static void stage1(const Path &p, const Path &q, Path &rp, Path &rq) {
+  size_t i = 0;
+  while (i < p.size() && i < q.size() && p[i] == q[i]) ++i;
+  rp.assign(p.begin() + i, p.end());
+  rq.assign(q.begin() + i, q.end());
+}
+
+static bool sharesVar(const Path &p, const Path &q) {
+  std::map<int, FieldSet> a, b;
+  varsOf(p, a); varsOf(q, b);
+  for (const auto &kv : a) if (b.count(kv.first)) return true;
+  return false;
+}
+
+// CNF alone does not give exactness.  pi.a versus b.pi is in CNF -- each path
+// mentions pi once -- but pi sits at depth 0 in one and depth 1 in the other,
+// so Stage 1 consumes nothing and Stage 2 forgets that the two occurrences must
+// agree.  MayAlias asks for w with w.a = b.w, which has no solution for a != b.
+static void p5_cnfNotEnough() {
+  const int nf = 2, bound = 5;
+  FieldSet D = bit(0) | bit(1);
+  Path p{V(0, D), F(0)}, q{F(1), V(0, D)};
+  expect(mayAlias(p, q, nf), "P5  the non-anchored pair is reported as aliasing");
+  expect(!bruteAlias(p, q, nf, bound),
+         "P5  ... but no valuation makes pi.a and b.pi meet");
+  Path rp, rq; stage1(p, q, rp, rq);
+  expect(sharesVar(rp, rq), "P5  ... and pi survives Stage 1 in both remainders");
+}
+
+// The characterisation: exact exactly when no variable survives Stage 1 in both.
+static void p6_exactWhenUnshared() {
+  const int nf = 2, trials = 20000, bound = 4;
+  long unshared = 0, unsharedExact = 0, shared = 0, unsound = 0;
+  for (int t = 0; t < trials; ++t) {
+    VarEnv venv = randVarEnv(nf, 2);
+    Path p = randPath(nf, 3, venv), q = randPath(nf, 3, venv);
+    Path rp, rq; stage1(p, q, rp, rq);
+    bool m = mayAlias(p, q, nf), b = bruteAlias(p, q, nf, bound);
+    if (b && !m) ++unsound;
+    if (sharesVar(rp, rq)) ++shared;
+    else { ++unshared; if (m == b) ++unsharedExact; }
+  }
+  expect(unsound == 0, "P6  no unsound answer in " + std::to_string(trials) + " pairs");
+  expect(unshared == unsharedExact,
+         "P6  exact whenever no variable survives Stage 1 in both remainders (" +
+         std::to_string(unsharedExact) + "/" + std::to_string(unshared) + ")");
+  std::cout << "        " << shared << " pairs did share one; that class holds all"
+            << " the imprecision\n";
+}
+
 // P1  truly aliases  =>  mayAlias says yes            (soundness of the negation)
 static void p1_aliasSoundness() {
   const int nf = 2, trials = 40000, bound = 3;
@@ -388,6 +446,8 @@ int main() {
   unitTests();
   std::cout << "\n== property tests ==\n";
   prop::p1_aliasSoundness();
+  prop::p5_cnfNotEnough();
+  prop::p6_exactWhenUnshared();
   prop::p2_joinUpperBound();
   prop::p3_widenUpperBound();
   prop::p4_reindexRoundTrip();
