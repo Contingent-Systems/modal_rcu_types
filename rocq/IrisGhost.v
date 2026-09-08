@@ -129,12 +129,19 @@ Definition to_LState
 Definition obsUR : ucmra := authUR (gmapUR Loc (exclR (leibnizO (gset obs)))).
 Definition flUR  : ucmra := authUR (gmapUR Loc (exclR (leibnizO (gset TID)))).
 
+(** Observations indexed by the observing thread; see the section on
+    per-thread control at the end of the file for why this is the right unit. *)
+Definition tobsUR : ucmra :=
+  authUR (gmapUR (Loc * TID) (exclR (leibnizO (gset obs)))).
+
 Class rcuG (Σ : gFunctors) := RcuG {
-  rcu_obsG :: inG Σ obsUR;
-  rcu_flG  :: inG Σ flUR;
+  rcu_obsG  :: inG Σ obsUR;
+  rcu_flG   :: inG Σ flUR;
+  rcu_tobsG :: inG Σ tobsUR;
 }.
 
-Definition rcuΣ : gFunctors := #[ GFunctor obsUR; GFunctor flUR ].
+Definition rcuΣ : gFunctors :=
+  #[ GFunctor obsUR; GFunctor flUR; GFunctor tobsUR ].
 
 Global Instance subG_rcuΣ {Σ} : subG rcuΣ Σ → rcuG Σ.
 Proof. solve_inG. Qed.
@@ -383,3 +390,155 @@ Print Assumptions obs_alloc_at.
 Print Assumptions obs_set.
 Print Assumptions fl_set.
 Print Assumptions initial_ghost_obsv.
+
+(** * Observations indexed by thread
+
+    A defect in the design above, found when attempting the reader-side rules.
+
+    Exclusive control of a location's whole observation set is right for the
+    writer, which is the only thread that unlinks.  It is wrong for readers: two
+    readers may each observe the same location as [iterator], and several
+    variables of one reader may assert that observation at once.  Under a single
+    entry per location, at most one of them can hold it.
+
+    The fix follows from what the system actually does.  Observations carry the
+    observing thread, and *every thread only ever changes its own*: the writer
+    moves its own [iterator] to [unlinked] to [freeable], and a reader adds and
+    drops its own.  No thread writes another's.  So the unit of control is the
+    pair [(o, t)], not [o] -- and then exclusivity, which the writer needs, and
+    sharing between threads, which the readers need, stop being in tension.
+
+    The logical observation map is recovered pointwise rather than computed: a
+    location is observed as [ob] when some thread's entry records it.  That
+    avoids a fold over the map and keeps the reconstruction definitionally
+    transparent, which is what makes the lemmas below one-liners. *)
+
+Definition ObsMap := gmap (Loc * TID) (gset obs).
+
+Definition to_LState_t
+    (m : MState) (Og : ObsMap) (U : gset (Var * TID))
+    (T : gset TID) (F : gmap Loc (gset TID)) : LState :=
+  {| ms    := m;
+     obsv  := fun o ob => exists t s, Og !! (o, t) = Some s /\ ob ∈ s;
+     undf  := fun x t => (x, t) ∈ U;
+     thrd  := fun t => t ∈ T;
+     flist := fun o => match F !! o with
+                       | Some s => Some (fun t => t ∈ s)
+                       | None   => None
+                       end |}.
+
+Lemma to_LState_t_obs Og m U T F o t s ob :
+  Og !! (o, t) = Some s -> ob ∈ s ->
+  obsv (to_LState_t m Og U T F) o ob.
+Proof. intros Hlk Hin. by exists t, s. Qed.
+
+(** Independence: changing one thread's entry cannot affect what another
+    thread's entries record.  This is the property the single-map design could
+    not state, and it is what lets a reader keep an observation across a write
+    that revokes the writer's. *)
+Lemma to_LState_t_other_thread Og m U T F o t t' s' ob :
+  t <> t' ->
+  Og !! (o, t') = Some s' -> ob ∈ s' ->
+  obsv (to_LState_t m (<[(o, t) := ∅]> Og) U T F) o ob.
+Proof.
+  intros Hne Hlk Hin. exists t', s'. split; [| exact Hin].
+  rewrite lookup_insert_ne; [exact Hlk |].
+  intros HH. apply Hne. congruence.
+Qed.
+
+Section threadghost.
+  Context `{!rcuG Σ}.
+
+  (** Control of one thread's observations of one location. *)
+  Definition tobs_auth (γ : gname) (Og : ObsMap) : iProp Σ :=
+    own γ (● (Excl <$> Og : gmap (Loc * TID) (excl (leibnizO (gset obs))))).
+  Definition tobs_ctl (γ : gname) (o : Loc) (t : TID) (s : gset obs) : iProp Σ :=
+    own γ (◯ {[ (o, t) := Excl (s : leibnizO (gset obs)) ]}).
+
+  (** Introducing a thread's entry for a location. *)
+  Lemma tobs_alloc_at γ Og o t s :
+    Og !! (o, t) = None ->
+    tobs_auth γ Og ==∗ tobs_auth γ (<[(o, t) := s]> Og) ∗ tobs_ctl γ o t s.
+  Proof.
+    iIntros (Hlk) "Ha".
+    iMod (own_update _ _
+            (● (Excl <$> (<[(o, t) := s]> Og)
+                : gmap (Loc * TID) (excl (leibnizO (gset obs))))
+             ⋅ ◯ {[(o, t) := Excl (s : leibnizO (gset obs))]})
+           with "Ha") as "[Ha Hf]".
+    { rewrite fmap_insert. apply auth_update_alloc.
+      apply alloc_singleton_local_update; [| done].
+      by rewrite lookup_fmap Hlk. }
+    iModIntro. iFrame.
+  Qed.
+
+  (** Two *threads* hold entries for the same location at once.  This is the
+      point of the change: under one entry per location it is unprovable,
+      because the two fragments would be the same exclusive resource.  Here
+      they are different keys, so both are held, and [tobs_ctl_exclusive] below
+      still forbids two holders of the *same* key -- which is what revocation
+      needs. *)
+  Lemma tobs_two_threads γ Og o t t' s s' :
+    t <> t' ->
+    Og !! (o, t) = None ->
+    (<[(o, t) := s]> Og) !! (o, t') = None ->
+    tobs_auth γ Og ==∗
+      tobs_auth γ (<[(o, t') := s']> (<[(o, t) := s]> Og))
+      ∗ tobs_ctl γ o t s ∗ tobs_ctl γ o t' s'.
+  Proof.
+    iIntros (Hne H1 H2) "Ha".
+    iMod (tobs_alloc_at with "Ha") as "[Ha Hc]"; [exact H1 |].
+    iMod (tobs_alloc_at with "Ha") as "[Ha Hc']"; [exact H2 |].
+    iModIntro. iFrame.
+  Qed.
+
+  (** But one thread's entry is still exclusive, so revocation works. *)
+  Lemma tobs_ctl_exclusive γ o t s s' :
+    tobs_ctl γ o t s -∗ tobs_ctl γ o t s' -∗ False.
+  Proof.
+    iIntros "H1 H2".
+    iDestruct (own_valid_2 with "H1 H2") as %Hv.
+    iPureIntro. rewrite auth_frag_op_valid singleton_op singleton_valid in Hv.
+    by apply exclusive_l in Hv.
+  Qed.
+
+  Lemma tobs_ctl_agree γ Og o t s :
+    tobs_auth γ Og -∗ tobs_ctl γ o t s -∗ ⌜Og !! (o, t) = Some s⌝.
+  Proof.
+    iIntros "Ha Hf".
+    iDestruct (own_valid_2 with "Ha Hf") as %Hv.
+    iPureIntro.
+    apply auth_both_valid_discrete in Hv as [Hincl _].
+    apply singleton_included_l in Hincl as [y [Hlk Hle]].
+    rewrite lookup_fmap in Hlk.
+    apply fmap_Some_equiv in Hlk as [s0 [Hs0 Hy]].
+    rewrite Hs0. f_equal.
+    rewrite Hy Excl_included in Hle.
+    by apply leibniz_equiv.
+  Qed.
+
+  (** A thread replaces its own observations of a location.  The writer's
+      unlink step is this with [s' = {[Ounlk t]}]. *)
+  Lemma tobs_set γ Og o t s s' :
+    tobs_auth γ Og -∗ tobs_ctl γ o t s ==∗
+      tobs_auth γ (<[(o, t) := s']> Og) ∗ tobs_ctl γ o t s'.
+  Proof.
+    iIntros "Ha Hf".
+    iMod (own_update_2 _ _ _
+            (● (Excl <$> (<[(o, t) := s']> Og)
+                : gmap (Loc * TID) (excl (leibnizO (gset obs))))
+             ⋅ ◯ {[(o, t) := Excl (s' : leibnizO (gset obs))]})
+           with "Ha Hf") as "[Ha Hf]".
+    { rewrite fmap_insert. apply auth_update.
+      apply singleton_local_update_any.
+      intros y _. by apply exclusive_local_update. }
+    iModIntro. iFrame.
+  Qed.
+
+End threadghost.
+
+Print Assumptions to_LState_t_other_thread.
+Print Assumptions tobs_ctl_agree.
+Print Assumptions tobs_ctl_exclusive.
+Print Assumptions tobs_set.
+Print Assumptions tobs_two_threads.
