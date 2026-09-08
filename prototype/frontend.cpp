@@ -9,9 +9,10 @@
 // of rcu_check.h, run the driver, and turn what it reports into diagnostics.
 // Nothing here decides anything about types.
 //
-// Scope, stated plainly: this translates *straight-line* bodies.  Branches and
-// loops need the CFG with dominators, which is the next piece -- see
-// setup-frontend.sh --status.  A construct it does not recognise inside a
+// Bodies are translated through Clang's CFG, so branches and loops are handled:
+// merges become joins, and back edges -- identified by dominance, an edge whose
+// target dominates its source -- are closed by reindexing or widening rather
+// than joined.  A construct it does not recognise inside a
 // critical section is reported, not skipped: a checker that silently ignores
 // what it cannot read is worse than one that says so, because its silence looks
 // like a pass.
@@ -20,6 +21,8 @@
 
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/RecursiveASTVisitor.h"
+#include "clang/Analysis/Analyses/Dominators.h"
+#include "clang/Analysis/CFG.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendAction.h"
@@ -123,12 +126,20 @@ class Translator {
  public:
   Translator(ASTContext &ctx, Names &names) : ctx_(ctx), names_(names) {}
 
-  Translated run(const FunctionDecl *fd) {
-    out_ = Translated{};
-    if (const auto *body = llvm::dyn_cast_or_null<CompoundStmt>(fd->getBody()))
-      for (const Stmt *s : body->body()) one(s);
-    return out_;
+  // Translate one CFG block.  Accumulated state (names, the RCU field set,
+  // what could not be translated) is shared across blocks of a function.
+  std::vector<rcu::Stmt> block(const CFGBlock *b) {
+    std::vector<rcu::Stmt> saved;
+    saved.swap(out_.stmts);
+    for (const CFGElement &e : *b)
+      if (std::optional<CFGStmt> cs = e.getAs<CFGStmt>()) one(cs->getStmt());
+    std::vector<rcu::Stmt> got;
+    got.swap(out_.stmts);
+    out_.stmts.swap(saved);
+    return got;
   }
+
+  Translated &state() { return out_; }
 
  private:
   unsigned line(SourceLocation l) const {
@@ -192,6 +203,23 @@ class Translator {
         out_.stmts.push_back(st);
         return;
       }
+      // x = y between locals is T-ReadS.  Easy to overlook, and a traversal
+      // loop cannot close without it: the cursor advances by exactly this
+      // assignment, so dropping it leaves the back edge comparing a cursor
+      // that never moved against one that did.
+      {
+        const auto *lhs = llvm::dyn_cast<DeclRefExpr>(bo->getLHS()->IgnoreParenImpCasts());
+        const auto *rhs = llvm::dyn_cast<DeclRefExpr>(bo->getRHS()->IgnoreParenImpCasts());
+        if (lhs && rhs && lhs->getType()->isPointerType()) {
+          rcu::Stmt st;
+          st.kind = rcu::Stmt::ReadS;
+          st.x = names_.of(rhs->getDecl());
+          st.z = names_.of(lhs->getDecl());
+          st.line = line(s->getBeginLoc());
+          out_.stmts.push_back(st);
+          return;
+        }
+      }
       note(s, "assignment to something other than an RCU field");
       return;
     }
@@ -219,10 +247,11 @@ class Translator {
       return;
     }
 
-    if (llvm::isa<IfStmt>(s) || llvm::isa<WhileStmt>(s) || llvm::isa<ForStmt>(s)) {
-      note(s, "control flow: needs the CFG, which is not wired up yet");
+    // Control-flow constructs carry no action of their own; the CFG has
+    // already split them into blocks and edges.
+    if (llvm::isa<IfStmt>(s) || llvm::isa<WhileStmt>(s) || llvm::isa<ForStmt>(s) ||
+        llvm::isa<DoStmt>(s) || llvm::isa<ReturnStmt>(s) || llvm::isa<NullStmt>(s))
       return;
-    }
     note(s, "unrecognised statement");
   }
 
@@ -250,13 +279,50 @@ class Consumer : public ASTConsumer {
 
       Names names;
       Translator tr(ctx, names);
-      Translated t = tr.run(fd);
-      if (t.stmts.empty() && t.unhandled.empty()) continue;
+
+      // Clang's CFG, and the dominator tree over it.  An edge is a back edge
+      // when its target dominates its source; that is the only thing dominance
+      // is needed for here, and it is why the checker cannot compute it itself
+      // -- it never sees the shape of the source.
+      CFG::BuildOptions bo;
+      std::unique_ptr<CFG> cfgraph = CFG::buildCFG(fd, fd->getBody(), &ctx, bo);
+      if (!cfgraph) continue;
+      CFGDomTree dom;
+      dom.buildDominatorTree(cfgraph.get());
+
+      unsigned n = cfgraph->getNumBlockIDs();
+      rcu::Cfg cfg(n);
+      for (const CFGBlock *b : *cfgraph) {
+        unsigned id = b->getBlockID();
+        cfg[id].stmts = tr.block(b);
+        for (const CFGBlock::AdjacentBlock &adj : b->succs()) {
+          const CFGBlock *s = adj.getReachableBlock();
+          if (!s) continue;
+          if (dom.dominates(s, b)) cfg[id].backSuccs.push_back(s->getBlockID());
+          else                     cfg[id].succs.push_back(s->getBlockID());
+        }
+      }
+
+      Translated t = tr.state();
+      if (t.stmts.empty() && t.unhandled.empty()) {
+        bool any = false;
+        for (const auto &blk : cfg) if (!blk.stmts.empty()) any = true;
+        if (!any) continue;
+      }
 
       if (DumpIR) {
-        llvm::outs() << "-- " << fd->getNameAsString() << "\n";
-        for (const rcu::Stmt &s : t.stmts)
-          llvm::outs() << "   line " << s.line << "  kind " << int(s.kind) << "\n";
+        llvm::outs() << "-- " << fd->getNameAsString() << "  ("
+                     << n << " blocks)\n";
+        for (unsigned i = 0; i < n; ++i) {
+          if (cfg[i].stmts.empty() && cfg[i].succs.empty() &&
+              cfg[i].backSuccs.empty()) continue;
+          llvm::outs() << "   B" << i;
+          for (int s : cfg[i].succs)     llvm::outs() << " -> B" << s;
+          for (int s : cfg[i].backSuccs) llvm::outs() << " ~> B" << s << " (back)";
+          llvm::outs() << "\n";
+          for (const rcu::Stmt &s : cfg[i].stmts)
+            llvm::outs() << "      line " << s.line << "  kind " << int(s.kind) << "\n";
+        }
       }
 
       for (const auto &u : t.unhandled)
@@ -265,7 +331,6 @@ class Consumer : public ASTConsumer {
                   note)
             << ("not translated: " + u.second);
 
-      // Let diagnostics use the source's own names.
       rcu::detail::varNamer() = [&names](int v) {
         return v >= 0 && v < int(names.varName.size()) ? names.varName[v]
                                                        : "v" + std::to_string(v);
@@ -287,14 +352,16 @@ class Consumer : public ASTConsumer {
             entry[names.of(p)] = rcu::tItr(rcu::Path{rcu::V(pv++, conf.rcuFields)});
       }
 
-      rcu::Cfg cfg(1);
-      cfg[0].stmts = t.stmts;
-      rcu::CheckResult r = rcu::check(cfg, entry, conf);
-      for (const rcu::Diagnosis &dg : r.errors)
-        de.Report(ctx.getSourceManager().translateLineCol(
-                      ctx.getSourceManager().getMainFileID(), dg.line, 1),
-                  err)
-            << dg.why;
+      // Clang numbers the entry block last, not first.
+      rcu::CheckResult r = rcu::check(cfg, entry, conf,
+                                      int(cfgraph->getEntry().getBlockID()));
+      for (const rcu::Diagnosis &dg : r.errors) {
+        SourceLocation at =
+            dg.line > 0 ? ctx.getSourceManager().translateLineCol(
+                              ctx.getSourceManager().getMainFileID(), dg.line, 1)
+                        : fd->getBeginLoc();
+        de.Report(at, err) << dg.why;
+      }
     }
   }
 

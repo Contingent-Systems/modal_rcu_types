@@ -169,7 +169,8 @@ inline Result applyStmt(const TypeEnv &g, const Stmt &s, const Config &cfg) {
 
 struct Block {
   std::vector<Stmt> stmts;
-  std::vector<int> succs;
+  std::vector<int> succs;      // ordinary edges, merged with joinEnv
+  std::vector<int> backSuccs;  // loop back edges, closed with closeBackEdge
 };
 using Cfg = std::vector<Block>;
 
@@ -215,29 +216,52 @@ inline void injectPaths(TypeEnv &g, const Env &e, const std::vector<int> &order)
 inline std::optional<TypeEnv> closeBackEdge(const TypeEnv &entry,
                                             const TypeEnv &exit,
                                             int freshVar) {
-  std::pair<Env, std::vector<int>> pe = projectPaths(entry);
-  std::pair<Env, std::vector<int>> px = projectPaths(exit);
-  if (pe.second != px.second) return std::nullopt;  // different variables live
-  if (reindex(pe.first, px.first)) return entry;     // closes as it stands
-  std::optional<Env> w = widen(pe.first, px.first, freshVar);
+  // Only iterators live at *both* ends take part.  A variable declared inside
+  // the body is live at the back edge and not at the head, and demanding the
+  // two agree would fail every loop that declares one -- which is most of them.
+  std::vector<int> order;
+  Env pe, px;
+  for (const auto &kv : entry) {
+    if (kv.second.kind != Type::Itr) continue;
+    auto it = exit.find(kv.first);
+    if (it == exit.end() || it->second.kind != Type::Itr) continue;
+    order.push_back(kv.first);
+    pe.push_back(kv.second.path);
+    px.push_back(it->second.path);
+  }
+  if (order.empty()) return entry;
+  if (reindex(pe, px)) return entry;          // closes as it stands
+  std::optional<Env> w = widen(pe, px, freshVar);
   if (!w) return std::nullopt;
   TypeEnv out = entry;
-  injectPaths(out, *w, pe.second);
+  injectPaths(out, *w, order);
   return out;
 }
 
-// Forward dataflow.  Blocks are visited from a worklist; a block is re-visited
-// when an incoming environment changes.  Merges use joinEnv, which rejects
-// rather than inventing a join for incompatible kinds.
+// Back edges are separated from ordinary ones because they need different
+// treatment: an ordinary merge joins two environments, while a loop must be
+// closed by reindexing or widening, which is what turns a traversal's growing
+// path into a loop-invariant one.  Joining a back edge instead would either
+// fail (the paths differ) or lose the relationship between cursors that the
+// field maps depend on.
+//
+// Which edges are back edges is dominator information, which the frontend
+// computes and passes in rather than this layer rediscovering.
 inline CheckResult check(const Cfg &cfg, const TypeEnv &initial,
-                         const Config &conf, int maxRounds = 64) {
+                         const Config &conf, int entryBlock = 0,
+                         int maxRounds = 64) {
   CheckResult res;
   res.entry.assign(cfg.size(), TypeEnv{});
   std::vector<bool> seen(cfg.size(), false);
   std::deque<int> work;
 
-  if (!cfg.empty()) { res.entry[0] = initial; seen[0] = true; work.push_back(0); }
+  if (!cfg.empty() && entryBlock >= 0 && entryBlock < int(cfg.size())) {
+    res.entry[entryBlock] = initial;
+    seen[entryBlock] = true;
+    work.push_back(entryBlock);
+  }
 
+  int freshVar = 1000;  // path variables introduced by widening
   int rounds = 0;
   while (!work.empty() && rounds++ < maxRounds * int(cfg.size())) {
     int b = work.front(); work.pop_front();
@@ -262,16 +286,46 @@ inline CheckResult check(const Cfg &cfg, const TypeEnv &initial,
         res.entry[s] = incoming; seen[s] = true; work.push_back(s);
         continue;
       }
-      std::optional<TypeEnv> m = joinEnv(res.entry[s], incoming);
+      int bad = -1; bool kindClash = false;
+      std::optional<TypeEnv> m = joinEnvWhy(res.entry[s], incoming, &bad, &kindClash);
       if (!m) {
         res.ok = false;
         res.errors.push_back(Diagnosis{
-            s, -1, 0,
-            "the environments reaching this point cannot be merged: a "
-            "reference has different kinds on different paths"});
+            s, -1, cfg[b].stmts.empty() ? 0 : cfg[b].stmts.back().line,
+            kindClash
+                ? (detail::name(bad) + " reaches this point with different "
+                   "kinds on different paths, so there is no type it has here")
+                : (detail::name(bad) + " reaches this point by paths that do "
+                   "not join: the path abstraction cannot describe both")});
         continue;
       }
       if (!(*m == res.entry[s])) { res.entry[s] = *m; work.push_back(s); }
+    }
+
+    for (int s : cfg[b].backSuccs) {
+      if (!seen[s]) continue;  // the head is always visited first
+      std::optional<TypeEnv> closed = closeBackEdge(res.entry[s], g, freshVar++);
+      if (!closed) {
+        res.ok = false;
+        res.errors.push_back(Diagnosis{
+            b, -1, cfg[b].stmts.empty() ? 0 : cfg[b].stmts.back().line,
+            "the loop does not converge: the paths at the back edge are "
+            "neither a reindexing nor a widening of the paths at the head, so "
+            "no loop-invariant environment was found"});
+        continue;
+      }
+      if (!(*closed == res.entry[s])) {
+        // Widening weakens the loop head.  Everything downstream was computed
+        // from the stronger environment of the first pass, and joining the two
+        // fails -- not because the program is wrong but because the earlier
+        // result is stale.  Discard it and recompute from the weakened head.
+        res.entry[s] = *closed;
+        for (size_t i = 0; i < seen.size(); ++i)
+          if (int(i) != s && int(i) != entryBlock) seen[i] = false;
+        work.clear();
+        work.push_back(s);
+        break;
+      }
     }
   }
   return res;

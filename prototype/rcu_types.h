@@ -138,6 +138,33 @@ inline std::optional<TypeEnv> joinEnv(const TypeEnv &a, const TypeEnv &b) {
   return out;
 }
 
+// The same, reporting which variable failed and why.  A merge can fail two
+// ways, and they mean different things to a programmer: a reference with
+// different *kinds* on the two paths is a real inconsistency, while two paths
+// that will not join is the path abstraction giving up.  Reporting both as one
+// message hides which happened.
+inline std::optional<TypeEnv> joinEnvWhy(const TypeEnv &a, const TypeEnv &b,
+                                         int *badVar, bool *kindClash) {
+  TypeEnv out;
+  for (const auto &kv : a) {
+    auto it = b.find(kv.first);
+    if (it == b.end()) continue;
+    if (kv.second.kind != it->second.kind) {
+      if (badVar) *badVar = kv.first;
+      if (kindClash) *kindClash = true;
+      return std::nullopt;
+    }
+    std::optional<Type> t = joinType(kv.second, it->second);
+    if (!t) {
+      if (badVar) *badVar = kv.first;
+      if (kindClash) *kindClash = false;
+      return std::nullopt;
+    }
+    out.emplace(kv.first, *t);
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Well-formedness
 // ---------------------------------------------------------------------------

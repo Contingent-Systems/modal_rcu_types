@@ -137,14 +137,13 @@ if [ "${1:-}" = "--status" ]; then
   echo "  done   the rules                rcu_rules.h       22 checks"
   echo "  done   statement IR and driver  rcu_check.h        6 checks"
   echo
-  echo "  done   Clang AST -> Stmt IR     frontend.cpp, straight-line bodies"
+  echo "  done   Clang AST -> Stmt IR     frontend.cpp, via Clang's CFG"
+  echo "  done   CFG with dominators      back edges found by dominance and"
+  echo "                                  closed by reindexing or widening"
   echo "  done   read __rcu on fields     both the attribute and the address"
   echo "                                  space spelling"
   echo "  done   diagnostic emission      named after the source, not internal ids"
   echo
-  echo "  todo   CFG with dominators      branches and loops.  closeBackEdge in"
-  echo "                                  rcu_check.h is written and waiting on"
-  echo "                                  the back edges"
   echo "  todo   function summaries       so a function can be checked without"
   echo "                                  --assume-entry, which is an assumption"
   echo "                                  and says so"
