@@ -758,3 +758,81 @@ Print Assumptions corrected_but_not_published.
 Print Assumptions ULKR_closed_reaches.
 Print Assumptions FLR_chains.
 Print Assumptions FPI_not_preserved_by_replace.
+
+(** * HD is too strong: Free breaks it
+
+    A seventh defect, found the same way as the fifth and sixth -- by attempting
+    a proof case, here the HD case of Free.
+
+    HD as published constrains every edge in the heap.  But T-UnlinkH leaves the
+    unlinked node still pointing at its old child through [f2] (the rule nulls
+    its *other* fields, not that one), and Free sets only the freed node's own
+    fields to undefined, not its predecessors'.  Nothing orders the reclamation
+    of two unlinked nodes.  So a well-typed section may free a node while
+    another node, unlinked and awaiting its own reclamation, still points at it,
+    and HD fails in that state.
+
+    It fails harmlessly: the dangling pointer sits in a node that is itself
+    detached and unreachable, so nothing can follow it.  That is exactly the
+    exemption OW already carries -- its conclusion is excused when either
+    endpoint is [Detached] -- and HD should carry the same one.  That OW has it
+    and HD does not looks like an oversight rather than a decision. *)
+
+Definition HD_live (s : LState) : Prop :=
+  forall o f o', Edge s o f o' -> ~ Detached s o -> InHeap s o'.
+
+(** Node 0 is unlinked and still points at node 1, which is freeable.  Freeing
+    1 leaves 0's pointer dangling. *)
+Definition hd_before : LState :=
+  {| ms := {| stk := fun _ _ => None;
+              hp  := fun o f => if Nat.eqb f 0
+                                then (if Nat.eqb o 0 then Some (VLoc 1)
+                                      else if Nat.eqb o 1 then Some VNull
+                                      else None)
+                                else None;
+              lk  := Some 9; rt := 2;
+              rds := fun _ => False;
+              bnd := fun _ => False |};
+     obsv  := fun o ob => (o = 0 /\ ob = Ounlk 9) \/ (o = 1 /\ ob = Ofree 9);
+     undf  := fun _ _ => False;
+     thrd  := fun t => t = 9;
+     flist := fun _ => None |}.
+
+Definition hd_after : LState :=
+  {| ms := {| stk := fun _ _ => None;
+              hp  := fun o f => if Nat.eqb f 0
+                                then (if Nat.eqb o 0 then Some (VLoc 1) else None)
+                                else None;
+              lk  := Some 9; rt := 2;
+              rds := fun _ => False;
+              bnd := fun _ => False |};
+     obsv  := fun o ob => (o = 0 /\ ob = Ounlk 9) \/ (o = 1 /\ ob = Ofree 9);
+     undf  := fun _ _ => False;
+     thrd  := fun t => t = 9;
+     flist := fun _ => None |}.
+
+Lemma HD_not_preserved_by_free :
+  HD hd_before /\ ~ HD hd_after /\ HD_live hd_after.
+Proof.
+  split; [| split].
+  - (* before the free, both nodes are allocated *)
+    intros o f o' Hedge. unfold Edge in Hedge. simpl in Hedge.
+    destruct f; simpl in Hedge; [| discriminate].
+    destruct o as [|o1]; simpl in Hedge.
+    + injection Hedge as <-. exists 0, VNull. reflexivity.
+    + destruct o1; simpl in Hedge; discriminate.
+  - (* after it, node 0's pointer dangles *)
+    intros HD.
+    assert (Hedge : Edge hd_after 0 0 1) by reflexivity.
+    destruct (HD 0 0 1 Hedge) as [f [v Hv]].
+    simpl in Hv. destruct f; simpl in Hv; discriminate.
+  - (* but the dangling pointer sits in a detached node *)
+    intros o f o' Hedge Hlive. exfalso. apply Hlive.
+    unfold Edge in Hedge. simpl in Hedge.
+    destruct f; simpl in Hedge; [| discriminate].
+    destruct o as [|o1]; simpl in Hedge.
+    + exists 9. left. simpl. left. split; reflexivity.
+    + discriminate.
+Qed.
+
+Print Assumptions HD_not_preserved_by_free.
