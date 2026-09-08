@@ -20,6 +20,7 @@
 
 #include "rcu_types.h"
 
+#include <functional>
 #include <sstream>
 
 namespace rcu {
@@ -40,14 +41,30 @@ inline const Type *lookup(const TypeEnv &g, int x) {
   return it == g.end() ? nullptr : &it->second;
 }
 
-inline std::string name(int v) { return "v" + std::to_string(v); }
+// Diagnostics name variables and fields as the source does.  The checker works
+// in dense ids; a frontend installs a resolver so that a message reads "cur"
+// rather than "v1".  This matters more here than usual: the environments are
+// inferred, so there is no annotation for the reader to compare against and the
+// message is the only thing they have.
+inline std::function<std::string(int)> &varNamer() {
+  static std::function<std::string(int)> f =
+      [](int v) { return "v" + std::to_string(v); };
+  return f;
+}
+inline std::function<std::string(int)> &fieldNamer() {
+  static std::function<std::string(int)> f =
+      [](int v) { return std::to_string(v); };
+  return f;
+}
+
+inline std::string name(int v) { return varNamer()(v); }
 
 // A field-set key, for diagnostics: "1" for a single field, "0|1" for a
 // disjunctive one.
 inline std::string fieldsToString(FieldSet k) {
   std::string out;
   for (int f = 0; f < 32; ++f)
-    if (k & bit(f)) { if (!out.empty()) out += "|"; out += std::to_string(f); }
+    if (k & bit(f)) { if (!out.empty()) out += "|"; out += fieldNamer()(f); }
   return out.empty() ? "-" : out;
 }
 

@@ -36,6 +36,14 @@ using namespace clang;
 namespace {
 
 llvm::cl::OptionCategory RcuCategory("rcu-check options");
+llvm::cl::opt<bool> AssumeEntry(
+    "assume-entry",
+    llvm::cl::desc("type each pointer parameter as an iterator at its own "
+                   "path.  An assumption, not an inference: checking a "
+                   "function in isolation needs the caller's environment, "
+                   "which is the function-summary work still to be done"),
+    llvm::cl::cat(RcuCategory));
+
 llvm::cl::opt<bool> DumpIR("dump-ir",
                            llvm::cl::desc("print the statement IR translated "
                                           "from each function"),
@@ -137,6 +145,19 @@ class Translator {
       for (const Decl *d : ds->decls()) {
         const auto *vd = llvm::dyn_cast<VarDecl>(d);
         if (!vd || !vd->hasInit()) continue;
+        // T *n = kmalloc(...)  -- a fresh node
+        if (const auto *ce = llvm::dyn_cast<CallExpr>(
+                vd->getInit()->IgnoreParenImpCasts())) {
+          std::string cn = calleeName(ce);
+          if (cn == "kmalloc" || cn == "malloc" || cn == "kzalloc") {
+            rcu::Stmt st;
+            st.kind = rcu::Stmt::Alloc;
+            st.x = names_.of(vd);
+            st.line = line(s->getBeginLoc());
+            out_.stmts.push_back(st);
+            continue;
+          }
+        }
         if (const MemberExpr *me = rcuMember(vd->getInit())) {
           const ValueDecl *base = baseVar(me);
           if (!base) { note(s, "field read from a non-variable base"); continue; }
@@ -194,6 +215,8 @@ class Translator {
       if (n == "rcu_read_lock" || n == "rcu_read_unlock") return;  // boundaries
       note(s, "call to " + n);
       return;
+      note(s, "call to " + n);
+      return;
     }
 
     if (llvm::isa<IfStmt>(s) || llvm::isa<WhileStmt>(s) || llvm::isa<ForStmt>(s)) {
@@ -242,13 +265,31 @@ class Consumer : public ASTConsumer {
                   note)
             << ("not translated: " + u.second);
 
+      // Let diagnostics use the source's own names.
+      rcu::detail::varNamer() = [&names](int v) {
+        return v >= 0 && v < int(names.varName.size()) ? names.varName[v]
+                                                       : "v" + std::to_string(v);
+      };
+      rcu::detail::fieldNamer() = [&names](int f) {
+        return f >= 0 && f < int(names.fieldName.size()) ? names.fieldName[f]
+                                                         : std::to_string(f);
+      };
+
       rcu::Config conf;
       conf.rcuFields = t.rcuFields;
       conf.numFields = int(names.fieldName.size());
 
+      rcu::TypeEnv entry;
+      if (AssumeEntry) {
+        int pv = 0;
+        for (const ParmVarDecl *p : fd->parameters())
+          if (p->getType()->isPointerType())
+            entry[names.of(p)] = rcu::tItr(rcu::Path{rcu::V(pv++, conf.rcuFields)});
+      }
+
       rcu::Cfg cfg(1);
       cfg[0].stmts = t.stmts;
-      rcu::CheckResult r = rcu::check(cfg, rcu::TypeEnv{}, conf);
+      rcu::CheckResult r = rcu::check(cfg, entry, conf);
       for (const rcu::Diagnosis &dg : r.errors)
         de.Report(ctx.getSourceManager().translateLineCol(
                       ctx.getSourceManager().getMainFileID(), dg.line, 1),

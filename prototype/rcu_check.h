@@ -87,12 +87,63 @@ struct Config {
   int numFields = 0;
 };
 
+// A field write is one of four rules, and which one depends on the types of the
+// operands rather than on the syntax -- rcu_assign_pointer(p->f, n) is a write
+// to a fresh node, a replacement, an insertion or an unlink according to what p
+// and n are at that point.  The frontend cannot tell; the driver can, so it
+// tries each applicable rule and accepts if one applies.  Each rule is sound on
+// its own, so accepting when any applies is sound.
+//
+// The operands the rules need beyond the statement -- the node being replaced,
+// the field the fresh node already links through -- are read out of the
+// environment rather than guessed.
+inline Result applyWrite(const TypeEnv &g, const Stmt &s, const Config &cfg) {
+  const Type *tx = detail::lookup(g, s.x);
+  const Type *tz = detail::lookup(g, s.z);
+  if (!tx) return Result::no(detail::name(s.x) + " is not in scope");
+  if (!tz) return Result::no(detail::name(s.z) + " is not in scope");
+
+  // writing a field of a fresh node
+  if (tx->kind == Type::Fresh) return tWriteFH(g, s.x, s.f, s.z);
+
+  // what the field currently holds, which the other three rules need
+  int victim = -1;
+  auto it = tx->fields.find(s.f);
+  if (it != tx->fields.end() && it->second.kind == FieldVal::Var)
+    victim = it->second.var;
+  if (victim < 0)
+    return Result::no("the field being written is not in " + detail::name(s.x) +
+                      "'s field map, so what it currently holds is unknown; "
+                      "read it before writing it");
+
+  if (tz->kind == Type::Fresh) {
+    // replacement, or insertion if the fresh node already links to the victim
+    for (const auto &fe : tz->fields)
+      if (fe.second.kind == FieldVal::Var && fe.second.var == victim) {
+        Result r = tInsert(g, s.x, s.f, victim, s.z, fe.first, cfg.numFields);
+        if (r.ok) return r;
+      }
+    return tReplace(g, s.x, s.f, victim, s.z, cfg.rcuFields, cfg.numFields);
+  }
+
+  // unlinking: the written value must be a grandchild through some field
+  const Type *tv = detail::lookup(g, victim);
+  if (tv)
+    for (const auto &fe : tv->fields)
+      if (fe.second.kind == FieldVal::Var && fe.second.var == s.z)
+        return tUnlinkH(g, s.x, s.f, victim, fe.first, s.z, cfg.numFields);
+  return Result::no("writing " + detail::name(s.z) + " over " +
+                    detail::name(victim) + " is not one of the four heap "
+                    "mutations: it is neither fresh nor a child of " +
+                    detail::name(victim));
+}
+
 inline Result applyStmt(const TypeEnv &g, const Stmt &s, const Config &cfg) {
   switch (s.kind) {
     case Stmt::Root:        return tRoot(g, s.x, s.y);
     case Stmt::ReadH:       return tReadH(g, s.x, s.f, s.z);
     case Stmt::Alloc:       return tAlloc(g, s.x);
-    case Stmt::WriteFH:     return tWriteFH(g, s.x, s.f, s.z);
+    case Stmt::WriteFH:     return applyWrite(g, s, cfg);
     case Stmt::UnlinkH:     return tUnlinkH(g, s.x, s.f, s.z, s.f2, s.r, cfg.numFields);
     case Stmt::Replace:     return tReplace(g, s.x, s.f, s.o, s.n, cfg.rcuFields, cfg.numFields);
     case Stmt::Insert:      return tInsert(g, s.x, s.f, s.o, s.n, s.f4, cfg.numFields);
