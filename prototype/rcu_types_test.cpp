@@ -21,8 +21,9 @@ static void expect(bool cond, const std::string &what) {
 }
 
 // Field names, as in the binary search tree: 0 = Left, 1 = Right.
-enum { Left = 0, Right = 1 };
-static const FieldSet BOTH = bit(Left) | bit(Right);
+enum { LeftF = 0, RightF = 1 };
+static const FieldSet Left = bit(LeftF), Right = bit(RightF);
+static const FieldSet BOTH = Left | Right;
 static const FieldSet RCU_FIELDS = BOTH;
 static const int NF = 2;
 
@@ -53,8 +54,8 @@ static void unitTests() {
   // the environment anchored -- they were reindexed by the same back edge.
   {
     TypeEnv bad;
-    bad[parent]  = tItr(Path{V(0, BOTH), F(Left)});
-    bad[current] = tItr(Path{F(Right), V(0, BOTH)});
+    bad[parent]  = tItr(Path{V(0, BOTH), F(LeftF)});
+    bad[current] = tItr(Path{F(RightF), V(0, BOTH)});
     expect(!wellFormed(bad),
            "an environment with one variable at two depths is rejected");
   }
@@ -117,8 +118,8 @@ static void joinTests() {
   // The BST's conditional: parent.Left == current on one branch, .Right on the
   // other.  The merge must keep the shared prefix and widen the last step.
   TypeEnv a, b;
-  a[current] = tItr(Path{V(0, BOTH), F(Left)});
-  b[current] = tItr(Path{V(0, BOTH), F(Right)});
+  a[current] = tItr(Path{V(0, BOTH), F(LeftF)});
+  b[current] = tItr(Path{V(0, BOTH), F(RightF)});
   std::optional<TypeEnv> m = joinEnv(a, b);
   expect(m.has_value(), "the two branches of the BST conditional merge");
   if (m) {
@@ -152,7 +153,7 @@ static void joinTests() {
   {
     TypeEnv x, y;
     x[current] = tItr(Path{V(0, BOTH)});
-    x[currentL] = tItr(Path{V(0, BOTH), F(Left)});
+    x[currentL] = tItr(Path{V(0, BOTH), F(LeftF)});
     y[current] = tItr(Path{V(0, BOTH)});
     std::optional<TypeEnv> j = joinEnv(x, y);
     expect(j.has_value() && j->count(currentL) == 0,

@@ -56,7 +56,11 @@ struct FieldVal {
 inline FieldVal fvVar(int v) { return FieldVal{FieldVal::Var, v}; }
 inline FieldVal fvNull()     { return FieldVal{FieldVal::Null, -1}; }
 
-using FieldMap = std::map<int, FieldVal>;  // field -> value; absent = untracked
+// Keys are field *sets*, not single fields.  After a merge the field through
+// which a child was reached is known only disjunctively -- the paper writes
+// par : rcuItr eps {Left|Right -> cur} -- so a single-field key cannot express
+// what a traversal produces.  A singleton key is the ordinary case.
+using FieldMap = std::map<FieldSet, FieldVal>;  // fields -> value; absent = untracked
 
 // ---------------------------------------------------------------------------
 // Types
@@ -163,14 +167,16 @@ inline bool wellFormed(const TypeEnv &g) { return inAnchoredCNF(pathsOf(g)); }
 // rather than preserving it.  It is what makes the mirroring the soundness
 // proof needs follow from the two denotations.
 inline bool coversRCUFields(const FieldMap &n, FieldSet rcuFields, int numFields) {
+  FieldSet covered = 0;
+  for (const auto &kv : n) covered |= kv.first;
   for (int f = 0; f < numFields; ++f)
-    if ((rcuFields & bit(f)) && !n.count(f)) return false;
+    if ((rcuFields & bit(f)) && !(covered & bit(f))) return false;
   return true;
 }
 
 // T-Insert: every tracked field of the fresh node other than f4 is null.
 // The untracked ones are handled by the rcuFresh denotation, not here.
-inline bool onlyFieldIs(const FieldMap &n, int f4) {
+inline bool onlyFieldIs(const FieldMap &n, FieldSet f4) {
   for (const auto &kv : n)
     if (kv.first != f4 && kv.second.kind != FieldVal::Null) return false;
   return true;
