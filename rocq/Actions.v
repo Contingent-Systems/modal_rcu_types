@@ -348,3 +348,82 @@ Print Assumptions obs_unlink_step_ne.
 Print Assumptions write_preserves_FPI.
 Print Assumptions unlink_preserves_FPI.
 Print Assumptions replace_preserves_FPI.
+
+(** ** The reader side
+
+    Reader rules are trivial as rules -- T-ReadS and T-ReadH both just produce
+    another [rcuItr] -- and the content is entirely in what acquiring an
+    observation obliges.  A reader following [x.f] to [z] does not already
+    observe [z]; the action must add [iterator t] to *its own* entry for [z],
+    which is the per-thread update.
+
+    The obligation is IFL.  If [z] is already on the free list, some grace
+    period is waiting on a set of threads before reclaiming it, and a reader
+    acquiring a reference to [z] must be in that set -- otherwise it could hold
+    the reference past the reclamation it is not delaying.  This is the
+    condition RCU implementations discharge by having a reader that entered its
+    critical section after SyncStart not reach unlinked nodes at all. *)
+
+Section readers.
+
+  Variable FType : FName -> FieldKind.
+
+  (** Acquiring an observation preserves IFL exactly when the acquiring thread
+      already bounds any pending reclamation of the node. *)
+  Theorem reader_acquire_preserves_IFL m Og U T F t z sz :
+    let s  := to_LState_t m Og U T F in
+    let s' := to_LState_t m (<[(z, t) := sz ∪ {[Oiter t]}]> Og) U T F in
+    IFL s ->
+    Og !! (z, t) = Some sz ->
+    (forall Tr, flist s z = Some Tr -> Tr t) ->
+    IFL s'.
+  Proof.
+    intros s s' HIFL Hlk Hbound t' o Tr Hiter Hfl.
+    (* the free list is untouched *)
+    assert (Hfl0 : flist s o = Some Tr) by exact Hfl.
+    destruct Hiter as [t'' [s'' [Hlk'' Hin]]].
+    destruct (decide ((o, t'') = (z, t))) as [Heq|Hne].
+    - injection Heq as -> ->.
+      rewrite lookup_insert_eq in Hlk''. injection Hlk'' as <-.
+      apply elem_of_union in Hin as [Hin | Hin].
+      + (* an observation that was already there *)
+        exact (HIFL t' z Tr (ex_intro _ t (ex_intro _ sz (conj Hlk Hin))) Hfl0).
+      + (* the one just acquired *)
+        apply elem_of_singleton in Hin. injection Hin as <-.
+        exact (Hbound Tr Hfl0).
+    - rewrite lookup_insert_ne // in Hlk''.
+      exact (HIFL t' o Tr (ex_intro _ t'' (ex_intro _ s'' (conj Hlk'' Hin))) Hfl0).
+  Qed.
+
+  (** And it preserves RITR unconditionally: a reader acquires an [iterator]
+      observation, which is the only kind RITR permits it. *)
+  Theorem reader_acquire_preserves_RITR m Og U T F t z sz :
+    let s  := to_LState_t m Og U T F in
+    let s' := to_LState_t m (<[(z, t) := sz ∪ {[Oiter t]}]> Og) U T F in
+    RITR s ->
+    Og !! (z, t) = Some sz ->
+    RITR s'.
+  Proof.
+    intros s s' HR Hlk o t' Hrd.
+    (* readers are unchanged by the update *)
+    assert (Hrd0 : rds (ms s) t') by exact Hrd.
+    destruct (HR o t' Hrd0) as (Hu & Hf & Hfr).
+    (* an observation in the post-state is either old, or the acquired iterator *)
+    assert (Hback : forall ob, obsv s' o ob -> obsv s o ob \/ ob = Oiter t).
+    { intros ob [t'' [s'' [Hlk'' Hin]]].
+      destruct (decide ((o, t'') = (z, t))) as [Heq|Hne].
+      - injection Heq as -> ->.
+        rewrite lookup_insert_eq in Hlk''. injection Hlk'' as <-.
+        apply elem_of_union in Hin as [Hin | Hin].
+        + left. by exists t, sz.
+        + right. by apply elem_of_singleton in Hin.
+      - rewrite lookup_insert_ne // in Hlk''. left. by exists t'', s''. }
+    repeat split; intros Hbad;
+      destruct (Hback _ Hbad) as [Hold | Heq]; try discriminate;
+      [exact (Hu Hold) | exact (Hf Hold) | exact (Hfr Hold)].
+  Qed.
+
+End readers.
+
+Print Assumptions reader_acquire_preserves_IFL.
+Print Assumptions reader_acquire_preserves_RITR.
