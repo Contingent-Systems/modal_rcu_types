@@ -33,6 +33,10 @@ _CoqProject.d
 prototype/*.o
 prototype/path_domain
 prototype/path_domain_test
+prototype/rcu_types_test
+prototype/rcu_rules_test
+prototype/rcu_check_test
+prototype/rcu-check
 
 # macOS
 .DS_Store
