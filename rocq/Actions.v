@@ -618,3 +618,79 @@ End grace.
 
 Print Assumptions sync_start_FLR.
 Print Assumptions sync_stop_entries_empty.
+
+(** ** The invariants a heap write cannot touch
+
+    Most of WellFormed does not mention the heap.  A field write changes [hp]
+    and nothing else, so those invariants transfer definitionally -- each proof
+    below is the identity.  Recording it as nine one-line lemmas rather than
+    leaving it implicit is worth the space: it says precisely which cases of an
+    atomic-action lemma have content and which do not, and the report's habit of
+    calling a case trivial without saying why is what hid three defects.
+
+    The eight that are *not* here -- OW, ULKR, FLR, FPI, FR, HD, and the two
+    halves of UNQRT -- all mention the heap, and every one of them needed a real
+    argument. *)
+
+Section untouched.
+
+  Variable FType : FName -> FieldKind.
+  Variables (m : MState) (Og : ObsMap) (U : gset (Var * TID))
+            (T : gset TID) (F : gmap Loc (gset TID)).
+  Variables (o : Loc) (f : FName) (v : Val).
+
+  Let s  := to_LState_t m Og U T F.
+  Let s' := to_LState_t (write_ms m o f v) Og U T F.
+
+  Lemma write_RWOW   : RWOW s   -> RWOW s'.   Proof. exact (fun H => H). Qed.
+  Lemma write_AWRT   : AWRT s   -> AWRT s'.   Proof. exact (fun H => H). Qed.
+  Lemma write_IFL    : IFL s    -> IFL s'.    Proof. exact (fun H => H). Qed.
+  Lemma write_WULK   : WULK s   -> WULK s'.   Proof. exact (fun H => H). Qed.
+  Lemma write_WFresh : WFresh s -> WFresh s'. Proof. exact (fun H => H). Qed.
+  Lemma write_FNR    : FNR s    -> FNR s'.    Proof. exact (fun H => H). Qed.
+  Lemma write_RITR   : RITR s   -> RITR s'.   Proof. exact (fun H => H). Qed.
+  Lemma write_RINFL  : RINFL s  -> RINFL s'.  Proof. exact (fun H => H). Qed.
+  Lemma write_WNR    : WNR s    -> WNR s'.    Proof. exact (fun H => H). Qed.
+
+End untouched.
+
+(** ** OW for a field write
+
+    In-degree at most one, for live nodes.  A write creates one edge, so the
+    obligation is that the node written was not already pointed at -- which for
+    the two rules that write a fresh node is FR, the same hypothesis their UNQR
+    cases use.  Nothing is needed about the edge that was overwritten: removing
+    an edge cannot raise anyone's in-degree. *)
+
+Section sharing.
+
+  Variable FType : FName -> FieldKind.
+
+  Theorem write_preserves_OW m Og U T F op f on :
+    let s  := to_LState_t m Og U T F in
+    let s' := to_LState_t (write_ms m op f (VLoc on)) Og U T F in
+    OW FType s ->
+    (forall o g, hp m o g <> Some (VLoc on)) ->
+    OW FType s'.
+  Proof.
+    intros s s' HOW Hno o o' g g' x He He' Hg Hg'.
+    assert (Hsplit : forall a b y,
+              hp (ms s') a b = Some (VLoc y) ->
+              ((a, b) = (op, f) /\ y = on) \/ hp m a b = Some (VLoc y)).
+    { intros a b y Hab. subst s'. simpl in Hab.
+      destruct (edge_eq_dec a b op f) as [Heq|Hne].
+      - left. injection Heq as -> ->. rewrite upd_same in Hab.
+        injection Hab as <-. split; reflexivity.
+      - right. by rewrite upd_other in Hab. }
+    destruct (Hsplit o g x He) as [[Hoe Hx] | Hold];
+    destruct (Hsplit o' g' x He') as [[Hoe' Hx'] | Hold'].
+    - injection Hoe as -> ->. injection Hoe' as -> ->. by left.
+    - exfalso. rewrite Hx in Hold'. exact (Hno o' g' Hold').
+    - exfalso. rewrite Hx' in Hold. exact (Hno o g Hold).
+    - exact (HOW o o' g g' x Hold Hold' Hg Hg').
+  Qed.
+
+End sharing.
+
+Print Assumptions write_WULK.
+Print Assumptions write_preserves_OW.
