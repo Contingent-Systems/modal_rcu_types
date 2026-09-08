@@ -288,6 +288,38 @@ static void p6_exactWhenUnshared() {
             << " the imprecision\n";
 }
 
+// P7  the anchored class is exactly the class mayAlias decides exactly.
+//
+// P6 characterised exactness by "no variable survives Stage 1 in both".  That is
+// a statement about the procedure's internals; anchoring is the syntactic
+// condition a checker can test, and this checks the two agree.
+static void p7_anchoredIsExact() {
+  const int nf = 2, trials = 20000, bound = 4;
+  long anchored = 0, anchoredExact = 0, unsound = 0;
+  for (int t = 0; t < trials; ++t) {
+    VarEnv venv = randVarEnv(nf, 2);
+    Path p = randPath(nf, 3, venv), q = randPath(nf, 3, venv);
+    Env e{p, q};
+    bool m = mayAlias(p, q, nf), b = bruteAlias(p, q, nf, bound);
+    if (b && !m) ++unsound;
+    if (inAnchoredCNF(e)) { ++anchored; if (m == b) ++anchoredExact; }
+  }
+  expect(unsound == 0, "P7  no unsound answer in " + std::to_string(trials) + " pairs");
+  expect(anchored == anchoredExact,
+         "P7  exact on every anchored environment (" +
+         std::to_string(anchoredExact) + "/" + std::to_string(anchored) + ")");
+}
+
+// P8  the counterexample of PathFragment.tex is rejected by the checker.
+static void p8_counterexampleRejected() {
+  FieldSet D = bit(0) | bit(1);
+  Env bad{Path{V(0, D), F(0)}, Path{F(1), V(0, D)}};   // pi.a  vs  b.pi
+  Env good{Path{V(0, D), F(0)}, Path{V(0, D), F(1)}};  // pi.a  vs  pi.b
+  expect(inFragment(bad), "P8  the bad pair is in CNF -- no variable repeats");
+  expect(!inAnchoredCNF(bad), "P8  ... but is not anchored, so a checker rejects it");
+  expect(inAnchoredCNF(good), "P8  the aligned pair is accepted");
+}
+
 // P1  truly aliases  =>  mayAlias says yes            (soundness of the negation)
 static void p1_aliasSoundness() {
   const int nf = 2, trials = 40000, bound = 3;
@@ -448,6 +480,8 @@ int main() {
   prop::p1_aliasSoundness();
   prop::p5_cnfNotEnough();
   prop::p6_exactWhenUnshared();
+  prop::p7_anchoredIsExact();
+  prop::p8_counterexampleRejected();
   prop::p2_joinUpperBound();
   prop::p3_widenUpperBound();
   prop::p4_reindexRoundTrip();

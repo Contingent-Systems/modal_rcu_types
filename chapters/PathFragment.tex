@@ -275,7 +275,7 @@ be deterministic and terminating on its own.
 \texttt{prototype/path\_domain.h} implements CNF membership, \MayAlias{}, join,
 substitution, reindexing, widening and the loop fixpoint in dependency-free
 C++17, structured to be lifted into \textsf{Sema}.
-\texttt{prototype/path\_domain\_test.cpp} passes 35/35, including the two
+\texttt{prototype/path\_domain\_test.cpp} passes 40/40, including the four
 properties of \S\ref{sec:pathfrag-exact}.
 
 \paragraph{Unit tests} use only paths that appear in the paper.
@@ -374,7 +374,10 @@ Theorem \ref{thm:alias-exact} applies.
 
 Anchoring is the syntactic form of what a traversal actually produces: the
 cursors of a loop all carry the loop word at the same position, because they were
-all reindexed by the same back edge.  Every path in the paper is anchored, which
+all reindexed by the same back edge.  It is decidable by inspection --- for each
+variable, compare the segments preceding it in every path that mentions it ---
+and \texttt{inAnchoredCNF} in the prototype does exactly that, so a checker can
+accept the class on which it is exact rather than settling for soundness.  Every path in the paper is anchored, which
 is why the unit tests are exact, and the counterexample above is not anchored ---
 $\pvar$ sits at depth $0$ in one path and depth $1$ in the other.
 

@@ -99,6 +99,62 @@ inline bool inFragment(const Env &e) {
   return true;
 }
 
+// Variables must be mentioned in increasing order.  inFragment above checks
+// only that none repeats within a path, which is the per-path half of CNF; this
+// is the other half, and it is what rules out the misaligned *cross*-variable
+// shape pi.a against b.pi'.
+inline bool varsIncreasing(const Path &p) {
+  int last = -1;
+  for (const Seg &s : p) {
+    if (s.kind != Seg::Var) continue;
+    if (s.var <= last) return false;
+    last = s.var;
+  }
+  return true;
+}
+
+// The segments strictly before the first occurrence of variable v, if v occurs.
+inline std::optional<Path> anchorOf(const Path &p, int v) {
+  for (size_t i = 0; i < p.size(); ++i)
+    if (p[i].kind == Seg::Var && p[i].var == v)
+      return Path(p.begin(), p.begin() + i);
+  return std::nullopt;
+}
+
+// Anchored: every path mentioning a variable agrees on what precedes it.
+//
+// This is the condition under which mayAlias is *exact* and not merely sound.
+// All the imprecision lives outside it: a variable that survives the prefix
+// reduction in both arguments is the only source, and anchoring is what
+// guarantees the reduction consumes every shared variable.  See
+// chapters/PathFragment.tex, "Exactness of Stage 2".
+//
+// It is also what a traversal actually produces, since the cursors of a loop
+// are reindexed by the same back edge -- so rejecting non-anchored environments
+// costs nothing on real code and buys exactness.
+inline bool isAnchored(const Env &e) {
+  std::map<int, Path> anchor;
+  for (const Path &p : e) {
+    for (const Seg &s : p) {
+      if (s.kind != Seg::Var) continue;
+      std::optional<Path> a = anchorOf(p, s.var);
+      auto it = anchor.find(s.var);
+      if (it == anchor.end()) anchor.emplace(s.var, *a);
+      else if (it->second != *a) return false;
+    }
+  }
+  return true;
+}
+
+// The class a checker should accept: CNF, in increasing order, and anchored.
+// On it, every negated mayAlias query the type rules issue is decided exactly.
+inline bool inAnchoredCNF(const Env &e) {
+  if (!inFragment(e)) return false;
+  for (const Path &p : e)
+    if (!varsIncreasing(p)) return false;
+  return isAnchored(e);
+}
+
 // ---------------------------------------------------------------------------
 // MayAlias
 // ---------------------------------------------------------------------------
