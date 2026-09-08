@@ -207,6 +207,13 @@ inline std::string frameItr(const TypeEnv &g, const std::vector<int> &actors,
                             const std::vector<int> &victims, int numFields) {
   for (const auto &kv : g) {
     if (kv.second.kind != Type::Itr) continue;
+    // The rules quantify over x:rcuItr rho N([f |-> y]) -- an iterator with a
+    // field map *entry*.  One with an empty map is not constrained, and should
+    // not be: what the premise protects is a map going stale when the mutation
+    // changes the field it records, and an empty map records nothing.
+    // Checking every iterator instead rejects a live root reference whenever a
+    // traversal might have taken zero steps, which is the paper's own example.
+    if (kv.second.fields.empty()) continue;
     bool isActor = false;
     for (int a : actors) if (a == kv.first) isActor = true;
     if (isActor) continue;

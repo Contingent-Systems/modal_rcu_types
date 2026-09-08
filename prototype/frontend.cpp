@@ -223,6 +223,21 @@ class Translator {
             }
           }
         }
+        // T *x = y;  -- the declaration form of T-ReadS.  Distinct from the
+        // assignment form and just as necessary: a traversal that seeds its
+        // cursor with `p = root` gets no type for p without it.
+        if (const auto *dr = llvm::dyn_cast<DeclRefExpr>(
+                vd->getInit()->IgnoreParenImpCasts())) {
+          if (dr->getType()->isPointerType()) {
+            rcu::Stmt st;
+            st.kind = rcu::Stmt::ReadS;
+            st.x = names_.of(dr->getDecl());
+            st.z = names_.of(vd);
+            st.line = line(s->getBeginLoc());
+            out_.stmts.push_back(st);
+            continue;
+          }
+        }
         if (const MemberExpr *me = rcuMember(vd->getInit())) {
           const ValueDecl *base = baseVar(me);
           if (!base) { note(s, "field read from a non-variable base"); continue; }

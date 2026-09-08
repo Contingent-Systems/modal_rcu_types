@@ -177,9 +177,20 @@ static void premises() {
     g[current] = tItr(Path{V(0, BOTH), F(LeftF)},
                       FieldMap{{Left, fvNull()}, {Right, fvNull()}});
     g[currentF] = tFresh(FieldMap{{Left, fvNull()}, {Right, fvNull()}});
-    g[9] = tItr(Path{V(0, BOTH), F(LeftF)});   // an alias of current
+    // The rule constrains x:rcuItr rho N([f |-> y]) -- an alias carrying a
+    // field map, whose entry the mutation would make stale.
+    g[9] = tItr(Path{V(0, BOTH), F(LeftF)}, FieldMap{{Left, fvVar(currentL)}});
     expectNo(tReplace(g, parent, Left, current, currentF, BOTH, NF),
-             "an aliasing iterator elsewhere in the environment is rejected");
+             "an aliasing iterator with a field map is rejected");
+
+    // One with no field map is not constrained, and must not be: it records
+    // nothing that the mutation can invalidate.  Rejecting it anyway makes a
+    // live root reference fatal whenever a traversal might have taken zero
+    // steps, which is the paper's own binary search tree delete.
+    TypeEnv g2 = g;
+    g2[9] = tItr(Path{V(0, BOTH), F(LeftF)});
+    expectOk(tReplace(g2, parent, Left, current, currentF, BOTH, NF),
+             "... one with an empty field map is not");
   }
 }
 
