@@ -143,6 +143,16 @@ inline std::optional<TypeEnv> joinEnv(const TypeEnv &a, const TypeEnv &b) {
 // different *kinds* on the two paths is a real inconsistency, while two paths
 // that will not join is the path abstraction giving up.  Reporting both as one
 // message hides which happened.
+// A merge fails only on a kind clash.  Two paths that will not join are not an
+// error: the reference simply has no describable path afterwards, so it is
+// dropped, exactly as a variable bound on only one branch is dropped.  Any
+// later use then fails on its own, at the use, which is where a programmer can
+// act on it.
+//
+// Failing the merge instead reports every dead local carried past a branch,
+// which is a false positive and the kind that makes a checker unusable.  The
+// alternative -- consulting liveness -- needs the frontend's own CFG and
+// analysis context to agree, and buys nothing this does not.
 inline std::optional<TypeEnv> joinEnvWhy(const TypeEnv &a, const TypeEnv &b,
                                          int *badVar, bool *kindClash) {
   TypeEnv out;
@@ -150,16 +160,21 @@ inline std::optional<TypeEnv> joinEnvWhy(const TypeEnv &a, const TypeEnv &b,
     auto it = b.find(kv.first);
     if (it == b.end()) continue;
     if (kv.second.kind != it->second.kind) {
+      // Different kinds matter only when one of them carries an obligation.
+      // A reference freed on one path and still an iterator on the other is
+      // ordinary code -- neither owes anything afterwards, so it is dropped.
+      // But fresh, unlinked or freeable on one path and not the other is a
+      // leak on that path, and has to be reported.
+      auto owes = [](Type::Kind k) {
+        return k == Type::Fresh || k == Type::Unlinked || k == Type::Freeable;
+      };
+      if (!owes(kv.second.kind) && !owes(it->second.kind)) continue;
       if (badVar) *badVar = kv.first;
       if (kindClash) *kindClash = true;
       return std::nullopt;
     }
     std::optional<Type> t = joinType(kv.second, it->second);
-    if (!t) {
-      if (badVar) *badVar = kv.first;
-      if (kindClash) *kindClash = false;
-      return std::nullopt;
-    }
+    if (!t) continue;  // no common path: the reference does not survive
     out.emplace(kv.first, *t);
   }
   return out;

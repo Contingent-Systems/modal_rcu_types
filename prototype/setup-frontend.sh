@@ -144,11 +144,12 @@ if [ "${1:-}" = "--status" ]; then
   echo "                                  space spelling"
   echo "  done   diagnostic emission      named after the source, not internal ids"
   echo
+  echo "  done   branch refinement        if (p->f == NULL) and if (p->f == q)"
+  echo "                                  recorded on the edge that proves them"
+  echo
   echo "  todo   function summaries       so a function can be checked without"
   echo "                                  --assume-entry, which is an assumption"
   echo "                                  and says so"
-  echo "  todo   null refinement          if (p->f == NULL) records a null field"
-  echo "                                  map entry, which T-UnlinkH needs"
   echo
   echo "No new annotation language is needed: rcu_dereference, rcu_assign_pointer,"
   echo "synchronize_rcu, kfree and __rcu already distinguish every action the"

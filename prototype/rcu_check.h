@@ -17,6 +17,7 @@
 #include "rcu_rules.h"
 
 #include <deque>
+#include <map>
 #include <set>
 
 namespace rcu {
@@ -38,6 +39,7 @@ struct Stmt {
     Sync,         // SyncStart; SyncStop
     Free,         // free(x)
     RefineField,  // assume x.f == y
+    RefineNull,   // assume x.f == NULL
     Nop
   } kind = Nop;
 
@@ -150,6 +152,7 @@ inline Result applyStmt(const TypeEnv &g, const Stmt &s, const Config &cfg) {
     case Stmt::Sync:        return tSync(g);
     case Stmt::Free:        return tFree(g, s.x);
     case Stmt::RefineField: return tRefineField(g, s.x, s.f, s.y);
+    case Stmt::RefineNull:  return tRefineNull(g, s.x, s.f);
     case Stmt::ReadS: {
       const Type *tx = detail::lookup(g, s.x);
       if (!tx || tx->kind != Type::Itr)
@@ -171,6 +174,12 @@ struct Block {
   std::vector<Stmt> stmts;
   std::vector<int> succs;      // ordinary edges, merged with joinEnv
   std::vector<int> backSuccs;  // loop back edges, closed with closeBackEdge
+  // What a branch proves, on the edge that proves it.  A refinement holds on
+  // one outgoing edge and not the other, so it cannot live in either block:
+  // putting it in the successor would apply it to that block's other
+  // predecessors too.
+  std::map<int, std::vector<Stmt>> onEdge;
+
 };
 using Cfg = std::vector<Block>;
 
@@ -282,6 +291,15 @@ inline CheckResult check(const Cfg &cfg, const TypeEnv &initial,
 
     for (int s : cfg[b].succs) {
       TypeEnv incoming = g;
+      bool edgeFailed = false;
+      auto eit = cfg[b].onEdge.find(s);
+      if (eit != cfg[b].onEdge.end())
+        for (const Stmt &es : eit->second) {
+          Result er = applyStmt(incoming, es, conf);
+          if (!er.ok) { edgeFailed = true; break; }
+          incoming = std::move(er.env);
+        }
+      if (edgeFailed) continue;  // the branch condition is not usable here
       if (!seen[s]) {
         res.entry[s] = incoming; seen[s] = true; work.push_back(s);
         continue;
@@ -296,7 +314,7 @@ inline CheckResult check(const Cfg &cfg, const TypeEnv &initial,
                 ? (detail::name(bad) + " reaches this point with different "
                    "kinds on different paths, so there is no type it has here")
                 : (detail::name(bad) + " reaches this point by paths that do "
-                   "not join: the path abstraction cannot describe both")});
+                   "not join")});
         continue;
       }
       if (!(*m == res.entry[s])) { res.entry[s] = *m; work.push_back(s); }

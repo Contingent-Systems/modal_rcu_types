@@ -22,6 +22,7 @@
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Analysis/Analyses/Dominators.h"
+#include "clang/Analysis/AnalysisDeclContext.h"
 #include "clang/Analysis/CFG.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Frontend/CompilerInstance.h"
@@ -140,6 +141,47 @@ class Translator {
   }
 
   Translated &state() { return out_; }
+
+  // What a branch proves on its true edge.  Clang keeps the condition in the
+  // block's terminator, and orders the successors true-then-false, so this is
+  // the one place the two branches can be told apart.
+  //
+  // Two shapes matter, and the type system has a rule for each:
+  //   if (x->f == NULL)   the field is null      -- T-UnlinkH needs it
+  //   if (x->f == y)      the field holds y      -- the field-refining rule
+  // The BST delete performs both, and neither can be typed without them.
+  std::vector<rcu::Stmt> refinementsOf(const CFGBlock *b) {
+    std::vector<rcu::Stmt> out;
+    const Stmt *cond = b->getTerminatorCondition();
+    if (!cond) return out;
+    const auto *ce = llvm::dyn_cast<Expr>(cond);
+    const auto *bo = ce ? llvm::dyn_cast<BinaryOperator>(ce->IgnoreParenImpCasts())
+                        : nullptr;
+    if (!bo || bo->getOpcode() != BO_EQ) return out;
+
+    const MemberExpr *me = rcuMember(bo->getLHS());
+    const Expr *other = bo->getRHS();
+    if (!me) { me = rcuMember(bo->getRHS()); other = bo->getLHS(); }
+    if (!me) return out;
+    const ValueDecl *base = baseVar(me);
+    if (!base) return out;
+
+    rcu::Stmt st;
+    st.x = names_.of(base);
+    st.f = rcu::bit(names_.of(llvm::cast<FieldDecl>(me->getMemberDecl())));
+    st.line = line(cond->getBeginLoc());
+
+    if (other->isNullPointerConstant(ctx_, Expr::NPC_ValueDependentIsNull)) {
+      st.kind = rcu::Stmt::RefineNull;
+      out.push_back(st);
+    } else if (const auto *dr = llvm::dyn_cast<DeclRefExpr>(
+                   other->IgnoreParenImpCasts())) {
+      st.kind = rcu::Stmt::RefineField;
+      st.y = names_.of(dr->getDecl());
+      out.push_back(st);
+    }
+    return out;
+  }
 
  private:
   unsigned line(SourceLocation l) const {
@@ -284,22 +326,38 @@ class Consumer : public ASTConsumer {
       // when its target dominates its source; that is the only thing dominance
       // is needed for here, and it is why the checker cannot compute it itself
       // -- it never sees the shape of the source.
-      CFG::BuildOptions bo;
-      std::unique_ptr<CFG> cfgraph = CFG::buildCFG(fd, fd->getBody(), &ctx, bo);
+      // One CFG, shared with the analyses.  Building a second one separately
+      // is the obvious thing and is wrong: LiveVariables answers in terms of
+      // the blocks of the CFG *it* was built over, so queries made with blocks
+      // from another CFG silently miss and report everything dead.
+      AnalysisDeclContextManager mgr(ctx);
+      AnalysisDeclContext *adc = mgr.getContext(fd);
+      if (!adc) continue;
+      CFG *cfgraph = adc->getCFG();
       if (!cfgraph) continue;
       CFGDomTree dom;
-      dom.buildDominatorTree(cfgraph.get());
+      dom.buildDominatorTree(cfgraph);
+
 
       unsigned n = cfgraph->getNumBlockIDs();
       rcu::Cfg cfg(n);
       for (const CFGBlock *b : *cfgraph) {
         unsigned id = b->getBlockID();
         cfg[id].stmts = tr.block(b);
+        std::vector<rcu::Stmt> refine = tr.refinementsOf(b);
+        bool first = true;
         for (const CFGBlock::AdjacentBlock &adj : b->succs()) {
           const CFGBlock *s = adj.getReachableBlock();
-          if (!s) continue;
-          if (dom.dominates(s, b)) cfg[id].backSuccs.push_back(s->getBlockID());
-          else                     cfg[id].succs.push_back(s->getBlockID());
+          if (!s) { first = false; continue; }
+          if (dom.dominates(s, b)) {
+            cfg[id].backSuccs.push_back(s->getBlockID());
+          } else {
+            cfg[id].succs.push_back(s->getBlockID());
+            // Clang orders successors true-then-false.
+            if (first && !refine.empty())
+              cfg[id].onEdge[s->getBlockID()] = refine;
+          }
+          first = false;
         }
       }
 

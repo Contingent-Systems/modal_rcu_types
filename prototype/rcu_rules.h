@@ -177,6 +177,23 @@ inline Result tRefineField(TypeEnv g, int x, FieldSet f, int y) {
                     detail::fieldsToString(f));
 }
 
+// In the branch where x.f == NULL holds, the field map records it as null.
+//
+// T-UnlinkH needs this and cannot get it any other way: its premise is that
+// every field of the unlinked node other than the one being spliced is null,
+// and a field map entry only ever records a *variable* until something proves
+// otherwise.  The proof is the test the code already performs -- the BST
+// delete's `if (current.Right == null)` exists for exactly this.
+inline Result tRefineNull(TypeEnv g, int x, FieldSet f) {
+  const Type *tx = detail::lookup(g, x);
+  if (!tx || (tx->kind != Type::Itr && tx->kind != Type::Fresh))
+    return Result::no(detail::name(x) + " is not a reference with fields");
+  FieldMap n = tx->fields;
+  n[f] = fvNull();
+  g[x] = (tx->kind == Type::Itr) ? tItr(tx->path, n) : tFresh(n);
+  return Result::yes(std::move(g));
+}
+
 // ---------------------------------------------------------------------------
 // The framing premises
 // ---------------------------------------------------------------------------
