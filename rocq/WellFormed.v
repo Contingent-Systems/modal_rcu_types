@@ -222,9 +222,21 @@ Section WellFormedness.
   Definition RINFL (s : LState) : Prop :=
     forall o Tr t, flist s o = Some Tr -> Tr t -> bnd (ms s) t.
 
-  (** 15. HD -- heap domain closure.  This is the invariant whose proof case is
-      empty in three separate lemmas of the technical report. *)
+  (** 15. HD -- heap domain closure, with the source restricted to nodes that
+      are not detached (change 7).  The published form constrains every edge,
+      which Free breaks: an unlinked node retains a pointer to its old child,
+      and freeing that child leaves the pointer dangling.  It dangles harmlessly
+      -- the node holding it is itself detached and unreachable -- and OW
+      already carries exactly this exemption, so HD not carrying it was an
+      oversight.  [HD_orig] below keeps the published form, where
+      [HD_not_preserved_by_free] shows a legal Free violating it.
+
+      This is also the invariant whose proof case is empty in four separate
+      lemmas of the technical report, and dismissed as trivial in a fifth. *)
   Definition HD (s : LState) : Prop :=
+    forall o f o', Edge s o f o' -> ~ Detached s o -> InHeap s o'.
+
+  Definition HD_orig (s : LState) : Prop :=
     forall o f o', Edge s o f o' -> InHeap s o'.
 
   (** 16. UNQRT -- unique root, split into its two halves. *)
@@ -704,7 +716,7 @@ Lemma initial_RINFL : RINFL initial.
 Proof. intros o Tr t H1 H2. simpl in H1. discriminate H1. Qed.
 
 Lemma initial_HD : HD initial.
-Proof. intros o f o' H. exfalso. exact (initial_no_edges _ _ _ H). Qed.
+Proof. intros o f o' H _. exfalso. exact (initial_no_edges _ _ _ H). Qed.
 
 Lemma initial_UNQRT_a : UNQRT_a initial.
 Proof. intros o f. apply initial_no_edges. Qed.
@@ -778,9 +790,6 @@ Print Assumptions FPI_not_preserved_by_replace.
     endpoint is [Detached] -- and HD should carry the same one.  That OW has it
     and HD does not looks like an oversight rather than a decision. *)
 
-Definition HD_live (s : LState) : Prop :=
-  forall o f o', Edge s o f o' -> ~ Detached s o -> InHeap s o'.
-
 (** Node 0 is unlinked and still points at node 1, which is freeable.  Freeing
     1 leaves 0's pointer dangling. *)
 Definition hd_before : LState :=
@@ -812,7 +821,7 @@ Definition hd_after : LState :=
      flist := fun _ => None |}.
 
 Lemma HD_not_preserved_by_free :
-  HD hd_before /\ ~ HD hd_after /\ HD_live hd_after.
+  HD_orig hd_before /\ ~ HD_orig hd_after /\ HD hd_after.
 Proof.
   split; [| split].
   - (* before the free, both nodes are allocated *)

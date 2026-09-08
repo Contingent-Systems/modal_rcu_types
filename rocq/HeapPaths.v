@@ -734,6 +734,15 @@ Qed.
 Definition free (h : Heap) (d : Loc) : Heap :=
   fun o f => if Nat.eq_dec o d then None else h o f.
 
+(** Lookup facts for [free], so callers never have to case-split on the
+    equality inside it -- doing that at the use site does not reduce, because
+    the decision procedure there is not syntactically the one [free] contains. *)
+Lemma free_same : forall h d f, free h d d f = None.
+Proof. intros h d f. unfold free. destruct (Nat.eq_dec d d); congruence. Qed.
+
+Lemma free_other : forall h d o f, o <> d -> free h d o f = h o f.
+Proof. intros h d o f Hne. unfold free. destruct (Nat.eq_dec o d); congruence. Qed.
+
 Lemma HD_h_free : forall h d,
   HD_h h ->
   (forall o f, h o f <> Some (VLoc d)) ->

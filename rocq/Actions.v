@@ -504,3 +504,53 @@ End readend.
 
 Print Assumptions read_end_preserves_IFL.
 Print Assumptions read_end_preserves_RINFL.
+
+(** ** Free
+
+    The endpoint the reclamation argument exists to justify, and the case the
+    report calls trivial.
+
+    Under the published HD it is not provable at all: HD constrains every edge,
+    and an unlinked node retains a pointer to its old child, so freeing that
+    child leaves a dangling edge ([HD_not_preserved_by_free]).  Under the
+    corrected HD it goes through by exactly the argument the write-up claimed --
+    ULKR is what supplies it.
+
+    The shape is worth noting.  The obligation is that nothing *live* points at
+    the freed node.  ULKR gives that every predecessor of a freeable node is
+    itself unlinked or freeable, hence detached; the corrected HD asks only
+    about non-detached sources; so the two meet exactly.  The published HD asked
+    about detached sources too, where ULKR has nothing to offer. *)
+
+Definition free_ms (m : MState) (d : Loc) : MState :=
+  {| stk := stk m; hp := free (hp m) d; lk := lk m; rt := rt m;
+     rds := rds m; bnd := bnd m |}.
+
+Section freeing.
+
+  Theorem free_preserves_HD m Og U T F d t :
+    let s  := to_LState_t m Og U T F in
+    let s' := to_LState_t (free_ms m d) Og U T F in
+    HD s -> ULKR s -> obsv s d (Ofree t) -> HD s'.
+  Proof.
+    intros s s' HHD HULKR Hfree o f o' Hedge Hlive.
+    (* the edge survived the free, so its source is not the freed node *)
+    unfold Edge in Hedge. subst s'. simpl in Hedge.
+    destruct (Nat.eq_dec o d) as [->|Hod];
+      [rewrite free_same in Hedge; discriminate |].
+    rewrite free_other in Hedge; [| exact Hod].
+    (* observations are untouched, so the source is live in the old state too *)
+    assert (Hlive0 : ~ Detached s o) by exact Hlive.
+    (* the target is not the freed node: ULKR would make the source detached *)
+    assert (Hne : o' <> d).
+    { intros ->. apply Hlive0.
+      destruct (HULKR d o f t (or_intror Hfree) Hedge) as [Hu | Hf];
+        [exists t; by left | exists t; right; by left]. }
+    (* so HD in the old state gives what we need, and the free did not touch it *)
+    destruct (HHD o f o' Hedge Hlive0) as [g [v Hv]].
+    exists g, v. simpl. by rewrite free_other.
+  Qed.
+
+End freeing.
+
+Print Assumptions free_preserves_HD.
