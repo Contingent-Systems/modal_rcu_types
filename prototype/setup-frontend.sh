@@ -146,10 +146,13 @@ if [ "${1:-}" = "--status" ]; then
   echo
   echo "  done   branch refinement        if (p->f == NULL) and if (p->f == q)"
   echo "                                  recorded on the edge that proves them"
+  echo "  done   function summaries      kind-level, with the entry kind chosen"
+  echo "                                  by trying the candidates"
   echo
-  echo "  todo   function summaries       so a function can be checked without"
-  echo "                                  --assume-entry, which is an assumption"
-  echo "                                  and says so"
+  echo "  todo   path-level summaries     a call drops its arguments' paths; a"
+  echo "                                  caller needing one re-reads it"
+  echo "  todo   call chains              two passes handle one level; deeper"
+  echo "                                  needs a fixpoint in dependency order"
   echo
   echo "No new annotation language is needed: rcu_dereference, rcu_assign_pointer,"
   echo "synchronize_rcu, kfree and __rcu already distinguish every action the"

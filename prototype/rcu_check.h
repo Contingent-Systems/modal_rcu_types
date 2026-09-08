@@ -40,12 +40,36 @@ struct Stmt {
     Free,         // free(x)
     RefineField,  // assume x.f == y
     RefineNull,   // assume x.f == NULL
+    Call,         // z = f(args...), f a function with a summary
     Nop
   } kind = Nop;
 
   int x = -1, y = -1, z = -1, r = -1, n = -1, o = -1;
   FieldSet f = 0, f2 = 0, f4 = 0;
-  int line = 0;  // for diagnostics
+  int line = 0;         // for diagnostics
+  int callee = -1;      // Call: index into Config::summaries
+  std::vector<int> args;  // Call: the actual arguments, in order
+};
+
+// ---------------------------------------------------------------------------
+// Function summaries
+// ---------------------------------------------------------------------------
+//
+// What a call does to its arguments, at the level of kinds rather than paths.
+//
+// Kinds are the useful part and paths are the hard part.  A path-level summary
+// would have to relate the callee's path variables to the caller's, which is
+// the interprocedural version of the problem the path domain solves within one
+// function; kinds alone already catch what goes wrong across a call -- freeing
+// what the callee freed, leaving unfreed what it unlinked, using what it
+// invalidated.  So an argument's path is dropped at a call and the reference
+// survives only as a kind.  A caller needing the path re-reads it, which is
+// what the field maps make it do anyway.
+struct Summary {
+  std::string name;
+  std::vector<Type::Kind> paramIn;   // what each pointer parameter must be
+  std::vector<Type::Kind> paramOut;  // what it is afterwards
+  bool returnsIterator = false;
 };
 
 // ---------------------------------------------------------------------------
@@ -84,9 +108,22 @@ inline const char *apiAction(Stmt::Kind k) {
 // Applying one statement
 // ---------------------------------------------------------------------------
 
+inline const char *kindName(Type::Kind k) {
+  switch (k) {
+    case Type::Itr:      return "an iterator";
+    case Type::Fresh:    return "a fresh node";
+    case Type::Unlinked: return "unlinked";
+    case Type::Freeable: return "freeable";
+    case Type::Undef:    return "undefined";
+    case Type::Root:     return "the root";
+  }
+  return "?";
+}
+
 struct Config {
   FieldSet rcuFields = 0;
   int numFields = 0;
+  std::vector<Summary> summaries;
 };
 
 // A field write is one of four rules, and which one depends on the types of the
@@ -140,8 +177,34 @@ inline Result applyWrite(const TypeEnv &g, const Stmt &s, const Config &cfg) {
                     detail::name(victim));
 }
 
+inline Result applyCall(const TypeEnv &g, const Stmt &s, const Config &cfg) {
+  if (s.callee < 0 || s.callee >= int(cfg.summaries.size()))
+    return Result::no("call to a function with no summary");
+  const Summary &sum = cfg.summaries[s.callee];
+  TypeEnv h = g;
+
+  for (size_t i = 0; i < s.args.size() && i < sum.paramIn.size(); ++i) {
+    const Type *ta = detail::lookup(g, s.args[i]);
+    if (!ta)
+      return Result::no(detail::name(s.args[i]) + " is not in scope");
+    if (ta->kind != sum.paramIn[i])
+      return Result::no(sum.name + " expects its argument " +
+                        std::to_string(i + 1) + " to be " +
+                        kindName(sum.paramIn[i]) + ", but " +
+                        detail::name(s.args[i]) + " is " + kindName(ta->kind));
+    // The path does not survive the call; the kind does.
+    Type after;
+    after.kind = sum.paramOut[i];
+    h[s.args[i]] = after;
+  }
+  if (s.z >= 0)
+    h[s.z] = sum.returnsIterator ? tItr(Path{}) : tUndef();
+  return Result::yes(std::move(h));
+}
+
 inline Result applyStmt(const TypeEnv &g, const Stmt &s, const Config &cfg) {
   switch (s.kind) {
+    case Stmt::Call:        return applyCall(g, s, cfg);
     case Stmt::Root:        return tRoot(g, s.x, s.y);
     case Stmt::ReadH:       return tReadH(g, s.x, s.f, s.z);
     case Stmt::Alloc:       return tAlloc(g, s.x);

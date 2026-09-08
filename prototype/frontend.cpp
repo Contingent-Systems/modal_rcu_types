@@ -40,14 +40,6 @@ using namespace clang;
 namespace {
 
 llvm::cl::OptionCategory RcuCategory("rcu-check options");
-llvm::cl::opt<bool> AssumeEntry(
-    "assume-entry",
-    llvm::cl::desc("type each pointer parameter as an iterator at its own "
-                   "path.  An assumption, not an inference: checking a "
-                   "function in isolation needs the caller's environment, "
-                   "which is the function-summary work still to be done"),
-    llvm::cl::cat(RcuCategory));
-
 llvm::cl::opt<bool> DumpIR("dump-ir",
                            llvm::cl::desc("print the statement IR translated "
                                           "from each function"),
@@ -127,6 +119,9 @@ class Translator {
  public:
   Translator(ASTContext &ctx, Names &names) : ctx_(ctx), names_(names) {}
 
+  // Set between passes: which functions have summaries, and their index.
+  std::map<const FunctionDecl *, int> *summaryOf = nullptr;
+
   // Translate one CFG block.  Accumulated state (names, the RCU field set,
   // what could not be translated) is shared across blocks of a function.
   std::vector<rcu::Stmt> block(const CFGBlock *b) {
@@ -198,7 +193,7 @@ class Translator {
       for (const Decl *d : ds->decls()) {
         const auto *vd = llvm::dyn_cast<VarDecl>(d);
         if (!vd || !vd->hasInit()) continue;
-        // T *n = kmalloc(...)  -- a fresh node
+        // T *n = kmalloc(...)  -- a fresh node; or T *z = f(...)  -- a call
         if (const auto *ce = llvm::dyn_cast<CallExpr>(
                 vd->getInit()->IgnoreParenImpCasts())) {
           std::string cn = calleeName(ce);
@@ -209,6 +204,23 @@ class Translator {
             st.line = line(s->getBeginLoc());
             out_.stmts.push_back(st);
             continue;
+          }
+          if (summaryOf) {
+            auto sit = summaryOf->find(ce->getDirectCallee());
+            if (sit != summaryOf->end()) {
+              rcu::Stmt st;
+              st.kind = rcu::Stmt::Call;
+              st.callee = sit->second;
+              st.z = names_.of(vd);
+              st.line = line(s->getBeginLoc());
+              for (const Expr *a : ce->arguments())
+                if (const auto *dr = llvm::dyn_cast<DeclRefExpr>(a->IgnoreParenImpCasts()))
+                  st.args.push_back(names_.of(dr->getDecl()));
+                else
+                  st.args.push_back(-1);
+              out_.stmts.push_back(st);
+              continue;
+            }
           }
         }
         if (const MemberExpr *me = rcuMember(vd->getInit())) {
@@ -283,6 +295,20 @@ class Translator {
         return;
       }
       if (n == "rcu_read_lock" || n == "rcu_read_unlock") return;  // boundaries
+      if (summaryOf) {
+        auto sit = summaryOf->find(ce->getDirectCallee());
+        if (sit != summaryOf->end()) {
+          st.kind = rcu::Stmt::Call;
+          st.callee = sit->second;
+          for (const Expr *a : ce->arguments())
+            if (const auto *dr = llvm::dyn_cast<DeclRefExpr>(a->IgnoreParenImpCasts()))
+              st.args.push_back(names_.of(dr->getDecl()));
+            else
+              st.args.push_back(-1);
+          out_.stmts.push_back(st);
+          return;
+        }
+      }
       note(s, "call to " + n);
       return;
       note(s, "call to " + n);
@@ -315,79 +341,80 @@ class Consumer : public ASTConsumer {
     unsigned err  = de.getCustomDiagID(DiagnosticsEngine::Warning, "rcu: %0");
     unsigned note = de.getCustomDiagID(DiagnosticsEngine::Note, "rcu: %0");
 
-    for (Decl *d : ctx.getTranslationUnitDecl()->decls()) {
-      auto *fd = llvm::dyn_cast<FunctionDecl>(d);
-      if (!fd || !fd->hasBody() || !fd->isThisDeclarationADefinition()) continue;
+    std::vector<const FunctionDecl *> fns;
+    for (Decl *d : ctx.getTranslationUnitDecl()->decls())
+      if (auto *fd = llvm::dyn_cast<FunctionDecl>(d))
+        if (fd->hasBody() && fd->isThisDeclarationADefinition())
+          fns.push_back(fd);
 
+    // Pass one derives a summary per function; pass two checks each body with
+    // the summaries available, so a call is checked rather than skipped.
+    //
+    // Two passes handle one level of calls.  A chain deeper than that needs
+    // iteration to a fixpoint in dependency order, which is the same shape of
+    // work and is not done here.
+    rcu::Config conf;
+    conf.rcuFields = 0;
+    std::map<const FunctionDecl *, int> index;
+
+    for (const FunctionDecl *fd : fns) {
       Names names;
       Translator tr(ctx, names);
+      rcu::Cfg cfg;
+      int entry = 0;
+      if (!build(ctx, fd, tr, names, cfg, entry)) continue;
 
-      // Clang's CFG, and the dominator tree over it.  An edge is a back edge
-      // when its target dominates its source; that is the only thing dominance
-      // is needed for here, and it is why the checker cannot compute it itself
-      // -- it never sees the shape of the source.
-      // One CFG, shared with the analyses.  Building a second one separately
-      // is the obvious thing and is wrong: LiveVariables answers in terms of
-      // the blocks of the CFG *it* was built over, so queries made with blocks
-      // from another CFG silently miss and report everything dead.
-      AnalysisDeclContextManager mgr(ctx);
-      AnalysisDeclContext *adc = mgr.getContext(fd);
-      if (!adc) continue;
-      CFG *cfgraph = adc->getCFG();
-      if (!cfgraph) continue;
-      CFGDomTree dom;
-      dom.buildDominatorTree(cfgraph);
+      rcu::Config c1;
+      c1.rcuFields = tr.state().rcuFields;
+      c1.numFields = int(names.fieldName.size());
 
-
-      unsigned n = cfgraph->getNumBlockIDs();
-      rcu::Cfg cfg(n);
-      for (const CFGBlock *b : *cfgraph) {
-        unsigned id = b->getBlockID();
-        cfg[id].stmts = tr.block(b);
-        std::vector<rcu::Stmt> refine = tr.refinementsOf(b);
-        bool first = true;
-        for (const CFGBlock::AdjacentBlock &adj : b->succs()) {
-          const CFGBlock *s = adj.getReachableBlock();
-          if (!s) { first = false; continue; }
-          if (dom.dominates(s, b)) {
-            cfg[id].backSuccs.push_back(s->getBlockID());
-          } else {
-            cfg[id].succs.push_back(s->getBlockID());
-            // Clang orders successors true-then-false.
-            if (first && !refine.empty())
-              cfg[id].onEdge[s->getBlockID()] = refine;
-          }
-          first = false;
-        }
+      // Which kind the parameters must have on entry is not always "iterator".
+      // A helper that reclaims a node takes one already unlinked, and assuming
+      // otherwise makes every call to it a false positive.  Rather than infer
+      // the requirement -- which is the same problem the whole system solves --
+      // the candidates are tried and the first that checks is taken.  A search
+      // over three possibilities, not an inference, and it is uniform across
+      // the parameters, so a function mixing kinds is not found.
+      const rcu::Type::Kind candidates[] = {rcu::Type::Itr, rcu::Type::Unlinked,
+                                            rcu::Type::Fresh};
+      rcu::Type::Kind chosen = rcu::Type::Itr;
+      rcu::TypeEnv in;
+      rcu::CheckResult r;
+      for (rcu::Type::Kind k : candidates) {
+        rcu::TypeEnv trial = assumedEntry(fd, names, c1, k);
+        rcu::CheckResult tr2 = rcu::check(cfg, trial, c1, entry);
+        if (tr2.ok) { chosen = k; in = trial; r = tr2; break; }
+        if (k == rcu::Type::Itr) { in = trial; r = tr2; }  // the fallback
       }
 
-      Translated t = tr.state();
-      if (t.stmts.empty() && t.unhandled.empty()) {
-        bool any = false;
-        for (const auto &blk : cfg) if (!blk.stmts.empty()) any = true;
-        if (!any) continue;
+      rcu::Summary sum;
+      sum.name = fd->getNameAsString();
+      // Clang numbers the exit block 0 and the entry block last, so the state
+      // after the body is the exit block's entry environment -- not the last
+      // one in the vector, which is where the *parameters* still sit exactly as
+      // they were assumed.  Reading that instead makes every summary report
+      // that the function changes nothing.
+      const rcu::TypeEnv &out = r.entry.empty() ? in : r.entry[0];
+      for (const ParmVarDecl *p : fd->parameters()) {
+        if (!p->getType()->isPointerType()) continue;
+        int id = names.of(p);
+        sum.paramIn.push_back(chosen);
+        auto it = out.find(id);
+        sum.paramOut.push_back(it == out.end() ? rcu::Type::Undef : it->second.kind);
       }
+      sum.returnsIterator = fd->getReturnType()->isPointerType();
+      index[fd] = int(conf.summaries.size());
+      conf.summaries.push_back(sum);
+      conf.rcuFields |= c1.rcuFields;
+    }
 
-      if (DumpIR) {
-        llvm::outs() << "-- " << fd->getNameAsString() << "  ("
-                     << n << " blocks)\n";
-        for (unsigned i = 0; i < n; ++i) {
-          if (cfg[i].stmts.empty() && cfg[i].succs.empty() &&
-              cfg[i].backSuccs.empty()) continue;
-          llvm::outs() << "   B" << i;
-          for (int s : cfg[i].succs)     llvm::outs() << " -> B" << s;
-          for (int s : cfg[i].backSuccs) llvm::outs() << " ~> B" << s << " (back)";
-          llvm::outs() << "\n";
-          for (const rcu::Stmt &s : cfg[i].stmts)
-            llvm::outs() << "      line " << s.line << "  kind " << int(s.kind) << "\n";
-        }
-      }
-
-      for (const auto &u : t.unhandled)
-        de.Report(ctx.getSourceManager().translateLineCol(
-                      ctx.getSourceManager().getMainFileID(), u.first, 1),
-                  note)
-            << ("not translated: " + u.second);
+    for (const FunctionDecl *fd : fns) {
+      Names names;
+      Translator tr(ctx, names);
+      tr.summaryOf = &index;
+      rcu::Cfg cfg;
+      int entry = 0;
+      if (!build(ctx, fd, tr, names, cfg, entry)) continue;
 
       rcu::detail::varNamer() = [&names](int v) {
         return v >= 0 && v < int(names.varName.size()) ? names.varName[v]
@@ -398,21 +425,30 @@ class Consumer : public ASTConsumer {
                                                          : std::to_string(f);
       };
 
-      rcu::Config conf;
-      conf.rcuFields = t.rcuFields;
-      conf.numFields = int(names.fieldName.size());
+      rcu::Config c = conf;
+      c.rcuFields = tr.state().rcuFields;
+      c.numFields = int(names.fieldName.size());
 
-      rcu::TypeEnv entry;
-      if (AssumeEntry) {
-        int pv = 0;
-        for (const ParmVarDecl *p : fd->parameters())
-          if (p->getType()->isPointerType())
-            entry[names.of(p)] = rcu::tItr(rcu::Path{rcu::V(pv++, conf.rcuFields)});
+      if (DumpIR) {
+        llvm::outs() << "-- " << fd->getNameAsString() << "\n";
+        for (unsigned i = 0; i < cfg.size(); ++i)
+          for (const rcu::Stmt &s : cfg[i].stmts)
+            llvm::outs() << "   B" << i << " line " << s.line
+                         << "  kind " << int(s.kind) << "\n";
       }
 
-      // Clang numbers the entry block last, not first.
-      rcu::CheckResult r = rcu::check(cfg, entry, conf,
-                                      int(cfgraph->getEntry().getBlockID()));
+      for (const auto &u : tr.state().unhandled)
+        de.Report(ctx.getSourceManager().translateLineCol(
+                      ctx.getSourceManager().getMainFileID(), u.first, 1),
+                  note)
+            << ("not translated: " + u.second);
+
+      rcu::Type::Kind pk = rcu::Type::Itr;
+      auto iit = index.find(fd);
+      if (iit != index.end() && !conf.summaries[iit->second].paramIn.empty())
+        pk = conf.summaries[iit->second].paramIn[0];
+      rcu::CheckResult r =
+          rcu::check(cfg, assumedEntry(fd, names, c, pk), c, entry);
       for (const rcu::Diagnosis &dg : r.errors) {
         SourceLocation at =
             dg.line > 0 ? ctx.getSourceManager().translateLineCol(
@@ -421,6 +457,58 @@ class Consumer : public ASTConsumer {
         de.Report(at, err) << dg.why;
       }
     }
+  }
+
+  // A function's parameters are the caller's, and what they are on entry is
+  // the caller's business.  Typing them as iterators is an assumption; the
+  // alternative is to infer what the body requires, which is the same problem
+  // the whole system solves and is not attempted here.
+  static rcu::TypeEnv assumedEntry(const FunctionDecl *fd, Names &names,
+                                   const rcu::Config &c,
+                                   rcu::Type::Kind k = rcu::Type::Itr) {
+    rcu::TypeEnv g;
+    int pv = 0;
+    for (const ParmVarDecl *p : fd->parameters()) {
+      if (!p->getType()->isPointerType()) continue;
+      int id = names.of(p);
+      if (k == rcu::Type::Itr)
+        g[id] = rcu::tItr(rcu::Path{rcu::V(pv++, c.rcuFields)});
+      else if (k == rcu::Type::Unlinked) g[id] = rcu::tUnlinked();
+      else                               g[id] = rcu::tFresh();
+    }
+    return g;
+  }
+
+  bool build(ASTContext &ctx, const FunctionDecl *fd, Translator &tr,
+             Names &names, rcu::Cfg &cfg, int &entry) {
+    AnalysisDeclContextManager mgr(ctx);
+    AnalysisDeclContext *adc = mgr.getContext(fd);
+    if (!adc) return false;
+    CFG *g = adc->getCFG();
+    if (!g) return false;
+    CFGDomTree dom;
+    dom.buildDominatorTree(g);
+
+    cfg.assign(g->getNumBlockIDs(), rcu::Block{});
+    for (const CFGBlock *b : *g) {
+      unsigned id = b->getBlockID();
+      cfg[id].stmts = tr.block(b);
+      std::vector<rcu::Stmt> refine = tr.refinementsOf(b);
+      bool first = true;
+      for (const CFGBlock::AdjacentBlock &adj : b->succs()) {
+        const CFGBlock *s = adj.getReachableBlock();
+        if (!s) { first = false; continue; }
+        if (dom.dominates(s, b)) {
+          cfg[id].backSuccs.push_back(s->getBlockID());
+        } else {
+          cfg[id].succs.push_back(s->getBlockID());
+          if (first && !refine.empty()) cfg[id].onEdge[s->getBlockID()] = refine;
+        }
+        first = false;
+      }
+    }
+    entry = int(g->getEntry().getBlockID());
+    return true;
   }
 
  private:
