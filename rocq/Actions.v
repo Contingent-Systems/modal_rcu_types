@@ -427,3 +427,80 @@ End readers.
 
 Print Assumptions reader_acquire_preserves_IFL.
 Print Assumptions reader_acquire_preserves_RITR.
+
+(** ** ReadEnd
+
+    A reader leaving its critical section stops being a reader, stops bounding
+    any pending reclamation, drops its observations, and is removed from every
+    free-list entry.  This is where the free list actually shrinks, and so where
+    Free eventually becomes possible.
+
+    The four have to happen together, and the proofs say why.  IFL needs the
+    observations dropped in the same step as the free-list removal: a thread
+    removed from an entry while still observing that node as an iterator is
+    exactly the state IFL forbids.  RINFL needs the bounding-thread set narrowed
+    with the entries, since it says every thread in an entry is a bounding
+    thread.  Neither is a step that can be taken on its own. *)
+
+Definition read_end_ms (m : MState) (t : TID) : MState :=
+  {| stk := stk m; hp := hp m; lk := lk m; rt := rt m;
+     rds := fun t' => rds m t' /\ t' <> t;
+     bnd := fun t' => bnd m t' /\ t' <> t |}.
+
+Definition read_end_F (F : gmap Loc (gset TID)) (t : TID) : gmap Loc (gset TID) :=
+  (fun s => s ∖ {[t]}) <$> F.
+
+Section readend.
+
+  (** [Og'] is [Og] with thread [t]'s entries gone; stated by its two defining
+      properties rather than as a filter, which keeps the proofs about what
+      matters. *)
+  Theorem read_end_preserves_IFL m Og Og' U T F t :
+    ObsWF Og' ->
+    (forall o, Og' !! (o, t) = None) ->
+    (forall o t', t' <> t -> Og' !! (o, t') = Og !! (o, t')) ->
+    IFL (to_LState_t m Og U T F) ->
+    IFL (to_LState_t (read_end_ms m t) Og' U T (read_end_F F t)).
+  Proof.
+    intros HWF Hgone Hkept HIFL t' o Tr Hiter Hfl.
+    (* the observation is thread t''s own, and t' is not the departing thread *)
+    destruct (obsv_t_locates _ _ _ _ _ o t' (Oiter t') HWF eq_refl Hiter)
+      as [s [Hlk Hin]].
+    assert (Hne : t' <> t) by (intros ->; rewrite Hgone in Hlk; discriminate).
+    (* the free-list entry is the old one minus t *)
+    unfold read_end_F in Hfl. simpl in Hfl.
+    rewrite lookup_fmap in Hfl.
+    destruct (F !! o) as [s0|] eqn:Hs0; [| discriminate].
+    simpl in Hfl. injection Hfl as <-.
+    (* so it suffices that t' was in the old entry *)
+    assert (Hold : IFL (to_LState_t m Og U T F)) by exact HIFL.
+    assert (Hiter0 : obsv (to_LState_t m Og U T F) o (Oiter t'))
+      by (exists t', s; rewrite -(Hkept o t' Hne); done).
+    assert (Hfl0 : flist (to_LState_t m Og U T F) o = Some (fun x => x ∈ s0))
+      by (simpl; by rewrite Hs0).
+    pose proof (Hold t' o _ Hiter0 Hfl0) as Hmem.
+    set_solver.
+  Qed.
+
+  (** RINFL: every thread in a free-list entry is a bounding thread.  Narrowing
+      the entries and the bounding set together preserves it. *)
+  Theorem read_end_preserves_RINFL m Og' U T F t :
+    RINFL (to_LState_t m Og' U T F) ->
+    RINFL (to_LState_t (read_end_ms m t) Og' U T (read_end_F F t)).
+  Proof.
+    intros HR o Tr t' Hfl Hin.
+    unfold read_end_F in Hfl. simpl in Hfl.
+    rewrite lookup_fmap in Hfl.
+    destruct (F !! o) as [s0|] eqn:Hs0; [| discriminate].
+    simpl in Hfl. injection Hfl as <-.
+    assert (Hne : t' <> t) by set_solver.
+    assert (Hin0 : t' ∈ s0) by set_solver.
+    assert (Hfl0 : flist (to_LState_t m Og' U T F) o = Some (fun x => x ∈ s0))
+      by (simpl; by rewrite Hs0).
+    split; [exact (HR o _ t' Hfl0 Hin0) | exact Hne].
+  Qed.
+
+End readend.
+
+Print Assumptions read_end_preserves_IFL.
+Print Assumptions read_end_preserves_RINFL.

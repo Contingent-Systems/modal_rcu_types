@@ -542,3 +542,34 @@ Print Assumptions tobs_ctl_agree.
 Print Assumptions tobs_ctl_exclusive.
 Print Assumptions tobs_set.
 Print Assumptions tobs_two_threads.
+
+(** ** Well-formedness of the per-thread encoding
+
+    Indexing by [(o, t)] only means what it should if an entry at that key holds
+    observations tagged with that thread.  Without it a thread's entry could
+    record another thread's observation, and dropping a thread's entries -- what
+    ReadEnd does -- would not drop exactly that thread's observations.  Stated
+    here because it is a property of the encoding, not of any action. *)
+
+Definition obs_tid (ob : obs) : option TID :=
+  match ob with
+  | Oiter t | Ounlk t | Ofresh t | Ofree t => Some t
+  | Oroot => None
+  end.
+
+Definition ObsWF (Og : ObsMap) : Prop :=
+  forall o t s ob, Og !! (o, t) = Some s -> ob ∈ s ->
+    obs_tid ob = Some t \/ ob = Oroot.
+
+(** Under it, a thread's observations are exactly what its own entries record,
+    so reading an observation off the reconstruction locates the entry. *)
+Lemma obsv_t_locates m Og U T F o t ob :
+  ObsWF Og -> obs_tid ob = Some t ->
+  obsv (to_LState_t m Og U T F) o ob ->
+  exists s, Og !! (o, t) = Some s /\ ob ∈ s.
+Proof.
+  intros HWF Htid [t' [s [Hlk Hin]]].
+  destruct (HWF o t' s ob Hlk Hin) as [Htid' | ->].
+  - rewrite Htid in Htid'. injection Htid' as ->. by exists s.
+  - simpl in Htid. discriminate.
+Qed.
