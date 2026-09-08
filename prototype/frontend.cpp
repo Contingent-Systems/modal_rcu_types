@@ -377,7 +377,7 @@ class Consumer : public ASTConsumer {
       Translator tr(ctx, names);
       rcu::Cfg cfg;
       int entry = 0;
-      if (!build(ctx, fd, tr, names, cfg, entry)) continue;
+      if (!build(ctx, fd, tr, cfg, entry)) continue;
 
       rcu::Config c1;
       c1.rcuFields = tr.state().rcuFields;
@@ -429,7 +429,7 @@ class Consumer : public ASTConsumer {
       tr.summaryOf = &index;
       rcu::Cfg cfg;
       int entry = 0;
-      if (!build(ctx, fd, tr, names, cfg, entry)) continue;
+      if (!build(ctx, fd, tr, cfg, entry)) continue;
 
       rcu::detail::varNamer() = [&names](int v) {
         return v >= 0 && v < int(names.varName.size()) ? names.varName[v]
@@ -494,8 +494,9 @@ class Consumer : public ASTConsumer {
     return g;
   }
 
+  // No Names parameter: tr already holds the reference.
   bool build(ASTContext &ctx, const FunctionDecl *fd, Translator &tr,
-             Names &names, rcu::Cfg &cfg, int &entry) {
+             rcu::Cfg &cfg, int &entry) {
     AnalysisDeclContextManager mgr(ctx);
     AnalysisDeclContext *adc = mgr.getContext(fd);
     if (!adc) return false;
