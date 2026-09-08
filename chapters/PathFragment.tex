@@ -272,11 +272,44 @@ be deterministic and terminating on its own.
 \subsection{Status}
 \label{sec:pathfrag-eval}
 
-\texttt{prototype/path\_domain.h} implements CNF membership, \MayAlias{}, join,
-substitution, reindexing, widening and the loop fixpoint in dependency-free
-C++17, structured to be lifted into \textsf{Sema}.
-\texttt{prototype/path\_domain\_test.cpp} passes 40/40, including the four
-properties of \S\ref{sec:pathfrag-exact}.
+The fragment is implemented, and so is a checker built on it.  Four layers, in
+dependency-free C++17 except the last, passing 84 unit and property checks:
+\texttt{path\_domain.h} for the material of this section --- CNF membership,
+\MayAlias{}, join, substitution, reindexing, widening and the loop fixpoint;
+\texttt{rcu\_types.h} for types, field maps and environments;
+\texttt{rcu\_rules.h} for the type rules as transfer functions; and
+\texttt{rcu\_check.h} for a statement IR and the forward dataflow over it.
+
+\texttt{frontend.cpp} is the only part that needs a compiler.  It translates a C
+function into that IR through Clang's CFG, taking back edges from the dominator
+tree and refinements from the branch conditions, and reports what the dataflow
+finds against the source.  It needs no annotation language: \texttt{\_\_rcu} on
+a field, and the existing \texttt{rcu\_dereference}, \texttt{rcu\_assign\_pointer},
+\texttt{synchronize\_rcu} and \texttt{kfree}, already distinguish every action
+the type system has a rule for.  Only the root has to be marked, since nothing
+in the source distinguishes it.
+
+\paragraph{On the paper's own example.}  \texttt{testdata/bst\_full.c} is the
+delete of Appendix \ref{appendix:bst_del} written as C: the traversal, the
+no-right-child case, and the two-child case that allocates a copy of the
+successor, splices it over the node and reclaims the original after a grace
+period.  It type checks.
+
+That it type checks is only worth reporting alongside what it rejects, so the
+same file carries the two-child case with one field left out of the copy, and
+the checker rejects it --- ``the fresh node's field map differs from the one it
+replaces, so it would not mirror it''.  That is the side condition
+\S\ref{sec:inv-open} adds to \textsc{T-Replace}, refusing an incomplete copy in
+C rather than in a proof.  Removing the grace period from the same function is
+likewise rejected, at the \texttt{free}.
+
+\paragraph{What it does not do.}  A function is checked on its own, with its
+pointer parameters assumed to be iterators; summaries carry kinds across a call
+but not paths.  The limit is visible in the same example: the delete checks when
+it reads its cursor out of the root, and does not when the two cursors arrive as
+parameters, because nothing at the boundary says the second is the first's
+child.  Carrying that relationship is the interprocedural form of what
+\S\ref{sec:pathfrag-def} does within a function, and is not attempted.
 
 \paragraph{Unit tests} use only paths that appear in the paper.
 \begin{itemize}

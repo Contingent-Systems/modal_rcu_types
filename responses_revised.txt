@@ -100,13 +100,39 @@ is exact in 27,148 of 27,148 cases where the condition holds, and no answer was
 unsound in any case.  So the residual imprecision is not spread over the domain;
 it sits entirely outside the anchored class.
 
-Reviewer 3's intuition about automation is borne out.  We have implemented the
-path domain -- fragment membership, MayAlias, join, substitution, reindexing,
-widening and the loop fixpoint -- in dependency-free C++17 structured to be
-lifted into a compiler front end, with unit tests on the paths appearing in the
-paper and property tests checking each abstract operation against the concrete
-semantics by enumeration.  It converges on both loops of the binary search tree
-delete, including the nested one.  The suite passes 35/35.
+Reviewer 3's intuition about automation is borne out, and further than we
+expected when we drafted this.  There is a checker.
+
+Four layers in dependency-free C++17 -- the path domain, the types and
+environments, the type rules as transfer functions, and a statement IR with a
+forward dataflow over it -- passing 84 unit and property checks, the latter
+comparing each abstract operation against the concrete semantics by
+enumeration.  On top of them a Clang front end translates a C function into the
+IR through the CFG, taking back edges from the dominator tree and refinements
+from the branch conditions, and reports what the dataflow finds against the
+source.
+
+It needs no annotation language.  __rcu on a field, and the existing
+rcu_dereference, rcu_assign_pointer, synchronize_rcu and kfree, already
+distinguish every action the type system has a rule for; only the root has to be
+marked, because nothing in the source distinguishes it.  We think that is the
+more useful claim than any figure about annotation burden: the annotations are
+already in the code, and what has been missing is a check of what they mean.
+
+The binary search tree delete of the appendix, written as C, type checks --
+including the two-child case that copies the successor, splices the copy in and
+reclaims the original after a grace period.  We report that together with what
+the checker rejects, since a file that passes and cannot be made to fail is not
+evidence: the same function with one field left out of the copy is rejected by
+the mirroring premise, and with the grace period removed is rejected at the
+free.
+
+What it does not do: a function is checked on its own, with its pointer
+parameters assumed to be iterators, and summaries carry kinds across a call but
+not paths.  The limit shows up in the same example -- the delete checks when it
+reads its cursor out of the root and does not when the two cursors arrive as
+parameters, because nothing at the boundary says the second is the first's
+child.
 
 This is now Appendix B, and the body points to it where MayAlias is introduced.
 

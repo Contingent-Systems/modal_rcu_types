@@ -38,5 +38,6 @@ Our contributions include:
 \item A type system that ensures code uses RCU memory management correctly, which is signifiantly simpler than full-blown verification logics
 \item Demonstration of the type system on two examples: a linked-list based bag and a binary search tree  
 \item A proof that the type system guarantees memory safety when using RCU primitives.
+\item A decidable algorithmic presentation of the type system (Appendix \ref{sec:pathfrag}), and a checker for C built on it.  It requires no annotations beyond those RCU code already carries, and accepts the binary search tree delete of Appendix \ref{appendix:bst_del} while rejecting the incomplete-copy and missing-grace-period versions of it.
 \item A machine-checked revision of the global invariants that proof rests on (Appendix \ref{sec:inv-revised}).  Six of the published invariants turn out to be defective, and two of the type rules were missing a premise; each defect comes with a proof or counterexample in Rocq, alongside the corrected statements and the reachability results the repaired proof cases use.
 \end{itemize}
