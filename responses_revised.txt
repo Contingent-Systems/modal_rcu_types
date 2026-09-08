@@ -12,7 +12,7 @@ core of the soundness argument in Rocq (about 1900 lines, 78 lemmas, axiom-free)
 This turned up more than we expected, and we think it materially strengthens the
 paper.
 
-Five of the WellFormed invariants as published are defective:
+Six of the WellFormed invariants as published are defective:
 
 - Unique-Reachable is vacuous as written, and admits heaps that are not trees.
 - Readers-Iterators-Only is contradictory in any state containing both a reader
@@ -22,9 +22,18 @@ Five of the WellFormed invariants as published are defective:
 - Unlinked-Reachability does not chain: its conclusion is weaker than its
   hypothesis, so the induction along a path stalls at the first freeable
   predecessor.
+- Heap-Domain-Closure is false as stated.  It constrains every edge in the
+  heap, but T-UnlinkH leaves the unlinked node still pointing at its old child
+  and nothing orders the reclamation of two unlinked nodes, so a well-typed
+  section may free a node that another, itself awaiting reclamation, still
+  points at.  The pointer dangles harmlessly, in a node that is detached and
+  unreachable -- which is exactly the exemption No-Sharing already carries and
+  this one does not.
 
-The last is the consequential one, and it is discussed under Delayed Ownership
-Transfer below.
+The last two are the consequential ones.  Unlinked-Reachability is discussed
+under Delayed Ownership Transfer below; Heap-Domain-Closure is the invariant the
+Free case rests on, and under the published statement that case cannot be proved
+at all, which is presumably why our proof records it as trivial.
 
 A sixth defect is in the type rules rather than in an invariant. Neither
 T-Replace nor T-UnlinkH prevents a rcuFresh reference in the environment from
@@ -38,8 +47,10 @@ Both rules now carry a premise excluding it. Both worked examples still type
 check unchanged, since the fresh node each builds points at the children of the
 node being replaced rather than at that node.
 
-Two of the six were found by attempting the proofs rather than by reading, and
-both are cases whose proof the technical report calls trivial. Every defect has
+Three of the seven were found by attempting the proofs rather than by reading,
+and all three are cases whose proof the technical report calls trivial.  We think
+that is the most useful thing the exercise produced: the defects that mattered
+were not the ones that looked doubtful. Every defect has
 a machine-checked proof or counterexample, the corrected set is machine-checked
 satisfiable, and the development has no axioms. The corrected statements now
 appear as an appendix, with the published ones retained alongside for

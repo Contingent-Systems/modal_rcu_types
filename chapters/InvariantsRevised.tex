@@ -292,14 +292,34 @@ only expressible under (C0).
 \emph{Changed:} per (C3), including the $T$ capture against the state's thread
 set.
 
-\paragraph{15.\ HD --- Heap Domain Closure.\hfill\textsc{major}}
-\[\textbf{HD} \defn \forall o,f,o' \ldotp \sigma.h(o,f) = o' \land o' \in \Loc \implies o' \in dom(\sigma.h)\]
-\emph{Changed:} the original binds $f'$ and then uses $f$.  $o' \in \Loc$ added
-to exclude scalar-valued fields, which are otherwise required to be in the
-domain of the heap.
+\paragraph{15.\ HD --- Heap Domain Closure.\hfill\textsc{critical}}
+\[\textbf{HD} \defn \forall o,f,o' \ldotp \sigma.h(o,f) = o' \land o' \in \Loc
+   \land \lnot\textsf{Detached}(O,o) \implies o' \in dom(\sigma.h)\]
+\emph{Changed:} the original binds $f'$ and then uses $f$; $o' \in \Loc$ added to
+exclude scalar-valued fields, which are otherwise required to be in the domain
+of the heap; and the source is restricted to nodes that are not detached.
 
-\emph{Note:} this is the invariant whose proof case is \textbf{empty} in three
-separate lemmas (\textsc{Replace}, \textsc{ReadHeap}, \textsc{WriteFreshField}).
+\emph{Why this is critical:} without the last change the invariant is false, and
+\texttt{Free} is what falsifies it.  \textsc{T-UnlinkH} leaves the unlinked node
+still pointing at its old child through $f_2$ --- the rule nulls its \emph{other}
+fields, not that one --- and the \texttt{Free} semantics sets only the freed
+node's own fields to undefined, not its predecessors'.  Nothing orders the
+reclamation of two unlinked nodes, so a well-typed critical section may free a
+node while another node, itself unlinked and awaiting reclamation, still points
+at it.
+
+The pointer dangles harmlessly: the node holding it is detached and unreachable,
+so nothing can follow it.  That is exactly the exemption \textbf{OW} already
+carries --- its conclusion is excused when either endpoint is
+$\textsf{Detached}$ --- and that \textbf{OW} has it while \textbf{HD} does not
+reads as an oversight rather than a decision.  Both the counterexample and the
+repaired case are machine checked: see \texttt{HD\_not\_preserved\_by\_free} and
+\texttt{free\_preserves\_HD}.
+
+\emph{Note:} this is also the invariant whose proof case is \textbf{empty} in
+four separate lemmas (\textsc{Replace}, \textsc{ReadHeap},
+\textsc{WriteFreshField}, \textsc{Alloc}) and dismissed as trivial in a fifth
+(\textsc{Free}) --- the one where it does not hold.
 
 \paragraph{16.\ UNQRT --- Unique Root.\hfill\textsc{major}}
 Split into two, because the original conflates them:
@@ -396,7 +416,17 @@ The semantic changes above invalidate specific cases in Section
   \unlk, \frbl{} or \frsh'', which with \textbf{WNR} puts the written node
   outside the readers' fragment.
 
-\item \textbf{HD (\S15)} --- \emph{done.}  The empty cases were \textsc{Replace},
+\item \textbf{HD (\S15)} --- \emph{done, after correcting the invariant.}  This
+  item was expected to be the easiest --- four empty cases and one dismissed as
+  trivial --- and the dismissed one turned out to be the seventh defect: the
+  published \textbf{HD} is false, and \texttt{Free} falsifies it.  See \S15 for
+  the counterexample and the repair.  With the source restricted to non-detached
+  nodes the \textsc{Free} case goes through by exactly the argument this list
+  predicted, with \textbf{ULKR} supplying it
+  (\texttt{free\_preserves\_HD}); under the published statement it cannot be
+  proved at all, which is presumably why it was skipped.
+
+  The empty cases were \textsc{Replace},
   \textsc{ReadHeap}, \textsc{WriteFreshField} and also \textsc{Alloc}, which this
   list previously missed; \textsc{Free} was worse than empty, folding
   \textbf{HD} into a blanket claim that all seventeen axioms are trivial.  Each
@@ -433,22 +463,26 @@ The semantic changes above invalidate specific cases in Section
   site rather than assuming.
 \end{enumerate}
 
-\paragraph{Machine-checked status.}  Five of the defects above are mechanized in
+\paragraph{Machine-checked status.}  Six of the defects above are mechanized in
 \texttt{rocq/WellFormed.v}: \texttt{UNQR\_orig\_vacuous} and
 \texttt{UNQR\_orig\_admits\_non\_trees};
 \texttt{RITR\_orig\_contradicts\_fresh};
 \texttt{FR\_orig\_admits\_writer\_local\_alias};
-\texttt{FPI\_orig\_contradicts\_FNR}; and \texttt{ULKR\_does\_not\_chain}
-together with its repair \texttt{ULKR\_closed\_reaches}.  A sixth,
+\texttt{FPI\_orig\_contradicts\_FNR}; \texttt{ULKR\_does\_not\_chain}
+together with its repair \texttt{ULKR\_closed\_reaches}; and
+\texttt{HD\_not\_preserved\_by\_free}.  A seventh,
 \texttt{FPI\_not\_preserved\_by\_replace}, is a defect in \textsc{T-Replace} and
 \textsc{T-UnlinkH} rather than in an invariant statement; both rules now carry
 the repairing premise.  The remaining \textsc{major} and \textsc{minor} items
 are restatements whose defects are syntactic (capture, scope, unused binders)
 and are visible without proof.
 
-Two of the six were found by attempting a proof rather than by reading ---
-\textbf{ULKR}'s failure to chain, and \textbf{FPI}'s failure to survive
-unlinking --- and both are cases the report calls trivial.
+Three of the seven were found by attempting a proof rather than by reading ---
+\textbf{ULKR}'s failure to chain, \textbf{FPI}'s failure to survive unlinking,
+and \textbf{HD}'s failure to survive \texttt{Free} --- and all three are cases
+the report calls trivial.  That is now a pattern rather than a coincidence, and
+it is the strongest thing the mechanization has to say about the original
+argument.
 
 The corrected invariants are also satisfiable
 (\texttt{WellFormed\_satisfiable}), so the repairs are not vacuously strong.
@@ -674,14 +708,39 @@ the side condition added to \textsc{T-Replace}, the second on the clause added
 to $\llbracket \textsf{rcuFresh}\,\mathcal{N} \rrbracket$.  Neither proof closes
 without it, so the repairs are load-bearing rather than bookkeeping.
 
-Atomic-action lemmas for the three heap mutations: each preserves \textbf{UNQR}
-and \textbf{HD}, and unlinking preserves \textbf{FPI}.  Each takes only
-invariants of the pre-state and premises of its own rule.  The \textbf{FPI} case
-is the one whose failure forced the repair to \textsc{T-Replace} and
-\textsc{T-UnlinkH}, and the repaired premise is used exactly once in it, at the
-step that would otherwise fail --- so that defect is now closed from both ends,
-by a counterexample against the published rule and a proof for the repaired one.
+Atomic-action lemmas for every action.  For the three heap mutations: each
+preserves \textbf{UNQR}, \textbf{HD} and \textbf{OW}, and unlinking and
+replacement preserve \textbf{FPI}.  The \textbf{FPI} case is the one whose
+failure forced the repair to \textsc{T-Replace} and \textsc{T-UnlinkH}, and the
+repaired premise is used exactly once in it, at the step that would otherwise
+fail --- so that defect is closed from both ends, by a counterexample against the
+published rule and a proof for the repaired one.  The argument does not depend on
+which rule caused the write, so it is proved once and both rules are instances,
+which is itself why the two needed the same repair.
 
-What remains is the rest of \textsf{WellFormed} for each action, which is
-breadth rather than depth, and the Hoare triples themselves, which wait on a
-choice of heap assertion for the object language rather than on anything here.
+For the reclamation protocol, the chain closes end to end.  Acquiring a
+reference obliges the acquiring thread to bound any pending reclamation of the
+node, which is \textbf{IFL}; \textsc{SyncStart} takes one snapshot of the
+readers, so all entries it creates agree and \textbf{FLR} holds with equality
+--- the same-critical-section case of the argument that fixed its direction;
+\textsc{SyncStop} leaves the bounding set empty, so by \textbf{RINFL} every
+entry is empty, which is the conjunct the \frbl{} denotation asks for;
+\textsc{Free} then needs that nothing \emph{live} points at the node, and
+\textbf{ULKR} supplies exactly that.  \textsc{ReadEnd} closes the loop: it must
+drop a thread's observations, its bounding-thread membership and its free-list
+entries \emph{together}, and the \textbf{IFL} and \textbf{RINFL} cases are
+what show that none of the three can be taken alone.
+
+One structural observation came out of doing the breadth.  Nine of the seventeen
+invariants --- \textbf{RWOW}, \textbf{AWRT}, \textbf{IFL}, \textbf{WULK},
+\textbf{WF}, \textbf{FNR}, \textbf{RITR}, \textbf{RINFL}, \textbf{WNR} --- do
+not mention the heap, so a field write transfers them definitionally and their
+cases are the identity.  The eight that do --- \textbf{OW}, \textbf{ULKR},
+\textbf{FLR}, \textbf{FPI}, \textbf{FR}, \textbf{HD} and the two halves of
+\textbf{UNQRT} --- each needed a real argument, and three of them turned up
+defects.  The split falls exactly on that line.  It is worth stating because the
+difference between the two kinds of trivial case is precisely what the original
+proofs did not record, and that is where the defects hid.
+
+What remains is the Hoare triples themselves, which wait on a choice of heap
+assertion for the object language rather than on anything here.
