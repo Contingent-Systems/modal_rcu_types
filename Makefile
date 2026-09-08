@@ -19,17 +19,17 @@ REFERENCESDIR = references
 ## Search for sources
 
 # Directories to search for .tex files.
-TEXDIRS = $(APPENDICESDIR) $(CHAPTERSDIR) $(TABLESDIR)
+TEXDIRS = $(wildcard $(APPENDICESDIR) $(CHAPTERSDIR) $(TABLESDIR))
 
 # Find .tex files in the subdirectories
 # performing a search of *.tex files amongst all the directories defined on $TEXDIRS
-TEXTARGETS = $(shell find $(TEXDIRS) -type f -regex ".*\.\tex") 
+TEXTARGETS = $(if $(TEXDIRS),$(shell find $(TEXDIRS) -type f -name "*.tex"),)
 
 ## Search for images
 
 # Search for changes on png figures. This can be changed by changing the figure extension or by adding
 # other search pattern for other image extensions.
-FIGURETARGETS = $(shell find $(FIGURESFDIR) -type f -regex ".*\.\pdf")
+FIGURETARGETS = $(if $(wildcard $(FIGURESDIR)),$(shell find $(FIGURESDIR) -type f -name "*.pdf"),)
 
 ## Build the final target
 
@@ -94,14 +94,14 @@ bibliography: $(TARGETS)
 clean:
 	rm -f *.log *.bak *.aux *.bbl *.blg *.idx *.toc *.out *~ *.lof *.lot *.nlo *.nls *.ist *.ilg
 	rm -f $(CHAPTERSDIR)/*.log $(CHAPTERSDIR)/*.bak $(CHAPTERSDIR)/*.aux $(CHAPTERSDIR)/*.bbl $(CHAPTERSDIR)/*.blg $(CHAPTERSDIR)/*.idx $(CHAPTERSDIR)/*.toc $(CHAPTERSDIR)/*.out $(CHAPTERSDIR)/*~  $(CHAPTERSDIR)/*.nlo $(CHAPTERSDIR)/*.nls $(CHAPTERSDIR)/*.ist $(CHAPTERSDIR)/*.ilg
-	rm -f $(TABLES)/*.log $(TABLES)/*.bak $(TABLES)/*.aux $(TABLES)/*.bbl $(TABLES)/*.blg $(TABLES)/*.idx $(TABLES)/*.toc $(TABLES)/*.out $(TABLES)/*~ $(TABLES)/*.nlo $(TABLES)/*.nls $(TABLES)/*.ist $(TABLES)/*.ilg
+	rm -f $(TABLESDIR)/*.log $(TABLESDIR)/*.bak $(TABLESDIR)/*.aux $(TABLESDIR)/*.bbl $(TABLESDIR)/*.blg $(TABLESDIR)/*.idx $(TABLESDIR)/*.toc $(TABLESDIR)/*.out $(TABLESDIR)/*~ $(TABLESDIR)/*.nlo $(TABLESDIR)/*.nls $(TABLESDIR)/*.ist $(TABLESDIR)/*.ilg
 	rm -f $(APPENDICESDIR)/*.log $(APPENDICESDIR)/*.bak $(APPENDICESDIR)/*.aux $(APPENDICESDIR)/*.bbl $(APPENDICESDIR)/*.blg $(APPENDICESDIR)/*.idx $(APPENDICESDIR)/*.toc $(APPENDICESDIR)/*.out $(APPENDICESDIR)/*~ $(APPENDICESDIR)/*.nlo $(APPENDICESDIR)/*.nls $(APPENDICESDIR)/*.ist $(APPENDICESDIR)/*.ilg
 
 # Clean all temporary resource files created during compilation and delete the latex output.
 clean-all:
-	rm -f *.dvi *.log *.bak *.aux *.bbl *.blg *.idx *.ps *.eps *.pdf *.toc *.out *~ *.lof *.lot *.nlo *.nls *.ist *.ilg
+	rm -f *.dvi *.log *.bak *.aux *.bbl *.blg *.idx *.ps *.eps $(PROJECT).pdf *.toc *.out *~ *.lof *.lot *.nlo *.nls *.ist *.ilg
 	rm -f $(CHAPTERSDIR)/*.dvi $(CHAPTERSDIR)/*.log $(CHAPTERSDIR)/*.bak $(CHAPTERSDIR)/*.aux $(CHAPTERSDIR)/*.bbl $(CHAPTERSDIR)/*.blg $(CHAPTERSDIR)/*.idx $(CHAPTERSDIR)/*.ps $(CHAPTERSDIR)/*.eps $(CHAPTERSDIR)/*.pdf $(CHAPTERSDIR)/*.toc $(CHAPTERSDIR)/*.out $(CHAPTERSDIR)/*~  $(CHAPTERSDIR)/*.nlo $(CHAPTERSDIR)/*.nls $(CHAPTERSDIR)/*.ist $(CHAPTERSDIR)/*.ilg
-	rm -f $(TABLES)/*.dvi $(TABLES)/*.log $(TABLES)/*.bak $(TABLES)/*.aux $(TABLES)/*.bbl $(TABLES)/*.blg $(TABLES)/*.idx $(TABLES)/*.ps $(TABLES)/*.eps $(TABLES)/*.pdf $(TABLES)/*.toc $(TABLES)/*.out $(TABLES)/*~ $(TABLES)/*.nlo $(TABLES)/*.nls $(TABLES)/*.ist $(TABLES)/*.ilg
+	rm -f $(TABLESDIR)/*.dvi $(TABLESDIR)/*.log $(TABLESDIR)/*.bak $(TABLESDIR)/*.aux $(TABLESDIR)/*.bbl $(TABLESDIR)/*.blg $(TABLESDIR)/*.idx $(TABLESDIR)/*.ps $(TABLESDIR)/*.eps $(TABLESDIR)/*.pdf $(TABLESDIR)/*.toc $(TABLESDIR)/*.out $(TABLESDIR)/*~ $(TABLESDIR)/*.nlo $(TABLESDIR)/*.nls $(TABLESDIR)/*.ist $(TABLESDIR)/*.ilg
 	rm -f $(APPENDICESDIR)/*.dvi $(APPENDICESDIR)/*.log $(APPENDICESDIR)/*.bak $(APPENDICESDIR)/*.aux $(APPENDICESDIR)/*.bbl $(APPENDICESDIR)/*.blg $(APPENDICESDIR)/*.idx $(APPENDICESDIR)/*.ps $(APPENDICESDIR)/*.eps $(APPENDICESDIR)/*.pdf $(APPENDICESDIR)/*.toc $(APPENDICESDIR)/*.out $(APPENDICESDIR)/*~ $(APPENDICESDIR)/*.nlo $(APPENDICESDIR)/*.nls $(APPENDICESDIR)/*.ist $(APPENDICESDIR)/*.ilg
 
 # When using vim-latexsuite it adds annoying <++> symbols, this removes that shit from all .tex files
