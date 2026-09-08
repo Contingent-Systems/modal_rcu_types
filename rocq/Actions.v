@@ -554,3 +554,67 @@ Section freeing.
 End freeing.
 
 Print Assumptions free_preserves_HD.
+
+(** ** SyncStart and SyncStop
+
+    The grace period.  SyncStart sets the bounding threads to the current
+    readers and populates a free-list entry for each unlinked node with that
+    same set; SyncStop blocks until the bounding set is empty, after which the
+    unlinked nodes become freeable.
+
+    Two facts carry the whole thing, and each is short once the invariants are
+    right.
+
+    The first is where the FLR direction settled earlier is used.  Every entry
+    created by one SyncStart holds the *same* set, so along a chain of unlinked
+    nodes the inclusion FLR demands holds with equality -- which is the
+    same-critical-section case of the argument that fixed the direction.  ULKR
+    is what supplies that a predecessor of an entry holder is an entry holder.
+
+    The second is what makes Free possible at all: after SyncStop the bounding
+    set is empty, and RINFL says every thread in an entry is a bounding thread,
+    so every entry is empty.  That is exactly the conjunct the [freeable]
+    denotation asks for. *)
+
+Section grace.
+
+  (** SyncStart: one snapshot, so all entries agree, so FLR holds with
+      equality rather than mere inclusion. *)
+  Theorem sync_start_FLR m Og U T F Rs :
+    let s := to_LState_t m Og U T F in
+    ULKR s ->
+    (forall o s0, F !! o = Some s0 -> s0 = Rs) ->
+    (forall o t, (obsv s o (Ounlk t) \/ obsv s o (Ofree t)) ->
+        exists s0, F !! o = Some s0) ->
+    (forall o s0, F !! o = Some s0 ->
+        exists t, obsv s o (Ounlk t) \/ obsv s o (Ofree t)) ->
+    FLR s.
+  Proof.
+    intros s HULKR Hsame Hcovers Honly o o' f' Tr Hfl Hedge.
+    simpl in Hfl. destruct (F !! o) as [s0|] eqn:Hs0; [| discriminate].
+    injection Hfl as <-.
+    (* o is detached, so by ULKR so is its predecessor *)
+    destruct (Honly o s0 Hs0) as [t Hdet].
+    pose proof (HULKR o o' f' t Hdet Hedge) as Hdet'.
+    (* hence the predecessor has an entry, and it is the same snapshot *)
+    destruct (Hcovers o' t Hdet') as [s1 Hs1].
+    exists (fun x => x ∈ s1). split; [simpl; by rewrite Hs1 |].
+    rewrite (Hsame o' s1 Hs1) (Hsame o s0 Hs0). done.
+  Qed.
+
+  (** SyncStop: the bounding set is empty, so every entry is. *)
+  Theorem sync_stop_entries_empty m Og U T F :
+    RINFL (to_LState_t m Og U T F) ->
+    (forall t, ~ bnd m t) ->
+    forall o s0 t, F !! o = Some s0 -> t ∉ s0.
+  Proof.
+    intros HR Hb o s0 t Hlk Hin.
+    assert (Hfl : flist (to_LState_t m Og U T F) o = Some (fun x => x ∈ s0))
+      by (simpl; by rewrite Hlk).
+    exact (Hb t (HR o _ t Hfl Hin)).
+  Qed.
+
+End grace.
+
+Print Assumptions sync_start_FLR.
+Print Assumptions sync_stop_entries_empty.
