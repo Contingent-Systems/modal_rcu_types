@@ -37,15 +37,20 @@ check: $(TESTS)
 # what is missing and can install it.
 LLVM_CONFIG ?= $(shell ./setup-frontend.sh --llvm-config 2>/dev/null)
 
-frontend:
+frontend: rcu-check
+
+rcu-check: frontend.cpp $(HEADERS)
 	@if [ -z "$(LLVM_CONFIG)" ]; then \
 	  echo "no llvm-config found; run ./setup-frontend.sh for what is needed"; \
 	  exit 1; \
-	fi; \
-	echo "llvm-config: $(LLVM_CONFIG)"; \
-	echo "frontend sources are not written yet -- see setup-frontend.sh --status"
+	fi
+	$(CXX) $(CXXFLAGS) -fno-rtti -I. \
+	  $$($(LLVM_CONFIG) --cxxflags) \
+	  -o $@ frontend.cpp \
+	  $$($(LLVM_CONFIG) --ldflags) \
+	  -lclang-cpp $$($(LLVM_CONFIG) --libs) $$($(LLVM_CONFIG) --system-libs)
 
 clean:
-	rm -f $(TESTS)
+	rm -f $(TESTS) rcu-check
 
 .PHONY: all check frontend clean
