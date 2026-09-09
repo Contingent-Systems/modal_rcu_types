@@ -24,7 +24,9 @@
 #                 hypotheses HeapPaths takes for T-Replace and T-Insert.
 #   Actions.v     joins the ghost updates to the pure state: to_LState
 #                 commutes with a field write and with an observation update;
-#                 then the per-invariant obligations for each atomic action.
+#                 then the per-invariant obligations for each atomic action,
+#                 and WellFormed preservation for Free, SyncStop and ReadEnd
+#                 as whole actions.
 
 ROCQ      ?= rocq
 ROCQFLAGS := -R . RCU
@@ -44,7 +46,7 @@ Actions.vo: WellFormed.vo HeapPaths.vo IrisGhost.vo Denotations.vo
 
 # A successful build proves less here than it looks.  `Admitted.` compiles and
 # writes a .vo like any other proof, and `Print Assumptions` reports an axiom on
-# stdout without failing anything.  So the development's actual claim -- 75
+# stdout without failing anything.  So the development's actual claim -- 84
 # results, every one closed under the global context, no axioms -- is precisely
 # the thing that building it does not check.  This target checks it.
 #

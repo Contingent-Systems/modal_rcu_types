@@ -835,6 +835,24 @@ Proof. intros h d f. unfold free. destruct (Nat.eq_dec d d); congruence. Qed.
 Lemma free_other : forall h d o f, o <> d -> free h d o f = h o f.
 Proof. intros h d o f Hne. unfold free. destruct (Nat.eq_dec o d); congruence. Qed.
 
+(** Free only ever removes edges, so it only ever removes paths: a walk that
+    succeeds after the free succeeded before it, on the same path.  That single
+    fact is what carries every invariant of Free other than HD -- the ones with
+    an [Edge] or a [Reaches] hypothesis all get weaker, and the rest do not
+    mention the heap at all.  HD is the exception because it is the only one
+    whose *conclusion* is about the heap. *)
+Lemma hstar_free_sub : forall h d p o x,
+  hstar (free h d) o p = Some x -> hstar h o p = Some x.
+Proof.
+  intros h d p. induction p as [|f p IH]; intros o x H; [exact H |].
+  simpl in H |- *.
+  destruct (Nat.eq_dec o d) as [->|Hne].
+  - rewrite free_same in H. discriminate.
+  - rewrite (free_other h d o f Hne) in H.
+    destruct (h o f) as [[o1|]|]; try discriminate.
+    exact (IH o1 x H).
+Qed.
+
 Lemma HD_h_free : forall h d,
   HD_h h ->
   (forall o f, h o f <> Some (VLoc d)) ->
@@ -900,4 +918,5 @@ Print Assumptions UNQR_h_upd_unreachable.
 Print Assumptions HD_h_upd.
 Print Assumptions HD_h_alloc.
 Print Assumptions HD_h_free.
+Print Assumptions hstar_free_sub.
 Print Assumptions HD_h_free_needs_no_incoming.

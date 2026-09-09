@@ -1050,3 +1050,818 @@ End roots.
 Print Assumptions unlink_preserves_UNQRT_b.
 Print Assumptions replace_preserves_UNQRT_b.
 Print Assumptions insert_preserves_UNQRT_b.
+
+(** ** Free, all seventeen
+
+    The first action taken end to end: not one invariant at a time, but
+    [WellFormed] itself, for the whole step.  Free is the right one to do first
+    for two reasons.  It needs no type denotations -- it is a state transition,
+    not a typing rule -- so nothing outside this file has to be assumed.  And it
+    is the action the report handled worst: its HD case is the one dismissed as
+    trivial along with everything else, and it is the one case that is not.
+
+    Doing the whole thing shows how lopsided it is.  Sixteen of the seventeen
+    fall out of [hstar_free_sub] and [free_edge_inv] -- free removes edges, so
+    every invariant with an [Edge] or [Reaches] hypothesis gets *weaker*, and
+    the nine that do not mention the heap are untouched outright.  The
+    seventeenth, HD, is the only one whose conclusion is about the heap, and it
+    is the only one that needs an argument.  It also needs the corrected
+    statement: under the published HD the theorem below is false, which
+    [HD_not_preserved_by_free] exhibits.
+
+    That is the whole content of the case, and it is a sentence long once the
+    invariants are right.  It is worth having the other sixteen written out
+    anyway: "trivial" is the claim that hid three defects, and the difference
+    between an identity proof and a proof that inverts an edge is exactly what
+    the report never recorded. *)
+
+Section reclamation.
+
+  Variable FType : FName -> FieldKind.
+  Variables (m : MState) (Og : ObsMap) (U : gset (Var * TID))
+            (T : gset TID) (F : gmap Loc (gset TID)) (d : Loc).
+
+  Let s  := to_LState_t m Og U T F.
+  Let s' := to_LState_t (free_ms m d) Og U T F.
+
+  (** Edges and paths only go away. *)
+  Lemma free_edge_inv o f o' : Edge s' o f o' -> Edge s o f o'.
+  Proof.
+    unfold Edge; simpl; intros He.
+    destruct (Nat.eq_dec o d) as [->|Hne].
+    - rewrite free_same in He. discriminate.
+    - by rewrite (free_other (hp m) d o f Hne) in He.
+  Qed.
+
+  Lemma free_reaches_inv p o : Reaches s' p o -> Reaches s p o.
+  Proof. unfold Reaches; simpl. apply hstar_free_sub. Qed.
+
+  (** The nine that do not mention the heap.  Free changes [hp] and nothing
+      else, so each is the identity -- as for a write, and for the same
+      reason. *)
+  Lemma free_RWOW   : RWOW s   -> RWOW s'.   Proof. exact (fun H => H). Qed.
+  Lemma free_AWRT   : AWRT s   -> AWRT s'.   Proof. exact (fun H => H). Qed.
+  Lemma free_IFL    : IFL s    -> IFL s'.    Proof. exact (fun H => H). Qed.
+  Lemma free_WULK   : WULK s   -> WULK s'.   Proof. exact (fun H => H). Qed.
+  Lemma free_WFresh : WFresh s -> WFresh s'. Proof. exact (fun H => H). Qed.
+  Lemma free_FNR    : FNR s    -> FNR s'.    Proof. exact (fun H => H). Qed.
+  Lemma free_WNR    : WNR s    -> WNR s'.    Proof. exact (fun H => H). Qed.
+  Lemma free_RITR   : RITR s   -> RITR s'.   Proof. exact (fun H => H). Qed.
+  Lemma free_RINFL  : RINFL s  -> RINFL s'.  Proof. exact (fun H => H). Qed.
+
+  (** The seven with an [Edge] or [Reaches] hypothesis.  Each is the old
+      invariant applied to the inverted hypothesis; none needs a side
+      condition, because a vanishing edge can only discharge an obligation. *)
+  Lemma free_OW : OW FType s -> OW FType s'.
+  Proof.
+    intros H o o' f f' x He He'.
+    exact (H o o' f f' x (free_edge_inv o f x He) (free_edge_inv o' f' x He')).
+  Qed.
+
+  Lemma free_ULKR : ULKR s -> ULKR s'.
+  Proof.
+    intros H o o' f' t Hobs He.
+    exact (H o o' f' t Hobs (free_edge_inv o' f' o He)).
+  Qed.
+
+  Lemma free_FLR : FLR s -> FLR s'.
+  Proof.
+    intros H o o' f' Tr Hfl He.
+    exact (H o o' f' Tr Hfl (free_edge_inv o' f' o He)).
+  Qed.
+
+  Lemma free_FPI : FPI FType s -> FPI FType s'.
+  Proof.
+    intros H o f o' t lw Hfr He Hft Hlk.
+    exact (H o f o' t lw Hfr (free_edge_inv o f o' He) Hft Hlk).
+  Qed.
+
+  Lemma free_FR : FR s -> FR s'.
+  Proof.
+    intros H t x o Hstk Hfr.
+    destruct (H t x o Hstk Hfr) as [Hin Hal].
+    split; [| exact Hal].
+    intros o' f' He. exact (Hin o' f' (free_edge_inv o' f' o He)).
+  Qed.
+
+  Lemma free_UNQRT_a : UNQRT_a s -> UNQRT_a s'.
+  Proof. intros H o f He. exact (H o f (free_edge_inv o f (rt m) He)). Qed.
+
+  Lemma free_UNQRT_b : UNQRT_b s -> UNQRT_b s'.
+  Proof.
+    intros H p o lw Hlk Hr. exact (H p o lw Hlk (free_reaches_inv p o Hr)).
+  Qed.
+
+  Lemma free_UNQR : UNQR s -> UNQR s'.
+  Proof.
+    intros H p p' o H1 H2.
+    exact (H p p' o (free_reaches_inv p o H1) (free_reaches_inv p' o H2)).
+  Qed.
+
+  (** The action lemma.  [obsv s d (Ofree t)] is the rule's premise -- the
+      variable freed is typed [freeable] -- and it is used in exactly one place,
+      the HD case, through ULKR. *)
+  Theorem free_preserves_WellFormed t :
+    WellFormed FType s -> obsv s d (Ofree t) -> WellFormed FType s'.
+  Proof.
+    intros (HOW & HRWOW & HAWRT & HIFL & HULKR & HFLR & HWULK & HFR & HWFresh
+            & HFNR & HFPI & HWNR & HRITR & HRINFL & HHD & HUa & HUb & HU) Hfree.
+    repeat apply conj.
+    - exact (free_OW HOW).
+    - exact (free_RWOW HRWOW).
+    - exact (free_AWRT HAWRT).
+    - exact (free_IFL HIFL).
+    - exact (free_ULKR HULKR).
+    - exact (free_FLR HFLR).
+    - exact (free_WULK HWULK).
+    - exact (free_FR HFR).
+    - exact (free_WFresh HWFresh).
+    - exact (free_FNR HFNR).
+    - exact (free_FPI HFPI).
+    - exact (free_WNR HWNR).
+    - exact (free_RITR HRITR).
+    - exact (free_RINFL HRINFL).
+    - exact (free_preserves_HD m Og U T F d t HHD HULKR Hfree).
+    - exact (free_UNQRT_a HUa).
+    - exact (free_UNQRT_b HUb).
+    - exact (free_UNQR HU).
+  Qed.
+
+End reclamation.
+
+Print Assumptions free_edge_inv.
+Print Assumptions free_reaches_inv.
+Print Assumptions free_preserves_WellFormed.
+
+(** ** SyncStop, all seventeen
+
+    The second action taken whole, and the one that pays for the FNR repair.
+
+    SyncStop does two things: it returns once the bounding set is empty, and it
+    turns every [unlinked] observation into the matching [freeable] one.  Both
+    halves are needed and each carries different invariants -- the empty
+    bounding set is the whole of RINFL, and the observation change is everything
+    else.
+
+    The change is stated by what it does to observations rather than as a map
+    operation, which is the choice ReadEnd already makes and for the same
+    reason: two properties suffice, and they are the two directions.  Nothing
+    appears that was not there, except [freeable] arriving from [unlinked]
+    ([Hfwd]); and everything survives, [unlinked] as [freeable] ([Hmap]).  Every
+    one of the seventeen cases is one of those two applied once, which is worth
+    seeing -- the invariants that look like they should care about a grace
+    period ending mostly do not, and the ones that do are not the ones the
+    protocol's informal story points at.
+
+    Two cases have content beyond the bookkeeping.  RINFL is where the empty
+    bounding set is spent: it says every thread in a free-list entry bounds a
+    reclamation, and after SyncStop there are no bounding threads, so the
+    entries must be empty -- which is exactly the conjunct the [freeable]
+    denotation asks for, obtained rather than assumed.  And FNR is
+    [sync_stop_preserves_FNR]: the conjunct added to FNR to make T-Insert and
+    T-Replace preserve ULKR is discharged here from the conjunct FNR already
+    had, so the repair costs nothing at the one action that could have paid for
+    it. *)
+
+Definition sync_obs (ob : obs) : obs :=
+  match ob with Ounlk t => Ofree t | _ => ob end.
+
+Definition sync_stop_ms (m : MState) : MState :=
+  {| stk := stk m; hp := hp m; lk := lk m; rt := rt m;
+     rds := rds m; bnd := fun _ => False |}.
+
+Section quiescence.
+
+  Variable FType : FName -> FieldKind.
+  Variables (m : MState) (Og Og' : ObsMap) (U : gset (Var * TID))
+            (T : gset TID) (F : gmap Loc (gset TID)).
+
+  Let s  := to_LState_t m Og U T F.
+  Let s' := to_LState_t (sync_stop_ms m) Og' U T F.
+
+  (** Nothing appears that was not there, except [freeable] from [unlinked]. *)
+  Hypothesis Hfwd : forall o ob,
+    obsv s' o ob ->
+    obsv s o ob \/ exists t, ob = Ofree t /\ obsv s o (Ounlk t).
+
+  (** And everything survives, [unlinked] as [freeable]. *)
+  Hypothesis Hmap : forall o ob, obsv s o ob -> obsv s' o (sync_obs ob).
+
+  (** SyncStop returns only once the grace period has completed. *)
+  Hypothesis Hquiet : forall t, ~ bnd m t.
+
+  (** The inversions [Hfwd] gives, once each.  Note the one that is missing:
+      nothing maps *to* [unlinked], so after SyncStop no location is observed
+      unlinked at all -- which is why [ss_detach] can collapse the disjunction
+      the detachment invariants quantify over. *)
+  Lemma ss_iter o t : obsv s' o (Oiter t) -> obsv s o (Oiter t).
+  Proof.
+    intros H. destruct (Hfwd o _ H) as [Ho | [t0 [Hc _]]];
+      [exact Ho | discriminate].
+  Qed.
+
+  Lemma ss_fresh o t : obsv s' o (Ofresh t) -> obsv s o (Ofresh t).
+  Proof.
+    intros H. destruct (Hfwd o _ H) as [Ho | [t0 [Hc _]]];
+      [exact Ho | discriminate].
+  Qed.
+
+  Lemma ss_root o : obsv s' o Oroot -> obsv s o Oroot.
+  Proof.
+    intros H. destruct (Hfwd o _ H) as [Ho | [t0 [Hc _]]];
+      [exact Ho | discriminate].
+  Qed.
+
+  Lemma ss_detach o t :
+    obsv s' o (Ounlk t) \/ obsv s' o (Ofree t) ->
+    obsv s o (Ounlk t) \/ obsv s o (Ofree t).
+  Proof.
+    intros [H | H]; destruct (Hfwd o _ H) as [Ho | [t0 [Hc Hu]]].
+    - by left.
+    - discriminate.
+    - by right.
+    - injection Hc as <-. by left.
+  Qed.
+
+  Lemma ss_detached o : Detached s o -> Detached s' o.
+  Proof.
+    intros [t [H | [H | H]]]; exists t.
+    - right; left.  exact (Hmap o (Ounlk t) H).
+    - right; left.  exact (Hmap o (Ofree t) H).
+    - right; right. exact (Hmap o (Ofresh t) H).
+  Qed.
+
+  (** The four the grace period cannot reach: heap, stack, lock and readers are
+      all untouched, and neither the free list nor its [Edge] hypotheses move. *)
+  Lemma ss_FLR     : FLR s     -> FLR s'.     Proof. exact (fun H => H). Qed.
+  Lemma ss_WNR     : WNR s     -> WNR s'.     Proof. exact (fun H => H). Qed.
+  Lemma ss_UNQRT_a : UNQRT_a s -> UNQRT_a s'. Proof. exact (fun H => H). Qed.
+  Lemma ss_UNQR    : UNQR s    -> UNQR s'.    Proof. exact (fun H => H). Qed.
+
+  (** The rest, each one application of [Hmap] or of an inversion. *)
+  Lemma ss_OW : OW FType s -> OW FType s'.
+  Proof.
+    intros H o o' f f' x He He' Hf Hf'.
+    destruct (H o o' f f' x He He' Hf Hf') as [Heq | [Hd | Hd]].
+    - by left.
+    - right; left.  exact (ss_detached o Hd).
+    - right; right. exact (ss_detached o' Hd).
+  Qed.
+
+  Lemma ss_RWOW : RWOW s -> RWOW s'.
+  Proof.
+    intros H x t o Hstk Hundf.
+    destruct (H x t o Hstk Hundf) as [Hit | [Hlk [Hu | [Hfr | Hfs]]]].
+    - left. exact (Hmap o (Oiter t) Hit).
+    - right. split; [exact Hlk |]. right; left.  exact (Hmap o (Ounlk t) Hu).
+    - right. split; [exact Hlk |]. right; left.  exact (Hmap o (Ofree t) Hfr).
+    - right. split; [exact Hlk |]. right; right. exact (Hmap o (Ofresh t) Hfs).
+  Qed.
+
+  Lemma ss_AWRT : AWRT s -> AWRT s'.
+  Proof. intros H y t Hstk Hundf. exact (Hmap _ (Oiter t) (H y t Hstk Hundf)). Qed.
+
+  Lemma ss_IFL : IFL s -> IFL s'.
+  Proof. intros H t o Tr Hit Hfl. exact (H t o Tr (ss_iter o t Hit) Hfl). Qed.
+
+  Lemma ss_ULKR : ULKR s -> ULKR s'.
+  Proof.
+    intros H o o' f' t Hobs He.
+    destruct (H o o' f' t (ss_detach o t Hobs) He) as [Hu | Hf]; right.
+    - exact (Hmap o' (Ounlk t) Hu).
+    - exact (Hmap o' (Ofree t) Hf).
+  Qed.
+
+  Lemma ss_WULK : WULK s -> WULK s'.
+  Proof.
+    intros H lw o t Hlk Hit.
+    destruct (H lw o t Hlk (ss_iter o lw Hit)) as [Hnu Hnf].
+    split; intros Hbad.
+    - destruct (ss_detach o t (or_introl Hbad)) as [X | X];
+        [exact (Hnu X) | exact (Hnf X)].
+    - destruct (ss_detach o t (or_intror Hbad)) as [X | X];
+        [exact (Hnu X) | exact (Hnf X)].
+  Qed.
+
+  Lemma ss_FR : FR s -> FR s'.
+  Proof. intros H t x o Hstk Hfr. exact (H t x o Hstk (ss_fresh o t Hfr)). Qed.
+
+  Lemma ss_WFresh : WFresh s -> WFresh s'.
+  Proof. intros H t x o Hstk Hfr. exact (H t x o Hstk (ss_fresh o t Hfr)). Qed.
+
+  Lemma ss_FNR : FNR s -> FNR s'.
+  Proof. intros H. exact (sync_stop_preserves_FNR s s' H Hfwd). Qed.
+
+  Lemma ss_FPI : FPI FType s -> FPI FType s'.
+  Proof.
+    intros H o f o' t lw Hfr He Hft Hlk.
+    exact (Hmap o' (Oiter lw) (H o f o' t lw (ss_fresh o t Hfr) He Hft Hlk)).
+  Qed.
+
+  Lemma ss_RITR : RITR s -> RITR s'.
+  Proof.
+    intros H o t Hrd. destruct (H o t Hrd) as (Hnu & Hnf & Hnfr).
+    repeat apply conj; intros Hbad.
+    - destruct (ss_detach o t (or_introl Hbad)) as [X | X];
+        [exact (Hnu X) | exact (Hnf X)].
+    - destruct (ss_detach o t (or_intror Hbad)) as [X | X];
+        [exact (Hnu X) | exact (Hnf X)].
+    - exact (Hnfr (ss_fresh o t Hbad)).
+  Qed.
+
+  (** Where the empty bounding set is spent: no thread bounds anything, and
+      RINFL says every thread in an entry does, so no entry has a thread in
+      it. *)
+  Lemma ss_RINFL : RINFL s -> RINFL s'.
+  Proof. intros H o Tr t Hfl Hin. exact (Hquiet t (H o Tr t Hfl Hin)). Qed.
+
+  Lemma ss_HD : HD s -> HD s'.
+  Proof.
+    intros H o f o' He Hnd. apply (H o f o' He).
+    intros Hd. exact (Hnd (ss_detached o Hd)).
+  Qed.
+
+  Lemma ss_UNQRT_b : UNQRT_b s -> UNQRT_b s'.
+  Proof.
+    intros H p o lw Hlk Hr. destruct (H p o lw Hlk Hr) as [Hit | Hrt].
+    - left.  exact (Hmap o (Oiter lw) Hit).
+    - right. exact (Hmap o Oroot Hrt).
+  Qed.
+
+  Theorem sync_stop_preserves_WellFormed :
+    WellFormed FType s -> WellFormed FType s'.
+  Proof.
+    intros (HOW & HRWOW & HAWRT & HIFL & HULKR & HFLR & HWULK & HFR & HWFresh
+            & HFNR & HFPI & HWNR & HRITR & HRINFL & HHD & HUa & HUb & HU).
+    repeat apply conj.
+    - exact (ss_OW HOW).
+    - exact (ss_RWOW HRWOW).
+    - exact (ss_AWRT HAWRT).
+    - exact (ss_IFL HIFL).
+    - exact (ss_ULKR HULKR).
+    - exact (ss_FLR HFLR).
+    - exact (ss_WULK HWULK).
+    - exact (ss_FR HFR).
+    - exact (ss_WFresh HWFresh).
+    - exact (ss_FNR HFNR).
+    - exact (ss_FPI HFPI).
+    - exact (ss_WNR HWNR).
+    - exact (ss_RITR HRITR).
+    - exact (ss_RINFL HRINFL).
+    - exact (ss_HD HHD).
+    - exact (ss_UNQRT_a HUa).
+    - exact (ss_UNQRT_b HUb).
+    - exact (ss_UNQR HU).
+  Qed.
+
+End quiescence.
+
+(** The two hypotheses are not vacuous: the obvious map does satisfy them.
+    Worth checking, for the reason RITR gives -- an abstractly stated step can
+    be one no concrete step implements, and then the theorem above says
+    nothing. *)
+Definition sync_stop_Og (Og : ObsMap) : ObsMap := (set_map sync_obs) <$> Og.
+
+Lemma sync_stop_Og_map m Og U T F o ob :
+  obsv (to_LState_t m Og U T F) o ob ->
+  obsv (to_LState_t (sync_stop_ms m) (sync_stop_Og Og) U T F) o (sync_obs ob).
+Proof.
+  intros (t & S & Hlk & Hin). exists t, (set_map sync_obs S).
+  split; [by rewrite /sync_stop_Og lookup_fmap Hlk | set_solver].
+Qed.
+
+Lemma sync_stop_Og_fwd m Og U T F o ob :
+  obsv (to_LState_t (sync_stop_ms m) (sync_stop_Og Og) U T F) o ob ->
+  obsv (to_LState_t m Og U T F) o ob
+  \/ exists t, ob = Ofree t /\ obsv (to_LState_t m Og U T F) o (Ounlk t).
+Proof.
+  intros (t & S' & Hlk & Hin).
+  rewrite /sync_stop_Og lookup_fmap in Hlk.
+  apply fmap_Some in Hlk as (S & HS & ->).
+  apply elem_of_map in Hin as (ob0 & -> & Hin0).
+  destruct ob0 as [t0|t0|t0|t0|]; simpl.
+  - left. by exists t, S.
+  - right. exists t0. split; [reflexivity | by exists t, S].
+  - left. by exists t, S.
+  - left. by exists t, S.
+  - left. by exists t, S.
+Qed.
+
+Corollary sync_stop_WellFormed FType m Og U T F :
+  (forall t, ~ bnd m t) ->
+  WellFormed FType (to_LState_t m Og U T F) ->
+  WellFormed FType (to_LState_t (sync_stop_ms m) (sync_stop_Og Og) U T F).
+Proof.
+  intros Hq.
+  exact (sync_stop_preserves_WellFormed FType m Og (sync_stop_Og Og) U T F
+           (sync_stop_Og_fwd m Og U T F) (sync_stop_Og_map m Og U T F) Hq).
+Qed.
+
+Print Assumptions sync_stop_preserves_WellFormed.
+Print Assumptions sync_stop_WellFormed.
+
+(** ** ReadEnd, all seventeen
+
+    The third action taken whole, and the one where doing it whole changes the
+    statement rather than confirming it.  Two things had to be added that the
+    per-invariant lemmas above did not need, and neither is a detail.
+
+    The first is the departing thread's variables.  RWOW says a live variable's
+    referent carries an observation; ReadEnd drops the thread's observations; so
+    unless the thread's variables stop being live in the same step, RWOW fails
+    immediately.  The type system does supply this -- \textsc{ToRCURead} types
+    the read critical section as a *block*, and the reader's [rcuItr] variables
+    are scoped to it, so they are gone at the end and never appear in the
+    outer environment.  But that is a fact about the rule, and it has to be
+    carried into the action's statement to be usable: hence [Hundf_t].  The
+    earlier [read_end_preserves_IFL] and [read_end_preserves_RINFL] did not
+    need it because neither invariant mentions the stack.
+
+    The second is [Oroot], and it is the more interesting one -- see
+    [read_end_naive_breaks_UNQRT_b] below.
+
+    With those, the step is characterized by three properties of the
+    observations, the same shape SyncStop uses: the thread's own observations
+    are gone, everything else survives, and nothing new appears.  The pivotal
+    hypothesis is [Hrd] -- ReadEnd is a *reader's* -- because RITR then says the
+    departing thread held no detaching observation, so nothing that any
+    detachment invariant depends on is among what is dropped.  Without RITR the
+    action would be unsound, and this is the only place it is load-bearing. *)
+
+Section departure.
+
+  Variable FType : FName -> FieldKind.
+  Variables (m : MState) (Og Og' : ObsMap) (U U' : gset (Var * TID))
+            (T : gset TID) (F : gmap Loc (gset TID)) (t : TID).
+
+  Let s  := to_LState_t m Og U T F.
+  Let s' := to_LState_t (read_end_ms m t) Og' U' T (read_end_F F t).
+
+  (** The departing thread's own observations are gone, ... *)
+  Hypothesis Hself : forall o ob, obs_tid ob = Some t -> ~ obsv s' o ob.
+  (** ... everything that is not its own survives -- [Oroot] included, which is
+      the whole of the second addition, ... *)
+  Hypothesis Hkeep : forall o ob,
+    obsv s o ob -> obs_tid ob <> Some t -> obsv s' o ob.
+  (** ... and nothing new appears. *)
+  Hypothesis Hshrink : forall o ob, obsv s' o ob -> obsv s o ob.
+
+  (** The thread's variables leave scope, which ToRCURead's block supplies. *)
+  Hypothesis Hundf_t    : forall x, undf s' x t.
+  Hypothesis Hundf_grow : forall x t', undf s x t' -> undf s' x t'.
+
+  (** And the departing thread is a reader. *)
+  Hypothesis Hrd : rds m t.
+
+  (** RITR is what makes the step safe: a reader holds no detaching
+      observation, so dropping its entries drops nothing any detachment
+      invariant relies on. *)
+  Lemma re_detach_kept o ob :
+    RITR s -> obsv s o ob ->
+    (exists t0, ob = Ounlk t0 \/ ob = Ofree t0 \/ ob = Ofresh t0) ->
+    obsv s' o ob.
+  Proof.
+    intros HR Hob [t0 [-> | [-> | ->]]]; apply (Hkeep o _ Hob); simpl;
+      intros Hc; injection Hc as ->;
+      destruct (HR o t Hrd) as (Hu & Hf & Hfr);
+      [exact (Hu Hob) | exact (Hf Hob) | exact (Hfr Hob)].
+  Qed.
+
+  Lemma re_detached_fwd o : RITR s -> Detached s o -> Detached s' o.
+  Proof.
+    intros HR [t0 [H | [H | H]]]; exists t0.
+    - left. apply (re_detach_kept o (Ounlk t0) HR H). by exists t0; left.
+    - right; left. apply (re_detach_kept o (Ofree t0) HR H).
+      by exists t0; right; left.
+    - right; right. apply (re_detach_kept o (Ofresh t0) HR H).
+      by exists t0; right; right.
+  Qed.
+
+  Lemma re_detached_bwd o : Detached s' o -> Detached s o.
+  Proof.
+    intros [t0 [H | [H | H]]]; exists t0;
+      [left | right; left | right; right]; exact (Hshrink _ _ H).
+  Qed.
+
+  (** The writer is not the departing thread, so its observations are among
+      those that survive.  This is WNR's only use in the development. *)
+  Lemma re_writer_ne lw : WNR s -> lk m = Some lw -> lw <> t.
+  Proof. intros HW Hlk ->. exact (HW t Hlk Hrd). Qed.
+
+  (** A live variable of the departing thread is a contradiction. *)
+  Lemma re_not_t x t' : ~ undf s' x t' -> t' <> t.
+  Proof. intros Hnu ->. exact (Hnu (Hundf_t x)). Qed.
+
+  (** The free list loses [t] from every entry and keeps its domain. *)
+  Lemma re_flist_inv o Tr :
+    flist s' o = Some Tr ->
+    exists s0, F !! o = Some s0 /\ Tr = (fun x => x ∈ s0 ∖ {[t]}).
+  Proof.
+    simpl. rewrite /read_end_F lookup_fmap.
+    destruct (F !! o) as [s0|] eqn:HS; simpl; [| discriminate].
+    intros H. injection H as <-. by exists s0.
+  Qed.
+
+  Lemma re_flist o s0 :
+    F !! o = Some s0 -> flist s' o = Some (fun x => x ∈ s0 ∖ {[t]}).
+  Proof. intros H. simpl. by rewrite /read_end_F lookup_fmap H. Qed.
+
+  (** The four the departure cannot reach. *)
+  Lemma re_UNQRT_a : UNQRT_a s -> UNQRT_a s'. Proof. exact (fun H => H). Qed.
+  Lemma re_UNQR    : UNQR s    -> UNQR s'.    Proof. exact (fun H => H). Qed.
+
+  Lemma re_WNR : WNR s -> WNR s'.
+  Proof. intros H t0 Hlk [Hrd0 _]. exact (H t0 Hlk Hrd0). Qed.
+
+  Lemma re_HD : RITR s -> HD s -> HD s'.
+  Proof.
+    intros HR H o f o' He Hnd. apply (H o f o' He).
+    intros Hd. exact (Hnd (re_detached_fwd o HR Hd)).
+  Qed.
+
+  Lemma re_OW : RITR s -> OW FType s -> OW FType s'.
+  Proof.
+    intros HR H o o' f f' x He He' Hf Hf'.
+    destruct (H o o' f f' x He He' Hf Hf') as [Heq | [Hd | Hd]].
+    - by left.
+    - right; left.  exact (re_detached_fwd o HR Hd).
+    - right; right. exact (re_detached_fwd o' HR Hd).
+  Qed.
+
+  Lemma re_RWOW : RWOW s -> RWOW s'.
+  Proof.
+    intros H x t0 o Hstk Hnu.
+    assert (Hne : t0 <> t) by exact (re_not_t x t0 Hnu).
+    assert (Hnu0 : ~ undf s x t0) by (intros Hc; exact (Hnu (Hundf_grow x t0 Hc))).
+    destruct (H x t0 o Hstk Hnu0) as [Hit | [Hlk [Hu | [Hfr | Hfs]]]].
+    - left. apply (Hkeep o _ Hit). simpl. by injection 1 as ->.
+    - right. split; [exact Hlk |]. left.
+      apply (Hkeep o _ Hu). simpl. by injection 1 as ->.
+    - right. split; [exact Hlk |]. right; left.
+      apply (Hkeep o _ Hfr). simpl. by injection 1 as ->.
+    - right. split; [exact Hlk |]. right; right.
+      apply (Hkeep o _ Hfs). simpl. by injection 1 as ->.
+  Qed.
+
+  Lemma re_AWRT : AWRT s -> AWRT s'.
+  Proof.
+    intros H y t0 Hstk Hnu.
+    assert (Hne : t0 <> t) by exact (re_not_t y t0 Hnu).
+    assert (Hnu0 : ~ undf s y t0) by (intros Hc; exact (Hnu (Hundf_grow y t0 Hc))).
+    apply (Hkeep _ _ (H y t0 Hstk Hnu0)). simpl. by injection 1 as ->.
+  Qed.
+
+  Lemma re_IFL : IFL s -> IFL s'.
+  Proof.
+    intros H t0 o Tr Hit Hfl.
+    assert (Hne : t0 <> t) by (intros ->; exact (Hself o (Oiter t) eq_refl Hit)).
+    destruct (re_flist_inv o Tr Hfl) as [s0 [HS ->]].
+    assert (Hfl0 : flist (to_LState_t m Og U T F) o = Some (fun x => x ∈ s0))
+      by (simpl; by rewrite HS).
+    assert (Hin : t0 ∈ s0) by exact (H t0 o _ (Hshrink _ _ Hit) Hfl0).
+    set_solver.
+  Qed.
+
+  Lemma re_ULKR : ULKR s -> RITR s -> ULKR s'.
+  Proof.
+    intros H HR o o' f' t0 Hobs He.
+    assert (Hobs0 : obsv s o (Ounlk t0) \/ obsv s o (Ofree t0))
+      by (destruct Hobs as [X | X]; [left | right]; exact (Hshrink _ _ X)).
+    destruct (H o o' f' t0 Hobs0 He) as [Hu | Hf].
+    - left.  apply (re_detach_kept o' (Ounlk t0) HR Hu). by exists t0; left.
+    - right. apply (re_detach_kept o' (Ofree t0) HR Hf).
+      by exists t0; right; left.
+  Qed.
+
+  Lemma re_FLR : FLR s -> FLR s'.
+  Proof.
+    intros H o o' f' Tr Hfl He.
+    destruct (re_flist_inv o Tr Hfl) as [s0 [HS ->]].
+    assert (Hfl0 : flist (to_LState_t m Og U T F) o = Some (fun x => x ∈ s0))
+      by (simpl; by rewrite HS).
+    destruct (H o o' f' _ Hfl0 He) as [Tr' [Hfl' Hsub]].
+    simpl in Hfl'. destruct (F !! o') as [s1|] eqn:HS'; [| discriminate].
+    injection Hfl' as <-.
+    exists (fun x => x ∈ s1 ∖ {[t]}). split; [exact (re_flist o' s1 HS') |].
+    intros t0 Hin. assert (t0 ∈ s1) by set_solver.
+    assert (t0 <> t) by set_solver. set_solver.
+  Qed.
+
+  Lemma re_WULK : WULK s -> WULK s'.
+  Proof.
+    intros H lw o t0 Hlk Hit.
+    destruct (H lw o t0 Hlk (Hshrink _ _ Hit)) as [Hnu Hnf].
+    split; intros Hbad; [exact (Hnu (Hshrink _ _ Hbad))
+                        | exact (Hnf (Hshrink _ _ Hbad))].
+  Qed.
+
+  Lemma re_FR : FR s -> FR s'.
+  Proof. intros H t0 x o Hstk Hfr. exact (H t0 x o Hstk (Hshrink _ _ Hfr)). Qed.
+
+  Lemma re_WFresh : WFresh s -> WFresh s'.
+  Proof. intros H t0 x o Hstk Hfr. exact (H t0 x o Hstk (Hshrink _ _ Hfr)). Qed.
+
+  Lemma re_FNR : FNR s -> FNR s'.
+  Proof.
+    intros H o t0 t1 Hfr.
+    destruct (H o t0 t1 (Hshrink _ _ Hfr)) as (H1 & H2 & H3).
+    repeat apply conj; intros Hbad; [exact (H1 (Hshrink _ _ Hbad))
+                                    | exact (H2 (Hshrink _ _ Hbad))
+                                    | exact (H3 (Hshrink _ _ Hbad))].
+  Qed.
+
+  Lemma re_FPI : WNR s -> FPI FType s -> FPI FType s'.
+  Proof.
+    intros HW H o f o' t0 lw Hfr He Hft Hlk.
+    apply (Hkeep o' _ (H o f o' t0 lw (Hshrink _ _ Hfr) He Hft Hlk)).
+    simpl. intros Hc. injection Hc as Heq. exact (re_writer_ne lw HW Hlk Heq).
+  Qed.
+
+  Lemma re_RITR : RITR s -> RITR s'.
+  Proof.
+    intros H o t0 [Hrd0 _]. destruct (H o t0 Hrd0) as (H1 & H2 & H3).
+    repeat apply conj; intros Hbad; [exact (H1 (Hshrink _ _ Hbad))
+                                    | exact (H2 (Hshrink _ _ Hbad))
+                                    | exact (H3 (Hshrink _ _ Hbad))].
+  Qed.
+
+  Lemma re_RINFL : RINFL s -> RINFL s'.
+  Proof.
+    intros H o Tr t0 Hfl Hin.
+    destruct (re_flist_inv o Tr Hfl) as [s0 [HS ->]].
+    assert (Hin0 : t0 ∈ s0) by set_solver.
+    assert (Hfl0 : flist (to_LState_t m Og U T F) o = Some (fun x => x ∈ s0))
+      by (simpl; by rewrite HS).
+    split; [exact (H o _ t0 Hfl0 Hin0) |]. set_solver.
+  Qed.
+
+  Lemma re_UNQRT_b : WNR s -> UNQRT_b s -> UNQRT_b s'.
+  Proof.
+    intros HW H p o lw Hlk Hr.
+    destruct (H p o lw Hlk Hr) as [Hit | Hrt].
+    - left. apply (Hkeep o _ Hit). simpl. intros Hc. injection Hc as Heq.
+      exact (re_writer_ne lw HW Hlk Heq).
+    - right. apply (Hkeep o _ Hrt). simpl. discriminate.
+  Qed.
+
+  Theorem read_end_preserves_WellFormed :
+    WellFormed FType s -> WellFormed FType s'.
+  Proof.
+    intros (HOW & HRWOW & HAWRT & HIFL & HULKR & HFLR & HWULK & HFR & HWFresh
+            & HFNR & HFPI & HWNR & HRITR & HRINFL & HHD & HUa & HUb & HU).
+    repeat apply conj.
+    - exact (re_OW HRITR HOW).
+    - exact (re_RWOW HRWOW).
+    - exact (re_AWRT HAWRT).
+    - exact (re_IFL HIFL).
+    - exact (re_ULKR HULKR HRITR).
+    - exact (re_FLR HFLR).
+    - exact (re_WULK HWULK).
+    - exact (re_FR HFR).
+    - exact (re_WFresh HWFresh).
+    - exact (re_FNR HFNR).
+    - exact (re_FPI HWNR HFPI).
+    - exact (re_WNR HWNR).
+    - exact (re_RITR HRITR).
+    - exact (re_RINFL HRINFL).
+    - exact (re_HD HRITR HHD).
+    - exact (re_UNQRT_a HUa).
+    - exact (re_UNQRT_b HWNR HUb).
+    - exact (re_UNQR HU).
+  Qed.
+
+End departure.
+
+Print Assumptions read_end_preserves_WellFormed.
+
+(** ** Why the observation change is [Hkeep] and not "drop the thread's entries"
+
+    The obvious way to say what ReadEnd does to the observation map is the one
+    [read_end_preserves_IFL] uses: [Og'] has no entry at [(o, t)].  For every
+    invariant about a *thread's* observations that is right, because an
+    observation names its observer and [ObsWF] puts it in that observer's entry.
+
+    [Oroot] does not name an observer.  It is anonymous by design -- change C0
+    keeps it so, being the root being a property of the structure rather than of
+    anyone looking -- and [ObsWF] accordingly permits it in any entry, a
+    reader's included.  Dropping that reader's entries then destroys it, and
+    UNQRT_b, the one invariant that asks about [Oroot], fails.
+
+    So this is an encoding mismatch rather than a defect in a rule: the map is
+    keyed by observer so that a thread can own its fragment, and [Oroot] has no
+    owner to be filed under.  Either the encoding gives it a home no ReadEnd can
+    remove, or the action has to be stated so as to keep it.  [Hkeep] is the
+    second, and it is the smaller change -- it costs one hypothesis and no
+    change to [ObsWF], which every other lemma in [IrisGhost.v] depends on.
+
+    The state below is the witness.  It is well formed, its root observation is
+    recorded in the reader's entry, and the naive step breaks UNQRT_b. *)
+
+Definition ce_ms : MState :=
+  {| stk := fun _ _ => None;
+     hp  := fun o _ => if Nat.eqb o 0 then Some VNull else None;
+     lk  := Some 1;
+     rt  := 0;
+     rds := fun t => t = 2;
+     bnd := fun _ => False |}.
+
+(** The root observation, filed under reader 2 -- which [ObsWF] permits. *)
+Definition ce_Og : ObsMap := {[ (0%nat, 2%nat) := {[Oroot]} ]}.
+
+Definition ce_pre  : LState := to_LState_t ce_ms ce_Og ∅ ∅ ∅.
+Definition ce_post : LState :=
+  to_LState_t (read_end_ms ce_ms 2) ∅ ∅ ∅ (read_end_F ∅ 2).
+
+Lemma ce_ObsWF : ObsWF ce_Og.
+Proof.
+  intros o t S ob Hlk Hin.
+  destruct (decide ((o, t) = (0%nat, 2%nat))) as [Heq | Hne].
+  - injection Heq as -> ->. rewrite lookup_singleton_eq in Hlk.
+    injection Hlk as <-. apply elem_of_singleton in Hin. by right.
+  - assert (Hnone : ce_Og !! (o, t) = None)
+      by (apply lookup_singleton_ne; intros Hc; exact (Hne (eq_sym Hc))).
+    rewrite Hnone in Hlk. discriminate.
+Qed.
+
+Lemma ce_obs o ob : obsv ce_pre o ob <-> (o = 0%nat /\ ob = Oroot).
+Proof.
+  split.
+  - intros [t [S [Hlk Hin]]].
+    destruct (decide ((o, t) = (0%nat, 2%nat))) as [Heq | Hne].
+    + injection Heq as -> ->. rewrite lookup_singleton_eq in Hlk.
+      injection Hlk as <-. apply elem_of_singleton in Hin. by split.
+    + assert (Hnone : ce_Og !! (o, t) = None)
+        by (apply lookup_singleton_ne; intros Hc; exact (Hne (eq_sym Hc))).
+      rewrite Hnone in Hlk. discriminate.
+  - intros [-> ->]. exists 2%nat, {[Oroot]}.
+    split; [by rewrite lookup_singleton_eq | set_solver].
+Qed.
+
+Lemma ce_no_edges o f o' : ~ Edge ce_pre o f o'.
+Proof.
+  unfold Edge. simpl. destruct (Nat.eqb o 0); discriminate.
+Qed.
+
+Lemma ce_reaches p o : Reaches ce_pre p o -> p = [] /\ o = 0%nat.
+Proof.
+  destruct p as [|f p]; unfold Reaches; simpl.
+  - intros H. injection H as <-. by split.
+  - discriminate.
+Qed.
+
+Lemma ce_WellFormed FType : WellFormed FType ce_pre.
+Proof.
+  repeat apply conj.
+  - intros o o' f f' x He. exfalso. exact (ce_no_edges o f x He).
+  - intros x t o H. simpl in H. discriminate.
+  - intros y t H. simpl in H. discriminate.
+  - intros t o Tr Hit. exfalso.
+    destruct (proj1 (ce_obs o (Oiter t)) Hit) as [_ Hc]. discriminate.
+  - intros o o' f' t _ He. exfalso. exact (ce_no_edges o' f' o He).
+  - intros o o' f' Tr Hfl. simpl in Hfl. discriminate.
+  - intros lw o t _ Hit. exfalso.
+    destruct (proj1 (ce_obs o (Oiter lw)) Hit) as [_ Hc]. discriminate.
+  - intros t x o H. simpl in H. discriminate.
+  - intros t x o H. simpl in H. discriminate.
+  - intros o t t' Hfr. exfalso.
+    destruct (proj1 (ce_obs o (Ofresh t)) Hfr) as [_ Hc]. discriminate.
+  - intros o f o' t lw _ He. exfalso. exact (ce_no_edges o f o' He).
+  - intros t Hlk. simpl in Hlk. injection Hlk as <-. discriminate.
+  - intros o t Hrd. simpl in Hrd. subst t.
+    repeat apply conj; intros Hbad;
+      apply ce_obs in Hbad as [_ Hc]; discriminate.
+  - intros o Tr t Hfl. simpl in Hfl. discriminate.
+  - intros o f o' He. exfalso. exact (ce_no_edges o f o' He).
+  - intros o f He. exact (ce_no_edges o f (rt (ms ce_pre)) He).
+  - intros p o lw Hlk Hr.
+    destruct (ce_reaches p o Hr) as [_ ->]. right.
+    by apply ce_obs.
+  - intros p p' o H1 H2.
+    destruct (ce_reaches p o H1) as [-> _].
+    destruct (ce_reaches p' o H2) as [-> _]. reflexivity.
+Qed.
+
+(** The naive step: thread 2's entries are gone, which is exactly the
+    characterization the per-invariant ReadEnd lemmas use. *)
+Lemma ce_naive_gone o : (∅ : ObsMap) !! (o, 2%nat) = None.
+Proof. by rewrite lookup_empty. Qed.
+
+Lemma ce_post_no_obs o ob : ~ obsv ce_post o ob.
+Proof. intros [t [S [Hlk _]]]. rewrite lookup_empty in Hlk. discriminate. Qed.
+
+Theorem read_end_naive_breaks_UNQRT_b :
+  (forall FType, WellFormed FType ce_pre)
+  /\ ObsWF ce_Og
+  /\ rds (ms ce_pre) 2
+  /\ (forall o, (∅ : ObsMap) !! (o, 2%nat) = None)
+  /\ ~ UNQRT_b ce_post.
+Proof.
+  repeat apply conj;
+    [exact ce_WellFormed | exact ce_ObsWF | reflexivity | exact ce_naive_gone |].
+  intros H.
+  destruct (H [] 0%nat 1%nat eq_refl eq_refl) as [Hbad | Hbad];
+    [exact (ce_post_no_obs _ _ Hbad) | exact (ce_post_no_obs _ _ Hbad)].
+Qed.
+
+Print Assumptions ce_WellFormed.
+Print Assumptions read_end_naive_breaks_UNQRT_b.

@@ -762,6 +762,91 @@ drop a thread's observations, its bounding-thread membership and its free-list
 entries \emph{together}, and the \textbf{IFL} and \textbf{RINFL} cases are
 what show that none of the three can be taken alone.
 
+\textsc{Free} is also the first action taken \emph{whole}: not one invariant at
+a time but \textbf{WellFormed} itself, as \texttt{free\_preserves\_WellFormed}.
+It is the right one to do first, because it needs no type denotations --- it is
+a state transition rather than a typing rule --- and because it is the action
+the report handled worst.  The result is lopsided in a way worth recording.
+Sixteen of the seventeen fall out of two one-line facts, that freeing removes
+edges and therefore removes paths: every invariant with an \textbf{Edge} or
+\textbf{Reaches} hypothesis gets \emph{weaker}, and the nine that do not mention
+the heap are untouched outright.  \textbf{HD} is the only one whose conclusion
+is about the heap, and it is the only one with any content --- and it needs the
+corrected statement, since under the published \textbf{HD} the theorem is false.
+So the report's verdict on the case was right about sixteen seventeenths of it
+and wrong about the part that mattered, which is a fair summary of what
+"trivial" was doing throughout.
+
+\textsc{SyncStop} follows, as \texttt{sync\_stop\_preserves\_WellFormed}.  It
+does two things --- it returns once the bounding set is empty, and it turns
+every \unlk{} observation into the matching \frbl{} one --- and the two halves
+carry disjoint sets of invariants.  The observation change is stated by what it
+does to observations rather than as a map operation, which is the choice
+\textsc{ReadEnd} already makes and for the same reason: two properties suffice,
+and they are the two directions.  Nothing appears that was not there, except
+\frbl{} arriving from \unlk{}; and everything survives, \unlk{} as \frbl{}.
+Every one of the seventeen cases is one of those two applied once.
+
+Two have content.  RINFL is where the empty bounding set is spent: it says
+every thread in a free-list entry bounds a reclamation, and afterwards there
+are no bounding threads, so no entry has a thread in it --- which is exactly the
+conjunct the \frbl{} denotation asks for, obtained rather than assumed.  And
+FNR is \texttt{sync\_stop\_preserves\_FNR}: the conjunct added to FNR to make
+\textsc{T-Insert} and \textsc{T-Replace} preserve \textbf{ULKR} is discharged
+here from the conjunct FNR already had.  The repair therefore costs nothing at
+the one action that could have been asked to pay for it, which is the sense in
+which it was the right repair and not merely a sufficient one.
+
+Because that step is stated abstractly, it is also checked to be
+implementable: \texttt{sync\_stop\_WellFormed} instantiates both properties
+with the obvious map on the observation state.  The check is not ceremony ---
+\textbf{RITR} is the standing reminder that an abstractly stated condition can
+be one no concrete step satisfies, and every theorem over it then holds for
+nothing.
+
+\textsc{ReadEnd} is the third, as \texttt{read\_end\_preserves\_WellFormed},
+and it is the one where doing the action whole \emph{changed} the statement
+rather than confirming it.  Two things had to be added that no per-invariant
+case needed, and neither is bookkeeping.
+
+The first is the departing thread's variables.  \textbf{RWOW} says a live
+variable's referent carries an observation, and \textsc{ReadEnd} drops the
+thread's observations; unless the thread's variables stop being live in the
+same step, \textbf{RWOW} fails at once.  The type system does supply this ---
+\textsc{ToRCURead} types the read critical section as a block, so the reader's
+\textsf{rcuItr} variables are scoped to it and never reach the outer
+environment --- but that is a fact about the rule, and it has to be carried into
+the action's statement to be usable.  The earlier \textbf{IFL} and
+\textbf{RINFL} cases did not need it because neither invariant mentions the
+stack, which is exactly the kind of thing per-invariant work cannot notice.
+
+The second is \rt{}, and it is an encoding mismatch rather than a defect in
+anything published.  The observation map is keyed by observer, so that a thread
+can own its own fragment; \rt{} has no observer --- change C0 keeps it
+anonymous, being the root being a property of the structure rather than of
+anyone looking --- so \textbf{ObsWF} permits it in any thread's entry, a
+reader's included.  Describe \textsc{ReadEnd} as "the departing thread's entries
+are gone", which is what the per-invariant lemmas use and what is correct for
+every invariant about a thread's observations, and that description destroys
+the root observation; \textbf{UNQRT}$_b$, the one invariant that asks about
+\rt{}, then fails.  \texttt{read\_end\_naive\_breaks\_UNQRT\_b} is a well-formed
+state where it does.  Either the encoding gives \rt{} a home no
+\textsc{ReadEnd} can remove, or the action is stated so as to keep it; the
+development takes the second, which costs one hypothesis against a change to
+\textbf{ObsWF} that every lemma in the ghost-state layer depends on.
+
+With those, the step is three properties of the observations, the same shape
+\textsc{SyncStop} takes.  The pivotal hypothesis is that \textsc{ReadEnd} is a
+\emph{reader's}: \textbf{RITR} then says the departing thread held no
+detaching observation, so nothing any detachment invariant depends on is among
+what is dropped.  Without \textbf{RITR} the action is unsound, and this is the
+only place in the development where it is load-bearing --- which is worth
+recording, given that \textbf{RITR} as published is unsatisfiable in exactly
+the states where it is needed.  \textbf{WNR} likewise earns its keep here and
+only here: the writer is not the departing thread, so its \itr{} observations
+are among those that survive, which is what \textbf{FPI} and
+\textbf{UNQRT}$_b$ need.
+
 One structural observation came out of doing the breadth.  Nine of the seventeen
 invariants --- \textbf{RWOW}, \textbf{AWRT}, \textbf{IFL}, \textbf{WULK},
 \textbf{WF}, \textbf{FNR}, \textbf{RITR}, \textbf{RINFL}, \textbf{WNR} --- do
