@@ -241,13 +241,35 @@ does not support that step.
 \emph{Note:} under (C0) this is close to definitional.  Keep it as a named
 invariant for readability, but expect it to discharge in one step.
 
-\paragraph{10.\ FNR --- Fresh Not Reader-Visible.\hfill\textsc{minor}}
+\paragraph{10.\ FNR --- Fresh Carries No Other Observation.\hfill\textsc{major}}
 \[
 \textbf{FNR} \defn \forall o,\mathit{tid},\mathit{tid}' \ldotp
   \frsh\,\mathit{tid} \in O(o) \implies
   \itr\,\mathit{tid}' \notin O(o) \land \unlk\,\mathit{tid}' \notin O(o)
+  \land \frbl\,\mathit{tid}' \notin O(o)
 \]
-\emph{Changed:} the original binds $x$ and never uses it.
+\emph{Changed:} two things.  (i) The original binds $x$ and never uses it.
+(ii) The third conjunct is new, and it is not bookkeeping: without it the
+invariant set cannot prove that \textsc{T-Replace} and \textsc{T-Insert}
+preserve \textbf{ULKR}.  Both write $o_p.f := o_n$ with $o_n$ typed
+\textsf{rcuFresh}; the write creates the edge $o_p \to o_n$, and \textbf{ULKR}
+asks that if $o_n$ is unlinked or freeable then $o_p$ is too.  Since $o_p$ is
+the writer's iterator, \textbf{WULK} denies it both observations, so the
+obligation can be discharged only by denying both to $o_n$.  The published
+\textbf{FNR} denies the first and says nothing about the second: \frbl{}
+appears in \textbf{Detached}, \textbf{RWOW}, \textbf{ULKR}, \textbf{WULK} and
+\textbf{RITR}, and in none of them as a consequent a \frsh{} node could
+trigger.  So the proof does not close, and what is missing is an invariant
+rather than a rule premise --- which is why the repair belongs here.
+
+That the reachable states have no such node is beside the point, and is in fact
+why the omission survived: a node acquires \frbl{} only at \textsc{SyncStop},
+from \unlk{}, which the second conjunct already denies to a fresh node, so the
+property does hold inductively over whole executions.  But an invariant set
+earns its keep by making each action lemma provable from the invariants
+\emph{alone}, and this one is not.  Adding the conjunct restores that at no
+cost: \texttt{sync\_stop\_preserves\_FNR} discharges the new conjunct from the
+old one, by exactly that argument.
 
 \paragraph{11.\ FPI --- Fresh Points to Iterator.\hfill\textsc{critical}}
 \[
@@ -463,26 +485,31 @@ The semantic changes above invalidate specific cases in Section
   site rather than assuming.
 \end{enumerate}
 
-\paragraph{Machine-checked status.}  Six of the defects above are mechanized in
-\texttt{rocq/WellFormed.v}: \texttt{UNQR\_orig\_vacuous} and
+\paragraph{Machine-checked status.}  Seven of the defects above are mechanized
+in \texttt{rocq/WellFormed.v}: \texttt{UNQR\_orig\_vacuous} and
 \texttt{UNQR\_orig\_admits\_non\_trees};
 \texttt{RITR\_orig\_contradicts\_fresh};
 \texttt{FR\_orig\_admits\_writer\_local\_alias};
 \texttt{FPI\_orig\_contradicts\_FNR}; \texttt{ULKR\_does\_not\_chain}
-together with its repair \texttt{ULKR\_closed\_reaches}; and
-\texttt{HD\_not\_preserved\_by\_free}.  A seventh,
-\texttt{FPI\_not\_preserved\_by\_replace}, is a defect in \textsc{T-Replace} and
-\textsc{T-UnlinkH} rather than in an invariant statement; both rules now carry
-the repairing premise.  The remaining \textsc{major} and \textsc{minor} items
-are restatements whose defects are syntactic (capture, scope, unused binders)
-and are visible without proof.
+together with its repair \texttt{ULKR\_closed\_reaches};
+\texttt{HD\_not\_preserved\_by\_free}; and
+\texttt{FNR\_pub\_admits\_freeable\_fresh}, which exhibits a state satisfying
+the other sixteen invariants and the published \textbf{FNR} in which a node is
+both \frsh{} and \frbl{} --- with \texttt{link\_freeable\_breaks\_ULKR} in
+\texttt{rocq/Actions.v} showing that linking such a node breaks \textbf{ULKR},
+and \texttt{link\_fresh\_ULKR} showing that the repaired \textbf{FNR} closes
+the case.  An eighth, \texttt{FPI\_not\_preserved\_by\_replace}, is a defect in
+\textsc{T-Replace} and \textsc{T-UnlinkH} rather than in an invariant
+statement; both rules now carry the repairing premise.  The remaining
+\textsc{major} and \textsc{minor} items are restatements whose defects are
+syntactic (capture, scope, unused binders) and are visible without proof.
 
-Three of the seven were found by attempting a proof rather than by reading ---
+Four of the eight were found by attempting a proof rather than by reading ---
 \textbf{ULKR}'s failure to chain, \textbf{FPI}'s failure to survive unlinking,
-and \textbf{HD}'s failure to survive \texttt{Free} --- and all three are cases
-the report calls trivial.  That is now a pattern rather than a coincidence, and
-it is the strongest thing the mechanization has to say about the original
-argument.
+\textbf{HD}'s failure to survive \texttt{Free}, and \textbf{FNR}'s failure to
+support \textbf{ULKR} under linking --- and all four are cases the report calls
+trivial.  That is now a pattern rather than a coincidence, and it is the
+strongest thing the mechanization has to say about the original argument.
 
 The corrected invariants are also satisfiable
 (\texttt{WellFormed\_satisfiable}), so the repairs are not vacuously strong.
@@ -709,7 +736,10 @@ to $\llbracket \textsf{rcuFresh}\,\mathcal{N} \rrbracket$.  Neither proof closes
 without it, so the repairs are load-bearing rather than bookkeeping.
 
 Atomic-action lemmas for every action.  For the three heap mutations: each
-preserves \textbf{UNQR}, \textbf{HD} and \textbf{OW}, and unlinking and
+preserves \textbf{UNQR}, and a field write preserves \textbf{OW}, \textbf{HD},
+\textbf{ULKR}, \textbf{FLR}, \textbf{FR} and \textbf{UNQRT}$_a$ under a side
+condition apiece, each of which the rules already supply --- with the one
+exception that produced the \textbf{FNR} repair above.  Unlinking and
 replacement preserve \textbf{FPI}.  The \textbf{FPI} case is the one whose
 failure forced the repair to \textsc{T-Replace} and \textsc{T-UnlinkH}, and the
 repaired premise is used exactly once in it, at the step that would otherwise
@@ -741,6 +771,23 @@ cases are the identity.  The eight that do --- \textbf{OW}, \textbf{ULKR},
 defects.  The split falls exactly on that line.  It is worth stating because the
 difference between the two kinds of trivial case is precisely what the original
 proofs did not record, and that is where the defects hid.
+
+Within those eight there is a second, finer split, and it is what located the
+\textbf{FNR} defect.  Six --- \textbf{OW}, \textbf{ULKR}, \textbf{FLR},
+\textbf{FR}, \textbf{HD}, \textbf{UNQRT}$_a$ --- are edge-local: a write only
+ever \emph{removes} the edge it overwrites, and none of the six is endangered
+by an edge going away, so each reduces to a single obligation about the edge
+created.  \textbf{FPI} is not, since it needs the observation the same step
+withdraws; and \textbf{UNQRT}$_b$ is not a write lemma at all, its hypothesis
+being reachability, so it belongs with the path characterizations.
+
+Reducing the six that way is what turned a proof case into a proposition, and
+it is the reason the \textbf{FNR} gap became visible: \textbf{ULKR}'s
+obligation is a formula about $o_n$ that has to be discharged from the
+invariants, and once written down it plainly could not be.  The defect it
+exposed is not in any of the eight --- \textbf{FNR} is one of the nine that a
+write transfers definitionally --- which is the point.  An invariant can be
+heap-free and still be the thing a heap obligation needs.
 
 What remains is the Hoare triples themselves, which wait on a choice of heap
 assertion for the object language rather than on anything here.

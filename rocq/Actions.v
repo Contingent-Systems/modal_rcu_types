@@ -614,10 +614,42 @@ Section grace.
     exact (Hb t (HR o _ t Hfl Hin)).
   Qed.
 
+
+  (** The conjunct FNR gained (change 10b) is discharged by the conjunct it
+      already had, so strengthening it costs nothing.  SyncStop's only effect on
+      observations is to turn [unlinked] into [freeable]; a node observed
+      [fresh] holds no [unlinked] observation, so it gains no [freeable] one.
+
+      Stated over the observation *step* rather than a SyncStop transformer:
+      what the argument needs is only that [freeable] arrives from [unlinked],
+      and saying so keeps the lemma independent of how the grace period is
+      encoded. *)
+  Theorem sync_stop_preserves_FNR (s s' : LState) :
+    FNR s ->
+    (forall o ob, obsv s' o ob ->
+       obsv s o ob \/ exists t, ob = Ofree t /\ obsv s o (Ounlk t)) ->
+    FNR s'.
+  Proof.
+    intros HF Hstep o t t' Hfr'.
+    assert (Hfr : obsv s o (Ofresh t)).
+    { destruct (Hstep o (Ofresh t) Hfr') as [H | [t0 [Hc _]]];
+        [exact H | discriminate Hc]. }
+    destruct (HF o t t' Hfr) as [H1 [H2 H3]].
+    repeat apply conj; intros Hbad;
+      destruct (Hstep _ _ Hbad) as [H | [t0 [Hc Hu]]].
+    - exact (H1 H).
+    - discriminate Hc.
+    - exact (H2 H).
+    - discriminate Hc.
+    - exact (H3 H).
+    - injection Hc as <-. exact (H2 Hu).
+  Qed.
+
 End grace.
 
 Print Assumptions sync_start_FLR.
 Print Assumptions sync_stop_entries_empty.
+Print Assumptions sync_stop_preserves_FNR.
 
 (** ** The invariants a heap write cannot touch
 
@@ -694,3 +726,180 @@ End sharing.
 
 Print Assumptions write_WULK.
 Print Assumptions write_preserves_OW.
+
+(** ** The rest of the invariants a field write does touch
+
+    [write_preserves_OW] settled the first of the eight; this settles five more.
+    HD, UNQRT_a, ULKR, FLR and FR each mention the heap, so each has a real case
+    at the written edge -- and in every one of them the case at the *old* edge is
+    empty, because a write only removes that edge and no invariant here is
+    endangered by an edge going away.  What is left is one obligation per
+    invariant about the edge created, and each turns out to be a premise the
+    rules already carry, or -- once, for ULKR -- an invariant they do not.
+
+    The eighth, UNQRT_b, is not a write lemma: its hypothesis is [Reaches], so it
+    needs the path characterizations of [HeapPaths.v] and belongs with the
+    per-rule UNQR theorems above rather than here.
+
+    FR is the one whose statement has to say less than one might hope.  A write
+    that stores a *fresh* node destroys FR outright -- the node acquires an
+    in-edge -- and no side condition repairs that, because FR is not meant to
+    survive: T-Replace and T-Insert re-establish it by revoking the [fresh]
+    observation in the same step.  So the write lemma covers the writes that
+    store something else, which is T-WriteFH, and the linking rules get FR from
+    the observation update instead. *)
+
+Section heapinv.
+
+  Variables (m : MState) (Og : ObsMap) (U : gset (Var * TID))
+            (T : gset TID) (F : gmap Loc (gset TID)).
+  Variables (op : Loc) (fw : FName) (on : Loc).
+
+  Let s  := to_LState_t m Og U T F.
+  Let s' := to_LState_t (write_ms m op fw (VLoc on)) Og U T F.
+
+  (** Every edge after the write is either the one written or one that was
+      there before.  Both directions of the case split used below. *)
+  Lemma write_edge_split o g x :
+    Edge s' o g x -> ((o, g) = (op, fw) /\ x = on) \/ Edge s o g x.
+  Proof.
+    unfold Edge; simpl; intros He.
+    destruct (edge_eq_dec o g op fw) as [Heq | Hne].
+    - left. injection Heq as -> ->. rewrite upd_same in He.
+      injection He as <-. split; reflexivity.
+    - right. by rewrite upd_other in He.
+  Qed.
+
+  (** A write never deallocates: it assigns one field, so anything allocated
+      stays allocated. *)
+  Lemma write_InHeap o : InHeap s o -> InHeap s' o.
+  Proof.
+    intros [g [v Hv]]. unfold InHeap; simpl.
+    destruct (edge_eq_dec o g op fw) as [Heq | Hne].
+    - injection Heq as -> ->. exists fw, (VLoc on). apply upd_same.
+    - exists g, v. by rewrite upd_other.
+  Qed.
+
+  (** ** HD
+
+      Heap-domain closure, in the corrected form with the [Detached] exemption
+      (change 7).  The hypothesis is under that exemption, and deliberately so:
+      what a *detached* node's fields point at is nobody's business, since the
+      node is unreachable and OW and HD both excuse it.  A write through a live
+      node has to store something allocated; a write through an unlinked one
+      need not. *)
+  Theorem write_preserves_HD :
+    HD s -> (~ Detached s op -> InHeap s on) -> HD s'.
+  Proof.
+    intros HHD Hon o g x He Hnd.
+    destruct (write_edge_split o g x He) as [[Heq ->] | Hold].
+    - injection Heq as -> ->. exact (write_InHeap on (Hon Hnd)).
+    - exact (write_InHeap x (HHD o g x Hold Hnd)).
+  Qed.
+
+  (** ** UNQRT_a
+
+      Nothing points at the root.  The obligation is that the write does not
+      make the root a target, and every rule supplies it: the node stored is an
+      [rcuItr] at a non-empty path or an [rcuFresh], and the root is neither. *)
+  Theorem write_preserves_UNQRT_a :
+    UNQRT_a s -> on <> rt m -> UNQRT_a s'.
+  Proof.
+    intros HU Hne o g He.
+    destruct (write_edge_split o g (rt (ms s')) He) as [[_ Hx] | Hold].
+    - exact (Hne (eq_sym Hx)).
+    - exact (HU o g Hold).
+  Qed.
+
+  (** ** ULKR
+
+      Detachment propagates upwards: a predecessor of an unlinked-or-freeable
+      node is itself unlinked or freeable.  The new edge makes [op] a
+      predecessor of [on], so the obligation is that [on] being detached forces
+      [op] to be. *)
+  Theorem write_preserves_ULKR :
+    ULKR s ->
+    (forall t, (obsv s on (Ounlk t) \/ obsv s on (Ofree t)) ->
+               obsv s op (Ounlk t) \/ obsv s op (Ofree t)) ->
+    ULKR s'.
+  Proof.
+    intros HU Hnew o o' f' t Hobs He.
+    destruct (write_edge_split o' f' o He) as [[Heq ->] | Hold].
+    - injection Heq as -> ->. exact (Hnew t Hobs).
+    - exact (HU o o' f' t Hobs Hold).
+  Qed.
+
+  (** ** FLR
+
+      The same shape, on the free list rather than the observations. *)
+  Theorem write_preserves_FLR :
+    FLR s ->
+    (forall Tr, flist s on = Some Tr ->
+       exists Tr', flist s op = Some Tr' /\ (forall t, Tr' t -> Tr t)) ->
+    FLR s'.
+  Proof.
+    intros HF Hnew o o' f' Tr Hfl He.
+    destruct (write_edge_split o' f' o He) as [[Heq ->] | Hold].
+    - injection Heq as -> ->. exact (Hnew Tr Hfl).
+    - exact (HF o o' f' Tr Hfl Hold).
+  Qed.
+
+  (** ** FR
+
+      For a write that stores a node nobody observes as fresh.  The second
+      conjunct of FR is about the stack, which a write does not touch, so only
+      the in-edge obligation has content. *)
+  Theorem write_preserves_FR :
+    FR s -> (forall t, ~ obsv s on (Ofresh t)) -> FR s'.
+  Proof.
+    intros HFR Hnf t x o Hstk Hfresh.
+    destruct (HFR t x o Hstk Hfresh) as [Hin Halias].
+    split; [| exact Halias].
+    intros o' g He.
+    destruct (write_edge_split o' g o He) as [[_ ->] | Hold].
+    - exact (Hnf t Hfresh).
+    - exact (Hin o' g Hold).
+  Qed.
+
+  (** ** Linking a fresh node, and what ULKR costs there
+
+      This is the case the two linking rules are in, and it is where FNR's third
+      conjunct (change 10b) is spent.  [on] is fresh, so FNR denies it both
+      [unlinked] and [freeable], and the ULKR obligation is discharged without
+      any premise on [op] at all. *)
+  Corollary link_fresh_ULKR t0 :
+    ULKR s -> FNR s -> obsv s on (Ofresh t0) -> ULKR s'.
+  Proof.
+    intros HU HF Hfr. apply write_preserves_ULKR; [exact HU |].
+    intros t [Hu | Hf]; exfalso.
+    - exact (proj1 (proj2 (HF on t0 t Hfr)) Hu).
+    - exact (proj2 (proj2 (HF on t0 t Hfr)) Hf).
+  Qed.
+
+  (** And the published FNR does not pay for it.  Its two conjuncts leave [on]
+      free to be [freeable]; [op] is the writer's iterator, which WULK denies
+      both observations, so the obligation fails outright -- there is no weaker
+      premise to fall back on.  [WellFormed.fresh_freeable] is a state
+      satisfying the other sixteen invariants and the published FNR in which
+      this applies. *)
+  Theorem link_freeable_breaks_ULKR lw t :
+    WULK s -> lk (ms s) = Some lw ->
+    obsv s op (Oiter lw) -> obsv s on (Ofree t) ->
+    ~ ULKR s'.
+  Proof.
+    intros HW Hlk Hit Hfr HU.
+    assert (He : Edge s' op fw on) by (unfold Edge; simpl; apply upd_same).
+    destruct (HW lw op t Hlk Hit) as [Hnu Hnf].
+    destruct (HU on op fw t (or_intror Hfr) He) as [H | H];
+      [exact (Hnu H) | exact (Hnf H)].
+  Qed.
+
+End heapinv.
+
+Print Assumptions write_preserves_HD.
+Print Assumptions write_preserves_UNQRT_a.
+Print Assumptions write_preserves_ULKR.
+Print Assumptions write_preserves_FLR.
+Print Assumptions write_preserves_FR.
+Print Assumptions link_fresh_ULKR.
+Print Assumptions link_freeable_breaks_ULKR.

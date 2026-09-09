@@ -11,7 +11,7 @@
 #
 # Milestones:
 #   WellFormed.v  the seventeen global invariants, corrected; satisfiability;
-#                 machine-checked proofs that five of the published ones are
+#                 machine-checked proofs that seven of the published ones are
 #                 defective, and that T-Replace/T-UnlinkH needed a further
 #                 premise.
 #   HeapPaths.v   reachability under a single field update, on the raw-heap
@@ -22,7 +22,8 @@
 #   Denotations.v the type denotations, and the proofs that they supply the
 #                 hypotheses HeapPaths takes for T-Replace and T-Insert.
 #   Actions.v     joins the ghost updates to the pure state: to_LState
-#                 commutes with a field write and with an observation update.
+#                 commutes with a field write and with an observation update;
+#                 then the per-invariant obligations for each atomic action.
 
 ROCQ      ?= rocq
 ROCQFLAGS := -R . RCU
@@ -42,7 +43,7 @@ Actions.vo: WellFormed.vo HeapPaths.vo IrisGhost.vo Denotations.vo
 
 # A successful build proves less here than it looks.  `Admitted.` compiles and
 # writes a .vo like any other proof, and `Print Assumptions` reports an axiom on
-# stdout without failing anything.  So the development's actual claim -- sixty
+# stdout without failing anything.  So the development's actual claim -- seventy
 # results, every one closed under the global context, no axioms -- is precisely
 # the thing that building it does not check.  This target checks it.
 #

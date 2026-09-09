@@ -12,9 +12,10 @@
     dependency-free for now means they can be checked on their own.
 
     Besides stating the corrected invariants, this file mechanizes the claim
-    that four of the published ones are defective, by proving that the
+    that seven of the published ones are defective, by proving that the
     originals are vacuous, unsatisfiable, or too weak to support the uses the
-    proofs make of them.  See [Section defects] at the end.
+    proofs make of them.  See [Section defects] and the four numbered sections
+    after it.
 
     Checked with Rocq 9.0.  No axioms: see [Print Assumptions] at the bottom. *)
 
@@ -194,10 +195,16 @@ Section WellFormedness.
     forall t x o,
       stk (ms s) x t = Some o -> obsv s o (Ofresh t) -> lk (ms s) = Some t.
 
-  (** 10. FNR -- a fresh node is invisible to readers. *)
+  (** 10. FNR -- a fresh node carries no other observation.
+
+      The third conjunct is change 10b, and it is not cosmetic: without it the
+      invariant set cannot prove that linking a fresh node preserves ULKR.  See
+      [Section fresh_freeable] below, and [link_fresh_ULKR] in [Actions.v] for
+      the use. *)
   Definition FNR (s : LState) : Prop :=
     forall o t t',
-      obsv s o (Ofresh t) -> ~ obsv s o (Oiter t') /\ ~ obsv s o (Ounlk t').
+      obsv s o (Ofresh t) ->
+      ~ obsv s o (Oiter t') /\ ~ obsv s o (Ounlk t') /\ ~ obsv s o (Ofree t').
 
   (** 11. FPI -- a fresh node's fields point at live nodes.  Both [f] and [o']
       are bound at the top (in the original [o'] escapes its existential), and
@@ -845,3 +852,229 @@ Proof.
 Qed.
 
 Print Assumptions HD_not_preserved_by_free.
+
+(** * FNR does not exclude a freeable fresh node
+
+    An eighth defect, found the same way as the fifth, sixth and seventh -- by
+    attempting a proof case, here the ULKR case of the two rules that link a
+    fresh node.
+
+    The obligation is ULKR under the two rules that link a fresh node,
+    T-Replace and T-Insert.  Both write [op.f := on] with [on] typed
+    [rcuFresh]; the write creates the edge [op -> on], and ULKR asks that if
+    [on] is unlinked or freeable then [op] is too.  The writer's [op] is an
+    [rcuItr], so WULK denies it both observations -- which means the obligation
+    can only be discharged by denying both to [on].
+
+    FNR denies [on] the first.  Nothing in the published set denies it the
+    second: [freeable] appears in Detached, RWOW, ULKR, WULK and RITR, and in
+    none of them as a consequent that a [fresh] node could trigger.  So the
+    proof does not close, and the missing step is an invariant rather than a
+    side condition -- which is why the repair belongs in FNR.
+
+    That the *reachable* states have no such node is beside the point, and is
+    in fact the reason the omission survived.  A node acquires [freeable] only
+    at SyncStop, from [unlinked], which FNR's second conjunct already denies to
+    a fresh node; so the property holds inductively over whole executions.  But
+    an invariant set earns its keep by making each action lemma provable from
+    the invariants *alone*, and this one is not.  Adding the conjunct restores
+    that, and costs nothing: [sync_stop_preserves_FNR] in [Actions.v] discharges
+    it from the second conjunct, by exactly the argument just given.
+
+    The witness below satisfies the other sixteen invariants and the published
+    FNR, and has a node that is both fresh and freeable. *)
+
+(** The published form: FNR without the third conjunct. *)
+Definition FNR_pub (s : LState) : Prop :=
+  forall o t t',
+    obsv s o (Ofresh t) -> ~ obsv s o (Oiter t') /\ ~ obsv s o (Ounlk t').
+
+Lemma FNR_stronger : forall s, FNR s -> FNR_pub s.
+Proof.
+  intros s H o t t' Hf. destruct (H o t t' Hf) as [H1 [H2 _]]. split; assumption.
+Qed.
+
+(** Two allocated nodes, no edges at all, the writer holding the lock and one
+    variable pointing at node 1, which is observed both [fresh] and [freeable].
+    Every invariant that mentions the heap is vacuous here, which is the point:
+    the defect is about observations, so the witness carries no structure that
+    could be blamed for it. *)
+Definition fresh_freeable : LState :=
+  {| ms := {| stk := fun x t => if Nat.eqb x 0
+                                then (if Nat.eqb t 0 then Some 1 else None)
+                                else None;
+              hp  := fun o _ => if Nat.ltb o 2 then Some VNull else None;
+              lk  := Some 0;
+              rt  := 0;
+              rds := fun _ => False;
+              bnd := fun _ => False |};
+     obsv  := fun o ob => (o = 0 /\ ob = Oroot)
+                          \/ (o = 1 /\ (ob = Ofresh 0 \/ ob = Ofree 0));
+     undf  := fun _ _ => False;
+     thrd  := fun t => t = 0;
+     flist := fun _ => None |}.
+
+Lemma ff_no_edges : forall o f o', ~ Edge fresh_freeable o f o'.
+Proof.
+  intros o f o'. unfold Edge, fresh_freeable. simpl.
+  destruct (Nat.ltb o 2); discriminate.
+Qed.
+
+Lemma ff_reaches_only_root :
+  forall p o, Reaches fresh_freeable p o -> p = [] /\ o = 0.
+Proof.
+  intros [|f p] o H; unfold Reaches in H; simpl in H.
+  - injection H as <-. split; reflexivity.
+  - discriminate.
+Qed.
+
+Lemma ff_stk_inv :
+  forall x t o, stk (ms fresh_freeable) x t = Some o -> x = 0 /\ t = 0 /\ o = 1.
+Proof.
+  intros x t o H. simpl in H.
+  destruct (Nat.eqb x 0) eqn:Hx; [| discriminate].
+  destruct (Nat.eqb t 0) eqn:Ht; [| discriminate].
+  injection H as <-. apply Nat.eqb_eq in Hx. apply Nat.eqb_eq in Ht.
+  repeat split; assumption.
+Qed.
+
+Lemma ff_fresh : obsv fresh_freeable 1 (Ofresh 0).
+Proof. right. split; [reflexivity | left; reflexivity]. Qed.
+
+Lemma ff_free : obsv fresh_freeable 1 (Ofree 0).
+Proof. right. split; [reflexivity | right; reflexivity]. Qed.
+
+(** One lemma per invariant, as for [initial], so a failure names the invariant
+    that failed. *)
+
+Lemma ff_OW : forall FType, OW FType fresh_freeable.
+Proof.
+  intros FType o o' f f' x H1 H2 _ _. exfalso.
+  simpl in H1. destruct (Nat.ltb o 2); discriminate H1.
+Qed.
+
+Lemma ff_RWOW : RWOW fresh_freeable.
+Proof.
+  intros x t o H _.
+  destruct (ff_stk_inv _ _ _ H) as [_ [-> ->]].
+  right. split; [reflexivity |]. right. right. exact ff_fresh.
+Qed.
+
+Lemma ff_AWRT : AWRT fresh_freeable.
+Proof.
+  intros y t H _. destruct (ff_stk_inv _ _ _ H) as [_ [_ Hc]]. discriminate Hc.
+Qed.
+
+Lemma ff_IFL : IFL fresh_freeable.
+Proof. intros t o Tr H1 H2. simpl in H2. discriminate H2. Qed.
+
+Lemma ff_ULKR : ULKR fresh_freeable.
+Proof. intros o o' f' t _ H. exfalso. exact (ff_no_edges _ _ _ H). Qed.
+
+Lemma ff_FLR : FLR fresh_freeable.
+Proof. intros o o' f' Tr H1 H2. simpl in H1. discriminate H1. Qed.
+
+Lemma ff_WULK : WULK fresh_freeable.
+Proof.
+  intros lw o t _ H. simpl in H.
+  destruct H as [[_ H] | [_ [H | H]]]; discriminate H.
+Qed.
+
+Lemma ff_FR : FR fresh_freeable.
+Proof.
+  intros t x o Hstk Hfresh.
+  destruct (ff_stk_inv _ _ _ Hstk) as [-> [-> ->]]. split.
+  - intros o' f'. apply ff_no_edges.
+  - intros y t' Hne Hstk'.
+    destruct (ff_stk_inv _ _ _ Hstk') as [-> [-> _]].
+    apply Hne. reflexivity.
+Qed.
+
+Lemma ff_WFresh : WFresh fresh_freeable.
+Proof.
+  intros t x o Hstk _. destruct (ff_stk_inv _ _ _ Hstk) as [_ [-> _]].
+  reflexivity.
+Qed.
+
+(** The published FNR holds -- both of its conjuncts are about observations
+    node 1 does not carry. *)
+Lemma ff_FNR_pub : FNR_pub fresh_freeable.
+Proof.
+  intros o t t' Hf. simpl in Hf.
+  destruct Hf as [[_ H] | [-> _]]; [discriminate H |].
+  split; intros H; destruct H as [[H _] | [_ [H | H]]]; discriminate H.
+Qed.
+
+Lemma ff_FPI : forall FType, FPI FType fresh_freeable.
+Proof.
+  intros FType o f o' t lw _ H _ _. exfalso. exact (ff_no_edges _ _ _ H).
+Qed.
+
+Lemma ff_WNR : WNR fresh_freeable.
+Proof. intros t _ H. exact H. Qed.
+
+Lemma ff_RITR : RITR fresh_freeable.
+Proof. intros o t H. destruct H. Qed.
+
+Lemma ff_RINFL : RINFL fresh_freeable.
+Proof. intros o Tr t H1 H2. simpl in H1. discriminate H1. Qed.
+
+Lemma ff_HD : HD fresh_freeable.
+Proof. intros o f o' H _. exfalso. exact (ff_no_edges _ _ _ H). Qed.
+
+Lemma ff_UNQRT_a : UNQRT_a fresh_freeable.
+Proof. intros o f. apply ff_no_edges. Qed.
+
+Lemma ff_UNQRT_b : UNQRT_b fresh_freeable.
+Proof.
+  intros p o lw _ H. destruct (ff_reaches_only_root _ _ H) as [_ ->].
+  right. left. split; reflexivity.
+Qed.
+
+Lemma ff_UNQR : UNQR fresh_freeable.
+Proof.
+  intros p p' o H1 H2.
+  destruct (ff_reaches_only_root _ _ H1) as [-> _].
+  destruct (ff_reaches_only_root _ _ H2) as [-> _]. reflexivity.
+Qed.
+
+(** [WellFormed] with FNR replaced by the published form. *)
+Definition WellFormed_pubFNR (FType : FName -> FieldKind) (s : LState) : Prop :=
+  OW FType s /\ RWOW s /\ AWRT s /\ IFL s /\ ULKR s /\ FLR s /\ WULK s
+  /\ FR s /\ WFresh s /\ FNR_pub s /\ FPI FType s /\ WNR s /\ RITR s /\ RINFL s
+  /\ HD s /\ UNQRT_a s /\ UNQRT_b s /\ UNQR s.
+
+Theorem ff_WellFormed_pubFNR :
+  forall FType, WellFormed_pubFNR FType fresh_freeable.
+Proof.
+  intros FType. unfold WellFormed_pubFNR.
+  repeat apply conj;
+    first [ apply ff_OW      | apply ff_RWOW  | apply ff_AWRT
+          | apply ff_IFL     | apply ff_ULKR  | apply ff_FLR
+          | apply ff_WULK    | apply ff_FR    | apply ff_WFresh
+          | apply ff_FNR_pub | apply ff_FPI   | apply ff_WNR
+          | apply ff_RITR    | apply ff_RINFL | apply ff_HD
+          | apply ff_UNQRT_a | apply ff_UNQRT_b
+          | apply ff_UNQR ].
+Qed.
+
+Lemma ff_not_FNR : ~ FNR fresh_freeable.
+Proof.
+  intros H. destruct (H 1 0 0 ff_fresh) as [_ [_ Hnf]]. exact (Hnf ff_free).
+Qed.
+
+(** The published set does not entail the conjunct, so no proof over it can use
+    the conjunct -- and [link_fresh_ULKR] needs exactly that. *)
+Theorem FNR_pub_admits_freeable_fresh :
+  (forall FType, WellFormed_pubFNR FType fresh_freeable)
+  /\ obsv fresh_freeable 1 (Ofresh 0)
+  /\ obsv fresh_freeable 1 (Ofree 0)
+  /\ ~ FNR fresh_freeable.
+Proof.
+  repeat apply conj;
+    [ exact ff_WellFormed_pubFNR | exact ff_fresh | exact ff_free
+    | exact ff_not_FNR ].
+Qed.
+
+Print Assumptions ff_WellFormed_pubFNR.
+Print Assumptions FNR_pub_admits_freeable_fresh.
