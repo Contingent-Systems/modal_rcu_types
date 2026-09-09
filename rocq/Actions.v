@@ -903,3 +903,150 @@ Print Assumptions write_preserves_FLR.
 Print Assumptions write_preserves_FR.
 Print Assumptions link_fresh_ULKR.
 Print Assumptions link_freeable_breaks_ULKR.
+
+(** ** UNQRT_b, the eighth
+
+    The last of the eight, and the one that is not a write lemma.  UNQRT_b says
+    the writer observes every reachable node as an iterator, so its hypothesis
+    is [Reaches] and it has to be discharged against the path characterizations
+    of [HeapPaths.v] rather than against the written edge.  It is also the only
+    invariant that couples the heap change to the observation change: each of
+    the three rules updates both, and UNQRT_b is where the two have to agree.
+
+    Doing it makes the asymmetry between the rules visible, and it is not the
+    asymmetry the report's case structure suggests.
+
+      - T-Insert is the easy one.  Nothing loses an observation, and everything
+        reachable afterwards was either reachable before or is the inserted node
+        itself, which the step observes as an iterator.
+
+      - T-UnlinkH and T-Replace each revoke an iterator observation, so for them
+        the invariant needs something UNQR does not say: that the node losing it
+        is gone from the structure.  That is [unlink_unreachable] and
+        [replace_unreachable].  UNQR alone is not enough -- it says the result
+        is still a tree, not which nodes are in it -- and this is the one case
+        where the difference bites. *)
+
+Section roots.
+
+  (** T-UnlinkH: writes [x.f1 := r] and unlinks [z].  No node is added, so the
+      whole content is that [z] left. *)
+  Theorem unlink_preserves_UNQRT_b m O U T F lw ox f1 oz f2 ow tz rho :
+    let s  := to_LState m O U T F in
+    let s' := to_LState (write_ms m ox f1 (VLoc ow))
+                        (<[oz := {[Ounlk tz]}]> O) U T F in
+    lk m = Some lw ->
+    UNQRT_b s ->
+    UNQR_h (hp m) (rt m) ->
+    hstar (hp m) (rt m) rho = Some ox ->
+    hp m ox f1 = Some (VLoc oz) ->
+    hp m oz f2 = Some (VLoc ow) ->
+    UNQRT_b s'.
+  Proof.
+    intros s s' Hlk HB HU Hrho HXf1 Hzf2 p x lw' Hlk' Hreach.
+    simpl in Hlk'. rewrite Hlk in Hlk'. injection Hlk' as <-.
+    assert (Hnoback : forall tau, hstar (hp m) ow tau <> Some ox).
+    { apply (UNQR_no_back (hp m) (rt m) ox rho [f1; f2] ow HU Hrho);
+        [discriminate |].
+      rewrite hstar_app Hrho /=. rewrite HXf1 /=. by rewrite Hzf2. }
+    (* the unlinked node is no longer in the structure *)
+    assert (Hnz : x <> oz).
+    { intros ->.
+      exact (unlink_unreachable (hp m) (rt m) ox f1 oz f2 ow rho
+               HU Hrho HXf1 Hzf2 p Hreach). }
+    (* and everything that is was there before *)
+    assert (Hpre : exists q, hstar (hp m) (rt m) q = Some x).
+    { destruct (hstar_unlink_char (hp m) (rt m) ox f1 oz f2 ow p x
+                  HXf1 Hzf2 Hnoback Hreach)
+        as [[Ha _] | [p1 [s2 [_ [_ Hr]]]]].
+      - exists p. exact Ha.
+      - exists (p1 ++ f1 :: f2 :: s2). exact Hr. }
+    destruct Hpre as [q Hq].
+    assert (Htr : forall ob, obsv s x ob -> obsv s' x ob).
+    { intros ob. subst s s'. simpl. by rewrite lookup_insert_ne. }
+    destruct (HB q x lw Hlk Hq) as [Hit | Hrt];
+      [left; exact (Htr _ Hit) | right; exact (Htr _ Hrt)].
+  Qed.
+
+  (** T-Replace: writes [p.f := n] and unlinks [o].  Both halves at once -- [n]
+      arrives as an iterator, [o] leaves -- so both [replace_unreachable] and
+      the added observation are used. *)
+  Theorem replace_preserves_UNQRT_b m O U T F lw op f oo on to rho :
+    let s  := to_LState m O U T F in
+    let s' := to_LState (write_ms m op f (VLoc on))
+                        (<[on := {[Oiter lw]}]> (<[oo := {[Ounlk to]}]> O))
+                        U T F in
+    lk m = Some lw ->
+    UNQRT_b s ->
+    UNQR_h (hp m) (rt m) ->
+    Mirrors (hp m) on oo ->
+    hstar (hp m) (rt m) rho = Some op ->
+    hp m op f = Some (VLoc oo) ->
+    (forall sigma, hstar (hp m) (rt m) sigma <> Some on) ->
+    UNQRT_b s'.
+  Proof.
+    intros s s' Hlk HB HU Hmir Hrho HPf Hfresh p x lw' Hlk' Hreach.
+    simpl in Hlk'. rewrite Hlk in Hlk'. injection Hlk' as <-.
+    destruct (Nat.eq_dec x on) as [-> | Hxn].
+    - (* the node written in: the step observes it as the writer's iterator *)
+      left. subst s'. simpl. rewrite lookup_insert_eq. set_solver.
+    - assert (Hnp : on <> op) by (intros ->; exact (Hfresh rho Hrho)).
+      assert (Hnoback : forall tau, hstar (hp m) oo tau <> Some op)
+        by exact (UNQR_no_back_edge (hp m) (rt m) op f oo rho HU Hrho HPf).
+      (* not the replaced node, which left the structure *)
+      assert (Hxo : x <> oo).
+      { intros ->.
+        exact (replace_unreachable (hp m) (rt m) op f oo on rho
+                 HU Hmir Hrho HPf Hfresh p Hreach). }
+      (* so it was reachable before, by the same path *)
+      assert (Hq : hstar (hp m) (rt m) p = Some x).
+      { destruct (hstar_replace_char (hp m) (rt m) op f oo on p x
+                    Hmir Hnp HPf Hnoback Hreach) as [Ha | [Hx _]];
+          [exact Ha | contradiction]. }
+      assert (Htr : forall ob, obsv s x ob -> obsv s' x ob).
+      { intros ob. subst s s'. simpl. by rewrite !lookup_insert_ne. }
+      destruct (HB p x lw Hlk Hq) as [Hit | Hrt];
+        [left; exact (Htr _ Hit) | right; exact (Htr _ Hrt)].
+  Qed.
+
+  (** T-Insert: writes [p.f := n], unlinks nothing.  No unreachability result is
+      needed, which is exactly the difference. *)
+  Theorem insert_preserves_UNQRT_b m O U T F lw op f oo on f4 rho :
+    let s  := to_LState m O U T F in
+    let s' := to_LState (write_ms m op f (VLoc on))
+                        (<[on := {[Oiter lw]}]> O) U T F in
+    lk m = Some lw ->
+    UNQRT_b s ->
+    UNQR_h (hp m) (rt m) ->
+    PointsOnlyAt (hp m) on f4 oo ->
+    hstar (hp m) (rt m) rho = Some op ->
+    hp m op f = Some (VLoc oo) ->
+    (forall sigma, hstar (hp m) (rt m) sigma <> Some on) ->
+    UNQRT_b s'.
+  Proof.
+    intros s s' Hlk HB HU Hpo Hrho HPf Hfresh p x lw' Hlk' Hreach.
+    simpl in Hlk'. rewrite Hlk in Hlk'. injection Hlk' as <-.
+    destruct (Nat.eq_dec x on) as [-> | Hxn].
+    - left. subst s'. simpl. rewrite lookup_insert_eq. set_solver.
+    - assert (Hnp : on <> op) by (intros ->; exact (Hfresh rho Hrho)).
+      assert (Hnoback : forall tau, hstar (hp m) oo tau <> Some op)
+        by exact (UNQR_no_back_edge (hp m) (rt m) op f oo rho HU Hrho HPf).
+      assert (Hq : exists q, hstar (hp m) (rt m) q = Some x).
+      { destruct (hstar_insert_char (hp m) (rt m) op f oo on f4 p x
+                    Hpo Hnp HPf Hnoback Hreach)
+          as [[Ha _] | [[Hx _] | [p1 [tau [_ [_ Hr]]]]]].
+        - exists p. exact Ha.
+        - contradiction.
+        - exists (p1 ++ f :: tau). exact Hr. }
+      destruct Hq as [q Hq].
+      assert (Htr : forall ob, obsv s x ob -> obsv s' x ob).
+      { intros ob. subst s s'. simpl. by rewrite lookup_insert_ne. }
+      destruct (HB q x lw Hlk Hq) as [Hit | Hrt];
+        [left; exact (Htr _ Hit) | right; exact (Htr _ Hrt)].
+  Qed.
+
+End roots.
+
+Print Assumptions unlink_preserves_UNQRT_b.
+Print Assumptions replace_preserves_UNQRT_b.
+Print Assumptions insert_preserves_UNQRT_b.

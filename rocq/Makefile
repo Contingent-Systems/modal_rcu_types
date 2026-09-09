@@ -15,8 +15,9 @@
 #                 defective, and that T-Replace/T-UnlinkH needed a further
 #                 premise.
 #   HeapPaths.v   reachability under a single field update, on the raw-heap
-#                 encoding, plus heap-domain closure.  Infrastructure for the
-#                 three heap-mutation rules.
+#                 encoding, plus heap-domain closure and what each rule makes
+#                 unreachable.  Infrastructure for the three heap-mutation
+#                 rules.
 #   IrisGhost.v   the observation map and free list as Iris ghost state, and
 #                 the invariant tying them to the pure layer.
 #   Denotations.v the type denotations, and the proofs that they supply the
@@ -43,7 +44,7 @@ Actions.vo: WellFormed.vo HeapPaths.vo IrisGhost.vo Denotations.vo
 
 # A successful build proves less here than it looks.  `Admitted.` compiles and
 # writes a .vo like any other proof, and `Print Assumptions` reports an axiom on
-# stdout without failing anything.  So the development's actual claim -- seventy
+# stdout without failing anything.  So the development's actual claim -- 75
 # results, every one closed under the global context, no axioms -- is precisely
 # the thing that building it does not check.  This target checks it.
 #

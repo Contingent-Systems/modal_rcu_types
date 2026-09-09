@@ -736,12 +736,13 @@ to $\llbracket \textsf{rcuFresh}\,\mathcal{N} \rrbracket$.  Neither proof closes
 without it, so the repairs are load-bearing rather than bookkeeping.
 
 Atomic-action lemmas for every action.  For the three heap mutations: each
-preserves \textbf{UNQR}, and a field write preserves \textbf{OW}, \textbf{HD},
-\textbf{ULKR}, \textbf{FLR}, \textbf{FR} and \textbf{UNQRT}$_a$ under a side
-condition apiece, each of which the rules already supply --- with the one
-exception that produced the \textbf{FNR} repair above.  Unlinking and
-replacement preserve \textbf{FPI}.  The \textbf{FPI} case is the one whose
-failure forced the repair to \textsc{T-Replace} and \textsc{T-UnlinkH}, and the
+preserves \textbf{UNQR} and \textbf{UNQRT}$_b$, and a field write preserves
+\textbf{OW}, \textbf{HD}, \textbf{ULKR}, \textbf{FLR}, \textbf{FR} and
+\textbf{UNQRT}$_a$ under a side condition apiece, each of which the rules
+already supply --- with the one exception that produced the \textbf{FNR} repair
+above.  Unlinking and replacement preserve \textbf{FPI}.  The \textbf{FPI} case
+is the one whose failure forced the repair to \textsc{T-Replace} and
+\textsc{T-UnlinkH}, and the
 repaired premise is used exactly once in it, at the step that would otherwise
 fail --- so that defect is closed from both ends, by a counterexample against the
 published rule and a proof for the repaired one.  The argument does not depend on
@@ -779,7 +780,8 @@ ever \emph{removes} the edge it overwrites, and none of the six is endangered
 by an edge going away, so each reduces to a single obligation about the edge
 created.  \textbf{FPI} is not, since it needs the observation the same step
 withdraws; and \textbf{UNQRT}$_b$ is not a write lemma at all, its hypothesis
-being reachability, so it belongs with the path characterizations.
+being reachability, so it is discharged against the path characterizations
+instead, one rule at a time.
 
 Reducing the six that way is what turned a proof case into a proposition, and
 it is the reason the \textbf{FNR} gap became visible: \textbf{ULKR}'s
@@ -788,6 +790,23 @@ invariants, and once written down it plainly could not be.  The defect it
 exposed is not in any of the eight --- \textbf{FNR} is one of the nine that a
 write transfers definitionally --- which is the point.  An invariant can be
 heap-free and still be the thing a heap obligation needs.
+
+\textbf{UNQRT}$_b$ is worth a paragraph of its own, because it is the only
+invariant that couples the heap change to the observation change --- each rule updates
+both, and \textbf{UNQRT}$_b$ is where the two have to agree --- and because
+doing it exposes an asymmetry the report's case structure does not have.
+\textsc{T-Insert} is easy: nothing loses an observation, and everything
+reachable afterwards was either reachable before or is the inserted node, which
+the step observes as an iterator.  \textsc{T-UnlinkH} and \textsc{T-Replace}
+each \emph{revoke} an iterator observation, so for them the invariant needs
+something \textbf{UNQR} does not say: that the node losing it has left the
+structure.  \textbf{UNQR} says the result is still a tree, not which nodes are
+in it, and this is the one case where the difference bites.  The two missing
+facts are proved as \texttt{unlink\_unreachable} and
+\texttt{replace\_unreachable} in \texttt{rocq/HeapPaths.v}, each by the same
+path-length argument as \texttt{UNQR\_no\_back}; their proofs differ only
+because the replacement characterisation, unlike the unlinking one, rewrites
+paths through the written edge rather than excluding them.
 
 What remains is the Hoare triples themselves, which wait on a choice of heap
 assertion for the object language rather than on anything here.

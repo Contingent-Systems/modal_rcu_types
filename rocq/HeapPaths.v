@@ -652,6 +652,98 @@ Proof.
     reflexivity.
 Qed.
 
+(** ** What the write makes unreachable
+
+    UNQR says the structure stays a tree; it says nothing about what leaves it.
+    The two rules that produce an [unlinked] observation need the other half:
+    that the node losing it is no longer reachable from the root.  Without that,
+    UNQRT$_b$ -- everything reachable is the writer's iterator -- fails
+    immediately after the step that revokes the observation, and it is the only
+    invariant that notices the difference between "the tree is still a tree" and
+    "the tree no longer contains this node".
+
+    Both proofs are the same three lines of arithmetic on path lengths that
+    [UNQR_no_back] is, which is the sign that UNQR is doing the work. *)
+
+(** A path to [P] cannot itself traverse an edge out of [P]: the prefix at that
+    traversal would be a second, shorter path to [P]. *)
+Lemma UNQR_avoids : forall h root P f rho,
+  UNQR_h h root ->
+  hstar h root rho = Some P ->
+  avoids h root rho P f.
+Proof.
+  intros h root P f rho HU Hrho.
+  destruct (avoids_dec h root rho P f) as [Y | N]; [exact Y | exfalso].
+  destruct (avoids_false_factors h P f rho root N) as [p1 [p2 [Heq [Hp1 _]]]].
+  assert (Hpe : p1 = rho) by exact (HU p1 rho P Hp1 Hrho). subst p1.
+  assert (Hlen : length rho = length (rho ++ f :: p2))
+    by (rewrite <- Heq; reflexivity).
+  rewrite length_app in Hlen. simpl in Hlen. lia.
+Qed.
+
+(** T-UnlinkH: after [X.f1 := r], the unlinked [z] is unreachable.
+
+    In the old heap [z] is reached by [rho.f1] and, by UNQR, by nothing else.
+    So a post-state path to [z] is either that same path -- which the
+    characterisation says avoids the written edge, and it does not -- or a path
+    the write shortened, which is one segment too long to be [rho.f1]. *)
+Theorem unlink_unreachable : forall h root X f1 z f2 r rho,
+  UNQR_h h root ->
+  hstar h root rho = Some X ->
+  h X f1 = Some (VLoc z) ->
+  h z f2 = Some (VLoc r) ->
+  forall sigma, hstar (upd h X f1 (VLoc r)) root sigma <> Some z.
+Proof.
+  intros h root X f1 z f2 r rho HU Hrho HXf1 Hzf2 sigma Hreach.
+  assert (Hnoback : forall tau, hstar h r tau <> Some X).
+  { apply (UNQR_no_back h root X rho [f1; f2] r HU Hrho); [discriminate |].
+    rewrite hstar_app, Hrho. simpl. rewrite HXf1. simpl. rewrite Hzf2.
+    reflexivity. }
+  assert (Hz : hstar h root (rho ++ [f1]) = Some z).
+  { rewrite hstar_app, Hrho. simpl. rewrite HXf1. reflexivity. }
+  destruct (hstar_unlink_char h root X f1 z f2 r sigma z HXf1 Hzf2 Hnoback Hreach)
+    as [[Ha Hav] | [p1 [s2 [_ [Hp1 Hr2]]]]].
+  - assert (Heq : sigma = rho ++ [f1]) by exact (HU sigma (rho ++ [f1]) z Ha Hz).
+    subst sigma. exact (avoids_app_edge_false h X f1 rho [] root Hrho Hav).
+  - assert (Hp : p1 = rho) by exact (HU p1 rho X Hp1 Hrho). subst p1.
+    assert (Heq : rho ++ f1 :: f2 :: s2 = rho ++ [f1])
+      by exact (HU _ _ z Hr2 Hz).
+    assert (Hlen : length (rho ++ f1 :: f2 :: s2) = length (rho ++ [f1]))
+      by (rewrite Heq; reflexivity).
+    rewrite !length_app in Hlen. simpl in Hlen. lia.
+Qed.
+
+(** T-Replace: after [P.f := n], the replaced [o] is unreachable.
+
+    Here the characterisation's unchanged-path case carries no [avoids] -- the
+    mirroring rewrites paths through the edge back into old ones -- so the
+    argument runs the other way.  The only old path to [o] is [rho.f], and
+    walking [rho.f] in the *new* heap arrives at [n], not [o]. *)
+Theorem replace_unreachable : forall h root P f o n rho,
+  UNQR_h h root ->
+  Mirrors h n o ->
+  hstar h root rho = Some P ->
+  h P f = Some (VLoc o) ->
+  (forall sigma, hstar h root sigma <> Some n) ->
+  forall sigma, hstar (upd h P f (VLoc n)) root sigma <> Some o.
+Proof.
+  intros h root P f o n rho HU Hmir Hrho HPf Hfresh sigma Hreach.
+  assert (Ho : hstar h root (rho ++ [f]) = Some o).
+  { rewrite hstar_app, Hrho. simpl. rewrite HPf. reflexivity. }
+  assert (Hno : n <> o) by (intros ->; exact (Hfresh (rho ++ [f]) Ho)).
+  assert (Hnp : n <> P) by (intros ->; exact (Hfresh rho Hrho)).
+  assert (Hnoback : forall tau, hstar h o tau <> Some P)
+    by exact (UNQR_no_back_edge h root P f o rho HU Hrho HPf).
+  destruct (hstar_replace_char h root P f o n sigma o
+              Hmir Hnp HPf Hnoback Hreach) as [Ha | [Hxn _]].
+  - assert (Heq : sigma = rho ++ [f]) by exact (HU sigma (rho ++ [f]) o Ha Ho).
+    subst sigma.
+    rewrite (hstar_upd_through h P f n rho [] root
+               (UNQR_avoids h root P f rho HU Hrho) Hrho) in Hreach.
+    simpl in Hreach. injection Hreach as Heqn. exact (Hno Heqn).
+  - exact (Hno (eq_sym Hxn)).
+Qed.
+
 (** ** HD -- heap domain closure
 
     HD says every location stored in a field is allocated.  Its proof case is
@@ -802,6 +894,8 @@ Print Assumptions UNQR_unlink.
 Print Assumptions UNQR_insert_reachable.
 Print Assumptions UNQR_unlink_reachable.
 Print Assumptions UNQR_no_back.
+Print Assumptions unlink_unreachable.
+Print Assumptions replace_unreachable.
 Print Assumptions UNQR_h_upd_unreachable.
 Print Assumptions HD_h_upd.
 Print Assumptions HD_h_alloc.
