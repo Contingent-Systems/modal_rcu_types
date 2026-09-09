@@ -40,7 +40,46 @@ Actions.vo: WellFormed.vo HeapPaths.vo IrisGhost.vo Denotations.vo
 %.vo: %.v
 	$(ROCQ) compile $(ROCQFLAGS) $<
 
-clean:
-	rm -f *.vo *.vok *.vos *.glob .*.aux
+# A successful build proves less here than it looks.  `Admitted.` compiles and
+# writes a .vo like any other proof, and `Print Assumptions` reports an axiom on
+# stdout without failing anything.  So the development's actual claim -- sixty
+# results, every one closed under the global context, no axioms -- is precisely
+# the thing that building it does not check.  This target checks it.
+#
+# It also checks that VFILES and _CoqProject still agree with the .v files on
+# disk, since both lists are maintained by hand and a file missing from VFILES
+# is a file that silently is not built.
+CHECKLOG := check.log
 
-.PHONY: all clean
+check:
+	@bad=$$(grep -nE 'Admitted\.|(^|[^A-Za-z_])admit\.|^Axiom |^Parameter |^Hypothesis ' $(VFILES) || true); \
+	 if [ -n "$$bad" ]; then \
+	   echo "$$bad"; echo "FAILED: the development contains none of these by design"; exit 1; \
+	 fi
+	@for v in $(wildcard *.v); do \
+	   case " $(VFILES) " in *" $$v "*) ;; \
+	     *) echo "FAILED: $$v is not in VFILES, so it is never built"; exit 1;; esac; \
+	   grep -q "^$$v$$" _CoqProject || { echo "FAILED: $$v is not in _CoqProject"; exit 1; }; \
+	 done
+	@rm -f $(VOFILES)
+	@$(MAKE) --no-print-directory all > $(CHECKLOG) 2>&1 || { cat $(CHECKLOG); exit 1; }
+	@cmds=$$(grep -hc '^Print Assumptions ' $(VFILES) | paste -sd+ - | bc); \
+	 closed=$$(grep -c 'Closed under the global context' $(CHECKLOG) || true); \
+	 axioms=$$(grep -c '^Axioms:' $(CHECKLOG) || true); \
+	 echo "Print Assumptions commands   $$cmds"; \
+	 echo "closed under global context  $$closed"; \
+	 echo "reporting axioms             $$axioms"; \
+	 if [ "$$axioms" -ne 0 ] || [ "$$cmds" -ne "$$closed" ]; then \
+	   echo; echo "FAILED"; exit 1; \
+	 fi; \
+	 echo; echo "all $$closed assumption checks closed, no axioms"
+
+# Rebuild everything if the flags or the file list change, rather than leaving
+# .vo files built under the old ones.
+$(VOFILES): Makefile _CoqProject
+
+clean:
+	rm -f *.vo *.vok *.vos *.glob .*.aux $(CHECKLOG)
+	rm -rf .coq-native
+
+.PHONY: all check clean
