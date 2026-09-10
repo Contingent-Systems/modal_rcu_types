@@ -270,20 +270,26 @@ static void p5_cnfNotEnough() {
 // The characterisation: exact exactly when no variable survives Stage 1 in both.
 static void p6_exactWhenUnshared() {
   const int nf = 2, trials = 20000, bound = 4;
-  long unshared = 0, unsharedExact = 0, shared = 0, unsound = 0;
+  long unshared = 0, unsharedExact = 0, shared = 0, sharedExact = 0, unsound = 0;
   for (int t = 0; t < trials; ++t) {
     VarEnv venv = randVarEnv(nf, 2);
     Path p = randPath(nf, 3, venv), q = randPath(nf, 3, venv);
     Path rp, rq; stage1(p, q, rp, rq);
     bool m = mayAlias(p, q, nf), b = bruteAlias(p, q, nf, bound);
     if (b && !m) ++unsound;
-    if (sharesVar(rp, rq)) ++shared;
+    if (sharesVar(rp, rq)) { ++shared; if (m == b) ++sharedExact; }
     else { ++unshared; if (m == b) ++unsharedExact; }
   }
   expect(unsound == 0, "P6  no unsound answer in " + std::to_string(trials) + " pairs");
   expect(unshared == unsharedExact,
          "P6  exact whenever no variable survives Stage 1 in both remainders (" +
          std::to_string(unsharedExact) + "/" + std::to_string(unshared) + ")");
+  // The shared class is where the imprecision lives.  Reporting how *often* it
+  // is wrong, and not merely that it can be, is what makes the claim in
+  // PathFragment.tex a measurement rather than an impression.
+  expect(shared > 0 && sharedExact < shared,
+         "P6  ... and not on the shared class (" + std::to_string(sharedExact) +
+         "/" + std::to_string(shared) + " agree)");
   std::cout << "        " << shared << " pairs did share one; that class holds all"
             << " the imprecision\n";
 }

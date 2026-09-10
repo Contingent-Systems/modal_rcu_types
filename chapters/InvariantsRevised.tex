@@ -31,7 +31,7 @@
 \label{sec:inv-prelim}
 
 Four notational problems recur across the original figures and are fixed once
-here rather than seventeen times below.
+here rather than eighteen times below.
 
 \paragraph{(C0) Every observation carries the observing thread.}
 The original grammar tags only \itr:
@@ -80,14 +80,14 @@ state component.
 \subsection{The invariants}
 \label{sec:inv-list}
 
-$\textsf{WellFormed}(\sigma,O,U,T,F)$ is the conjunction of the seventeen
+$\textsf{WellFormed}(\sigma,O,U,T,F)$ is the conjunction of the eighteen
 predicates below.  Each carries a severity: \textsc{critical} means the original
 is vacuous, unprovable, unstatable, or too weak to support the use the proofs
 make of it, so a proof case discharged against it establishes nothing;
 \textsc{major} means ill-formed but with recoverable intent; \textsc{minor}
 means a typo, an unused binder, or a caption that contradicts its formula.
 
-All seventeen are mechanized in \texttt{rocq/WellFormed.v}, which also carries
+All eighteen are mechanized in \texttt{rocq/WellFormed.v}, which also carries
 machine-checked proofs of the \textsc{critical} claims and a satisfiability
 witness (\S\ref{sec:inv-impact}).  That development is axiom-free; both
 \texttt{Print Assumptions} queries report \emph{closed under the global
@@ -359,7 +359,31 @@ disjunct for $\rho = \epsilon$, where the reached node is the root and carries
 \rt{} rather than \itr.  \textbf{UNQRT-a} is the no-incoming-edges half, stated
 directly rather than through $h^{*}$.
 
-\paragraph{17.\ UNQR --- Unique Reachability.\hfill\textsc{critical}}
+\paragraph{17.\ WUNLK --- Unlinking is the Writer's.\hfill\textsc{major}}
+\[
+\textbf{WUNLK} \defn \forall o,\mathit{tid},\mathit{tid}_w \ldotp
+  \sigma.l = \mathit{tid}_w \land
+  (\unlk\,\mathit{tid} \in O(o) \lor \frbl\,\mathit{tid} \in O(o))
+  \implies \mathit{tid} = \mathit{tid}_w
+\]
+\emph{New.}  The counterpart of \textbf{WF} at the other end of a node's life:
+\textbf{WF} says an allocation is the lock holder's, and nothing said the same
+of an unlinking.  It is needed, and needed locally.  The \textbf{ULKR} case of
+\textsc{T-UnlinkH} and \textsc{T-Replace} ends at a detached predecessor of the
+node being unlinked --- \textbf{OW} supplies the detachment, and the repaired
+premise of those rules excludes a \textsf{rcuFresh} one --- so the predecessor
+is unlinked or freeable by \emph{some} thread.  \textbf{ULKR}'s conclusion names
+the thread its hypothesis names, so the case does not close without knowing
+which.
+
+As with \textbf{FNR}, the reachable states satisfy it anyway: \unlk{} is
+produced only by the two writer rules and carried to \frbl{} by
+\textsc{SyncStop}, so the thread is always the lock holder.  And as with
+\textbf{FNR} that is a property of whole executions rather than an invariant, so
+the action lemma does not close over it.  Guarded by the lock, so it says
+nothing about a state with no writer --- the weakest form that does the job.
+
+\paragraph{18.\ UNQR --- Unique Reachability.\hfill\textsc{critical}}
 \[
 \textbf{UNQR} \defn \forall \rho,\rho',o \ldotp
   h^{*}(\sigma.rt,\rho) = \lfloor o \rfloor \land h^{*}(\sigma.rt,\rho') = \lfloor o \rfloor
@@ -485,7 +509,7 @@ The semantic changes above invalidate specific cases in Section
   site rather than assuming.
 \end{enumerate}
 
-\paragraph{Machine-checked status.}  Seven of the defects above are mechanized
+\paragraph{Machine-checked status.}  Eight of the defects above are mechanized
 in \texttt{rocq/WellFormed.v}: \texttt{UNQR\_orig\_vacuous} and
 \texttt{UNQR\_orig\_admits\_non\_trees};
 \texttt{RITR\_orig\_contradicts\_fresh};
@@ -494,20 +518,26 @@ in \texttt{rocq/WellFormed.v}: \texttt{UNQR\_orig\_vacuous} and
 together with its repair \texttt{ULKR\_closed\_reaches};
 \texttt{HD\_not\_preserved\_by\_free}; and
 \texttt{FNR\_pub\_admits\_freeable\_fresh}, which exhibits a state satisfying
-the other sixteen invariants and the published \textbf{FNR} in which a node is
-both \frsh{} and \frbl{} --- with \texttt{link\_freeable\_breaks\_ULKR} in
+the other seventeen invariants and the published \textbf{FNR} in which a node
+is both \frsh{} and \frbl{} --- with \texttt{link\_freeable\_breaks\_ULKR} in
 \texttt{rocq/Actions.v} showing that linking such a node breaks \textbf{ULKR},
 and \texttt{link\_fresh\_ULKR} showing that the repaired \textbf{FNR} closes
-the case.  An eighth, \texttt{FPI\_not\_preserved\_by\_replace}, is a defect in
+the case; and
+\texttt{unlinked\_observations\_need\_not\_be\_the\_writers}, which does the same
+for \textbf{WUNLK} --- a state satisfying the other seventeen in which a node is
+unlinked by a thread that is not the one holding the lock, so that the
+\textbf{ULKR} case of the two unlinking rules cannot close.  A ninth,
+\texttt{FPI\_not\_preserved\_by\_replace}, is a defect in
 \textsc{T-Replace} and \textsc{T-UnlinkH} rather than in an invariant
 statement; both rules now carry the repairing premise.  The remaining
 \textsc{major} and \textsc{minor} items are restatements whose defects are
 syntactic (capture, scope, unused binders) and are visible without proof.
 
-Four of the eight were found by attempting a proof rather than by reading ---
+Five of the nine were found by attempting a proof rather than by reading ---
 \textbf{ULKR}'s failure to chain, \textbf{FPI}'s failure to survive unlinking,
-\textbf{HD}'s failure to survive \texttt{Free}, and \textbf{FNR}'s failure to
-support \textbf{ULKR} under linking --- and all four are cases the report calls
+\textbf{HD}'s failure to survive \texttt{Free}, \textbf{FNR}'s failure to
+support \textbf{ULKR} under linking, and \textbf{WUNLK}'s absence, which is the
+same case one step further along --- and all five are cases the report calls
 trivial.  That is now a pattern rather than a coincidence, and it is the
 strongest thing the mechanization has to say about the original argument.
 
@@ -767,13 +797,13 @@ a time but \textbf{WellFormed} itself, as \texttt{free\_preserves\_WellFormed}.
 It is the right one to do first, because it needs no type denotations --- it is
 a state transition rather than a typing rule --- and because it is the action
 the report handled worst.  The result is lopsided in a way worth recording.
-Sixteen of the seventeen fall out of two one-line facts, that freeing removes
+Seventeen of the eighteen fall out of two one-line facts, that freeing removes
 edges and therefore removes paths: every invariant with an \textbf{Edge} or
 \textbf{Reaches} hypothesis gets \emph{weaker}, and the nine that do not mention
 the heap are untouched outright.  \textbf{HD} is the only one whose conclusion
 is about the heap, and it is the only one with any content --- and it needs the
 corrected statement, since under the published \textbf{HD} the theorem is false.
-So the report's verdict on the case was right about sixteen seventeenths of it
+So the report's verdict on the case was right about seventeen eighteenths of it
 and wrong about the part that mattered, which is a fair summary of what
 "trivial" was doing throughout.
 
@@ -785,7 +815,7 @@ does to observations rather than as a map operation, which is the choice
 \textsc{ReadEnd} already makes and for the same reason: two properties suffice,
 and they are the two directions.  Nothing appears that was not there, except
 \frbl{} arriving from \unlk{}; and everything survives, \unlk{} as \frbl{}.
-Every one of the seventeen cases is one of those two applied once.
+Every one of the eighteen cases is one of those two applied once.
 
 Two have content.  RINFL is where the empty bounding set is spent: it says
 every thread in a free-list entry bounds a reclamation, and afterwards there
@@ -847,11 +877,43 @@ only here: the writer is not the departing thread, so its \itr{} observations
 are among those that survive, which is what \textbf{FPI} and
 \textbf{UNQRT}$_b$ need.
 
-One structural observation came out of doing the breadth.  Nine of the seventeen
+Finally the three heap mutations, so every atomic action of the system now
+preserves \textbf{WellFormed} as a step.  They are harder than the other three,
+for a reason that appears only when the action is attempted in full: each
+writes a field \emph{and} changes the writer's observations, and for
+\textsc{Free}, \textsc{SyncStop} and \textsc{ReadEnd} the ten heap-free
+invariants were identities precisely because nothing touched the observation
+map.  Here they are not.  \textsc{T-Insert} promotes a node from \frsh{} to
+\itr{}, \textsc{T-UnlinkH} demotes one from \itr{} to \unlk{}, and
+\textsc{T-Replace} does both at once, so \textbf{RWOW}, \textbf{AWRT},
+\textbf{IFL}, \textbf{WULK}, \textbf{WF}, \textbf{FNR}, \textbf{RITR} and
+\textbf{RINFL} all acquire content.
+
+The observation change is again given by properties rather than by a map
+operation, and here that is not merely for uniformity.  The revocation an
+unlink performs is of \emph{the writer's} iterator observation and of nothing
+else --- the readers still traversing the node keep theirs, which is the entire
+point of the structure --- so an update replacing a location's whole
+observation set would be wrong, and wrong in a way \textbf{FPI} cannot see and
+\textbf{RWOW} can.  That is worth recording, because the per-invariant
+\textbf{FPI} lemma uses exactly such an update.  It is sound there, its
+conclusion never asking about a reader's observation, and it would not have
+been here.
+
+Two earlier repairs are spent in these three.  The premise excluding a
+\textsf{rcuFresh} predecessor of the node being unlinked --- the repair
+\textbf{FPI} forced --- is used twice in each unlinking rule, once in
+\textbf{ULKR} and once in \textbf{FPI}.  \textbf{FNR}'s third conjunct is used
+again in the \textbf{WULK} case of \textsc{T-Insert} and \textsc{T-Replace},
+where the node just promoted to \itr{} has to be shown to carry neither \unlk{}
+nor \frbl{}.  And \textbf{WUNLK} is the one thing the assembled cases needed
+that the published set did not have.
+
+One structural observation came out of doing the breadth.  Ten of the eighteen
 invariants --- \textbf{RWOW}, \textbf{AWRT}, \textbf{IFL}, \textbf{WULK},
-\textbf{WF}, \textbf{FNR}, \textbf{RITR}, \textbf{RINFL}, \textbf{WNR} --- do
-not mention the heap, so a field write transfers them definitionally and their
-cases are the identity.  The eight that do --- \textbf{OW}, \textbf{ULKR},
+\textbf{WF}, \textbf{FNR}, \textbf{RITR}, \textbf{RINFL}, \textbf{WNR},
+\textbf{WUNLK} --- do not mention the heap, so a field write transfers them
+definitionally and their cases are the identity.  The eight that do --- \textbf{OW}, \textbf{ULKR},
 \textbf{FLR}, \textbf{FPI}, \textbf{FR}, \textbf{HD} and the two halves of
 \textbf{UNQRT} --- each needed a real argument, and three of them turned up
 defects.  The split falls exactly on that line.  It is worth stating because the

@@ -273,7 +273,7 @@ be deterministic and terminating on its own.
 \label{sec:pathfrag-eval}
 
 The fragment is implemented, and so is a checker built on it.  Four layers, in
-dependency-free C++17 except the last, passing 84 unit and property checks:
+dependency-free C++17 except the last, passing 86 unit and property checks:
 \texttt{path\_domain.h} for the material of this section --- CNF membership,
 \MayAlias{}, join, substitution, reindexing, widening and the loop fixpoint;
 \texttt{rcu\_types.h} for types, field maps and environments;
@@ -284,10 +284,13 @@ dependency-free C++17 except the last, passing 84 unit and property checks:
 function into that IR through Clang's CFG, taking back edges from the dominator
 tree and refinements from the branch conditions, and reports what the dataflow
 finds against the source.  It needs no annotation language: \texttt{\_\_rcu} on
-a field, and the existing \texttt{rcu\_dereference}, \texttt{rcu\_assign\_pointer},
-\texttt{synchronize\_rcu} and \texttt{kfree}, already distinguish every action
-the type system has a rule for.  Only the root has to be marked, since nothing
-in the source distinguishes it.
+a field is enough to recognise the reads and the writes, which are taken from
+the field's type rather than from an accessor macro, so
+\texttt{rcu\_dereference} and \texttt{rcu\_assign\_pointer} need not appear at
+all; \texttt{rcu\_read\_lock}/\texttt{rcu\_read\_unlock},
+\texttt{synchronize\_rcu} and the \texttt{kfree} family distinguish every
+remaining action the type system has a rule for.  Only the root has to be
+marked, since nothing in the source distinguishes it.
 
 \paragraph{On the paper's own example.}  \texttt{testdata/bst\_full.c} is the
 delete of Appendix \ref{appendix:bst_del} written as C: the traversal, the
@@ -414,10 +417,12 @@ accept the class on which it is exact rather than settling for soundness.  Every
 is why the unit tests are exact, and the counterexample above is not anchored ---
 $\pvar$ sits at depth $0$ in one path and depth $1$ in the other.
 
-\paragraph{Measured.}  Over $30{,}000$ random CNF pairs, partitioned by whether a
-variable survives Stage 1 in both remainders: where none does, the procedure
-agrees with brute-force enumeration in $27{,}148$ of $27{,}148$ cases; where one
-does, in $43.5\%$.  No answer was unsound in either class.  So the residual
+\paragraph{Measured.}  Over $10^{5}$ random CNF pairs across five seeds,
+partitioned by whether a variable survives Stage 1 in both remainders: where
+none does, the procedure agrees with brute-force enumeration in $93{,}564$ of
+$93{,}564$ cases; where one does, in $4{,}142$ of $6{,}436$, or $64\%$.  No
+answer was unsound in either class.  Separately, over a further $10^{5}$ pairs,
+it is exact on all $90{,}256$ that are anchored.  So the residual
 imprecision reported in \S\ref{sec:pathfrag-eval} is not spread thinly over the
 domain --- it is entirely inside the non-anchored class, and a checker that
 rejects non-anchored environments outright is exact rather than

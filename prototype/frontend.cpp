@@ -326,8 +326,6 @@ class Translator {
       }
       note(s, "call to " + n);
       return;
-      note(s, "call to " + n);
-      return;
     }
 
     // Control-flow constructs carry no action of their own; the CFG has

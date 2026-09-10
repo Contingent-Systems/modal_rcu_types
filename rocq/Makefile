@@ -10,7 +10,7 @@
 # switch under lib/coq/user-contrib and are found without extra -R flags.
 #
 # Milestones:
-#   WellFormed.v  the seventeen global invariants, corrected; satisfiability;
+#   WellFormed.v  the eighteen global invariants, corrected; satisfiability;
 #                 machine-checked proofs that seven of the published ones are
 #                 defective, and that T-Replace/T-UnlinkH needed a further
 #                 premise.
@@ -25,8 +25,8 @@
 #   Actions.v     joins the ghost updates to the pure state: to_LState
 #                 commutes with a field write and with an observation update;
 #                 then the per-invariant obligations for each atomic action,
-#                 and WellFormed preservation for Free, SyncStop and ReadEnd
-#                 as whole actions.
+#                 and WellFormed preservation for all six atomic actions,
+#                 the three heap mutations included.
 
 ROCQ      ?= rocq
 ROCQFLAGS := -R . RCU
@@ -46,7 +46,7 @@ Actions.vo: WellFormed.vo HeapPaths.vo IrisGhost.vo Denotations.vo
 
 # A successful build proves less here than it looks.  `Admitted.` compiles and
 # writes a .vo like any other proof, and `Print Assumptions` reports an axiom on
-# stdout without failing anything.  So the development's actual claim -- 84
+# stdout without failing anything.  So the development's actual claim -- 89
 # results, every one closed under the global context, no axioms -- is precisely
 # the thing that building it does not check.  This target checks it.
 #

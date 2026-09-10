@@ -7,12 +7,16 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 > All reviewers: Mechanization, and corrections to the published invariants
 
 
-Since submission we have mechanized the global invariants and the reachability
-core of the soundness argument in Rocq (about 1900 lines, 78 lemmas, axiom-free).
-This turned up more than we expected, and we think it materially strengthens the
-paper.
+Since submission we have mechanized the global invariants, the reachability core
+of the soundness argument, and every atomic action in full, in Rocq
+(about 6,400 lines and 380 lemmas, axiom-free).  The build refuses to succeed if
+the development contains an admitted proof, or if any of its eighty-nine
+assumption checks reports an axiom rather than closed under the global context;
+we mention this because a Rocq file that compiles proves considerably less than
+it looks.  This turned up more than we expected, and we think it materially
+strengthens the paper.
 
-Six of the WellFormed invariants as published are defective:
+Eight of the WellFormed invariants as published are defective:
 
 - Unique-Reachable is vacuous as written, and admits heaps that are not trees.
 - Readers-Iterators-Only is contradictory in any state containing both a reader
@@ -29,13 +33,48 @@ Six of the WellFormed invariants as published are defective:
   points at.  The pointer dangles harmlessly, in a node that is detached and
   unreachable -- which is exactly the exemption No-Sharing already carries and
   this one does not.
+- Fresh-Not-Reader is too weak.  It denies a freshly allocated node the
+  *iterator* and *unlinked* observations and says nothing about *freeable*, and
+  that third case is the one T-Replace and T-Insert need.  Both link a fresh
+  node under a reference the writer holds as an iterator; the write creates that
+  edge, and Unlinked-Reachability then requires that if the new child is
+  unlinked or freeable the parent is too -- which Writer-Unlink denies of an
+  iterator.  So the obligation can be discharged only by denying both to the
+  child, and the published invariant denies one.
 
-The last two are the consequential ones.  Unlinked-Reachability is discussed
+  This one differs in kind from the others, and we state the difference rather
+  than paper over it: the reachable states contain no such node, since a node
+  becomes freeable only from unlinked, and the unlinked conjunct already denies
+  that.  The property holds inductively over whole executions.  What fails is
+  locality -- the action lemma is not provable from the invariants alone, which
+  is the only thing a global invariant set is for.  Adding the conjunct restores
+  it and costs nothing: SyncStop, the one action that could have been asked to
+  pay for it, discharges the new conjunct from the old one.  We give a state
+  satisfying the other seventeen invariants and the published form in which a
+  node is both fresh and freeable, and a proof that linking it breaks
+  Unlinked-Reachability.
+- Unlinking is not said to be the writer's.  WriterFresh says an allocation
+  belongs to the lock holder; nothing said the same of an unlinking, and the
+  Unlinked-Reachability case of T-UnlinkH and T-Replace needs it.  That case
+  ends at a detached predecessor of the node being unlinked -- No-Sharing
+  supplies the detachment, the repaired premise of those rules excludes a
+  rcuFresh one -- so the predecessor is unlinked or freeable by *some* thread,
+  and Unlinked-Reachability's conclusion names the thread its hypothesis names.
+  Like the previous item this is a failure of locality rather than a false
+  statement, and it was found the same way, by attempting the case.  We give a
+  state satisfying the other seventeen in which a node is unlinked by a thread
+  that is not the lock holder.
+
+Four of these are the consequential ones.  Unlinked-Reachability is discussed
 under Delayed Ownership Transfer below; Heap-Domain-Closure is the invariant the
 Free case rests on, and under the published statement that case cannot be proved
-at all, which is presumably why our proof records it as trivial.
+at all, which is presumably why our proof records it as trivial; and
+Fresh-Not-Reader is what the two rules that link a fresh node need, so under the
+published statement neither T-Replace nor T-Insert can be shown to preserve
+Unlinked-Reachability; and the missing statement about unlinking is what the two
+rules that *unlink* a node need, for the same invariant.
 
-A sixth defect is in the type rules rather than in an invariant. Neither
+A ninth defect is in the type rules rather than in an invariant. Neither
 T-Replace nor T-UnlinkH prevents a rcuFresh reference in the environment from
 holding a field that points at the node the rule unlinks; the aliasing premises
 quantify only over rcuItr references, and the denotation of a type environment
@@ -47,8 +86,8 @@ Both rules now carry a premise excluding it. Both worked examples still type
 check unchanged, since the fresh node each builds points at the children of the
 node being replaced rather than at that node.
 
-Three of the seven were found by attempting the proofs rather than by reading,
-and all three are cases whose proof the technical report calls trivial.  We think
+Five of the nine were found by attempting the proofs rather than by reading,
+and all five are cases whose proof the technical report calls trivial.  We think
 that is the most useful thing the exercise produced: the defects that mattered
 were not the ones that looked doubtful. Every defect has
 a machine-checked proof or counterexample, the corrected set is machine-checked
@@ -56,11 +95,55 @@ satisfiable, and the development has no axioms. The corrected statements now
 appear as an appendix, with the published ones retained alongside for
 comparison.
 
+The development also now takes every atomic action end to end -- Free,
+SyncStop, ReadEnd and the three heap mutations each preserve the whole of
+WellFormed, rather than one invariant at a time -- and doing them whole was
+worth more than the sum of the cases.
+
+For Free, seventeen of the eighteen follow from a single observation, that
+freeing removes edges and therefore removes paths, so every invariant with a
+reachability or edge hypothesis gets weaker.  Heap-Domain-Closure is the only
+one whose conclusion is about the heap and the only one with any content.  That
+is a fair account of what "trivial" was doing: right about seventeen eighteenths
+of the case and wrong about the part that mattered.
+
+The three heap mutations are the hardest, and for a reason that appears only
+when the action is attempted in full: each writes a field *and* changes the
+writer's observations, so the ten heap-free invariants, which were identities
+for the other three actions, all acquire content.  The revocation an unlink
+performs is of *the writer's* iterator observation and of nothing else -- the
+readers still traversing the node keep theirs, which is the whole point of the
+structure -- so an update replacing a location's observation set outright would
+be wrong, and wrong in a way Fresh-Points-Iterator cannot see and
+Reader-Writer-Observation can.  Two earlier repairs are spent here: the premise
+excluding a rcuFresh predecessor of the unlinked node, twice in each unlinking
+rule, and Fresh-Not-Reader's new conjunct again in the Writer-Unlink case of the
+two rules that link a fresh node.
+
+ReadEnd changed its own statement twice, and neither change is visible from any
+single invariant.  It needs the departing reader's variables to leave scope in
+the same step, or Reader-Writer-Observation fails immediately -- the block
+structure of the read critical section supplies this, but only once it is
+carried into the action's statement.  And it must not be described as "the
+departing thread's entries are gone", which is the natural description and is
+correct for every invariant about a thread's observations: the root observation
+is anonymous, the observation map is keyed by observer, so that description
+deletes the root observation and the second half of Unique-Root fails.  We give
+a well-formed state where it does.  This is an encoding mismatch rather than a
+defect in anything published, and we report it as such.
+
+Two invariants turn out to be load-bearing in exactly one place each, both in
+ReadEnd: Readers-Iterators-Only, which is what says the departing thread held no
+detaching observation and so that dropping its entries is safe, and
+Writer-Not-Reader, which is what says the writer's observations survive it.
+That Readers-Iterators-Only as published is contradictory in the states where it
+is needed is therefore not a cosmetic defect.
+
 
 > R2: Emphasis on not appealing to implementation details 
 
 
-We can make this clearer earlier, some comparisons to Tassarotti et al.'s program logic [34] can be found in p.24. We want to emphasize that there exists no clean separation between RCU primitive and linked-list specifications as their RCU primitives are linked-list dependent.
+We can make this clearer earlier; the comparison with Tassarotti et al.'s program logic is in the related work section. We want to emphasize that there exists no clean separation between RCU primitive and linked-list specifications, as their RCU primitives are linked-list dependent.
 
 
 > All reviewers: Concerns about complexity, decidability, automation
@@ -95,27 +178,35 @@ is *exact* whenever no path index survives the prefix reduction in both
 arguments.  A syntactic condition guarantees that: all paths mentioning an index
 agree on the segments before it, which is what a traversal produces anyway, since
 the cursors of a loop are reindexed by the same back edge.  Measured against
-brute-force enumeration over 30,000 random pairs in the fragment, the procedure
-is exact in 27,148 of 27,148 cases where the condition holds, and no answer was
-unsound in any case.  So the residual imprecision is not spread over the domain;
-it sits entirely outside the anchored class.
+brute-force enumeration over 100,000 random pairs from the fragment across five
+seeds, no answer was unsound, and the procedure is exact in all 93,564 of the
+pairs where no index survives the prefix reduction in both arguments.  The 6,436
+that do share one carry the whole of the residual imprecision, and it is
+substantial there -- the procedure agrees on 64% of them -- which is the point:
+the imprecision is not spread thinly over the domain but concentrated outside
+the anchored class.  A second test, over a further 100,000 pairs, is exact on
+all 90,256 that are anchored.  The suites are seeded, so these are reproducible
+figures rather than a sample.
 
 Reviewer 3's intuition about automation is borne out, and further than we
 expected when we drafted this.  There is a checker.
 
 Four layers in dependency-free C++17 -- the path domain, the types and
 environments, the type rules as transfer functions, and a statement IR with a
-forward dataflow over it -- passing 84 unit and property checks, the latter
+forward dataflow over it -- passing 86 unit and property checks, the latter
 comparing each abstract operation against the concrete semantics by
 enumeration.  On top of them a Clang front end translates a C function into the
 IR through the CFG, taking back edges from the dominator tree and refinements
 from the branch conditions, and reports what the dataflow finds against the
 source.
 
-It needs no annotation language.  __rcu on a field, and the existing
-rcu_dereference, rcu_assign_pointer, synchronize_rcu and kfree, already
-distinguish every action the type system has a rule for; only the root has to be
-marked, because nothing in the source distinguishes it.  We think that is the
+It needs no annotation language, and rather less than we first claimed.  __rcu
+on a field is enough to recognise the reads and the writes: they are taken from
+the field's type, not from an accessor macro, so rcu_dereference and
+rcu_assign_pointer need not appear at all.  rcu_read_lock/rcu_read_unlock,
+synchronize_rcu and the kfree family distinguish every remaining action the type
+system has a rule for; only the root has to be marked, because nothing in the
+source distinguishes it.  We think that is the
 more useful claim than any figure about annotation burden: the annotations are
 already in the code, and what has been missing is a check of what they mean.
 
@@ -184,12 +275,32 @@ counterexample to the published form, along with the corresponding chaining
 property for the free list. Together those two are what keep a newly arrived
 reader away from a node scheduled for reclamation.
 
-We have also mechanized the Free case of heap-domain closure. Free is the only
+We have also mechanized the Free case of heap-domain closure, and now the whole
+of Free: all eighteen invariants, for the action as a step. Free is the only
 action that removes a location, so it is the only place where the obligation --
 that no surviving edge points at the freed node -- is real; we give a
-counterexample showing it cannot be dispensed with. The technical report
-discharges that case, and the whole group of memory axioms for that action, as
-"trivial".
+counterexample showing it cannot be dispensed with, and the corrected
+Heap-Domain-Closure is what discharges it, from the repaired
+Unlinked-Reachability. The technical report discharges that case, and the whole
+group of memory axioms for that action, as "trivial".
+
+Two further pieces of that argument are now proved rather than asserted.  The
+claim that a node awaiting reclamation is not reachable is stated directly, once
+for each rule that produces one -- unlinking and replacement -- and it is what
+the second half of Unique-Root needs.  That invariant says the writer observes
+every reachable node as an iterator, and both rules revoke exactly one iterator
+observation, so without the unreachability result it fails at the very step that
+revokes it.  Unique-Reachable does not supply this: it says the result is still
+a tree, not which nodes are in it, and this is the one place where the
+difference matters.  T-Insert, which revokes nothing, needs neither.
+
+And the rest of the protocol is machine-checked as whole actions.  SyncStop is
+where the empty bounding set is spent: Readers-In-Free-List says every thread in
+an entry bounds a reclamation, and afterwards there are none, so every entry is
+empty -- which is exactly the conjunct the *freeable* denotation asks for,
+obtained rather than assumed.  ReadEnd is discussed above.  Of the four steps in
+the reclamation chain three are now complete; SyncStart has its
+Free-List-Reachability case and not yet the rest.
 
 We will expand Section 6 along these lines.
 

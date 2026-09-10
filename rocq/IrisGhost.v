@@ -1,7 +1,7 @@
 (** * IrisGhost: ghost state for the RCU invariants.
 
     Milestone 3.  The first two milestones are deliberately Iris-free:
-    [WellFormed.v] states the seventeen invariants as pure propositions over a
+    [WellFormed.v] states the eighteen invariants as pure propositions over a
     plain record, and [HeapPaths.v] proves the reachability and heap-domain
     facts the atomic actions need.  Nothing in either mentions a logic.
 

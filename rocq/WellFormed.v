@@ -104,7 +104,7 @@ Section WellFormedness.
   (** Field kinds are static program information. *)
   Variable FType : FName -> FieldKind.
 
-  (** ** The seventeen invariants *)
+  (** ** The eighteen invariants *)
 
   (** 1. OW -- No Sharing.  In-degree at most one for live nodes.  (The
       published caption describes a different property entirely: "none of the
@@ -255,7 +255,25 @@ Section WellFormedness.
       lk (ms s) = Some lw -> Reaches s p o ->
       obsv s o (Oiter lw) \/ obsv s o Oroot.
 
-  (** 17. UNQR -- unique reachability: distinct paths reach distinct nodes.
+  (** 17. WUNLK -- detaching observations are the writer's.
+
+      New in the revision, and the counterpart of WFresh at the other end of a
+      node's life: WFresh says an allocation is the lock holder's, and nothing
+      said the same of an unlinking.  It is needed, and needed locally: the ULKR
+      case of T-UnlinkH and T-Replace ends at a detached predecessor of the node
+      being unlinked, and ULKR's conclusion names a thread, so the case does not
+      close without knowing that the predecessor's [unlinked] observation is the
+      writer's.  See [unlinked_observations_need_not_be_the_writers] below for a
+      state satisfying the other seventeen in which it is not.
+
+      Guarded by the lock, so it says nothing about a state with no writer --
+      which is the weakest form that does the job. *)
+  Definition WUNLK (s : LState) : Prop :=
+    forall o t lw,
+      lk (ms s) = Some lw ->
+      (obsv s o (Ounlk t) \/ obsv s o (Ofree t)) -> t = lw.
+
+  (** 18. UNQR -- unique reachability: distinct paths reach distinct nodes.
       This is the tree-shape invariant on which every framing side condition in
       T-UnlinkH, T-Replace and T-Insert depends. *)
   Definition UNQR (s : LState) : Prop :=
@@ -266,7 +284,7 @@ Section WellFormedness.
   Definition WellFormed (s : LState) : Prop :=
     OW s /\ RWOW s /\ AWRT s /\ IFL s /\ ULKR s /\ FLR s /\ WULK s
     /\ FR s /\ WFresh s /\ FNR s /\ FPI s /\ WNR s /\ RITR s /\ RINFL s
-    /\ HD s /\ UNQRT_a s /\ UNQRT_b s /\ UNQR s.
+    /\ HD s /\ UNQRT_a s /\ UNQRT_b s /\ WUNLK s /\ UNQR s.
 
 End WellFormedness.
 
@@ -641,7 +659,7 @@ End Defects.
     "corrected" into something no state satisfies, and every proof over it then
     goes through vacuously.  We exhibit a model -- the initial state of any RCU
     program, a root with null fields and the writer holding the lock -- and
-    check it satisfies all seventeen, for any field typing and any reading of
+    check it satisfies all eighteen, for any field typing and any reading of
     the open FLR direction. *)
 
 Definition initial : LState :=
@@ -735,6 +753,11 @@ Proof.
   simpl. split; reflexivity.
 Qed.
 
+Lemma initial_WUNLK : WUNLK initial.
+Proof.
+  intros o t lw _ [H | H]; simpl in H; destruct H as [_ H]; discriminate H.
+Qed.
+
 Lemma initial_UNQR : UNQR initial.
 Proof.
   intros p p' o H1 H2.
@@ -748,7 +771,7 @@ Proof.
   intros FType. unfold WellFormed.
   (* [repeat split] is too eager: it descends through binders and splits the
      conjunction inside [obsv initial] itself.  [apply conj] matches only a
-     literal [and] head, so it decomposes exactly the seventeen conjuncts. *)
+     literal [and] head, so it decomposes exactly the eighteen conjuncts. *)
   repeat apply conj;
     first [ apply initial_OW      | apply initial_RWOW  | apply initial_AWRT
           | apply initial_IFL     | apply initial_ULKR  | apply initial_FLR
@@ -756,7 +779,7 @@ Proof.
           | apply initial_FNR     | apply initial_FPI   | apply initial_WNR
           | apply initial_RITR    | apply initial_RINFL | apply initial_HD
           | apply initial_UNQRT_a | apply initial_UNQRT_b
-          | apply initial_UNQR ].
+          | apply initial_WUNLK    | apply initial_UNQR ].
 Qed.
 
 (** The corrected set is satisfiable; the published RITR makes it not, in any
@@ -881,7 +904,7 @@ Print Assumptions HD_not_preserved_by_free.
     that, and costs nothing: [sync_stop_preserves_FNR] in [Actions.v] discharges
     it from the second conjunct, by exactly the argument just given.
 
-    The witness below satisfies the other sixteen invariants and the published
+    The witness below satisfies the other seventeen invariants and the published
     FNR, and has a node that is both fresh and freeable. *)
 
 (** The published form: FNR without the third conjunct. *)
@@ -1031,6 +1054,13 @@ Proof.
   right. left. split; reflexivity.
 Qed.
 
+Lemma ff_WUNLK : WUNLK fresh_freeable.
+Proof.
+  intros o t lw Hlk [H | H]; simpl in Hlk; injection Hlk as <-;
+    simpl in H; destruct H as [[_ H] | [_ [H | H]]]; try discriminate.
+  injection H as H. exact H.
+Qed.
+
 Lemma ff_UNQR : UNQR fresh_freeable.
 Proof.
   intros p p' o H1 H2.
@@ -1042,7 +1072,7 @@ Qed.
 Definition WellFormed_pubFNR (FType : FName -> FieldKind) (s : LState) : Prop :=
   OW FType s /\ RWOW s /\ AWRT s /\ IFL s /\ ULKR s /\ FLR s /\ WULK s
   /\ FR s /\ WFresh s /\ FNR_pub s /\ FPI FType s /\ WNR s /\ RITR s /\ RINFL s
-  /\ HD s /\ UNQRT_a s /\ UNQRT_b s /\ UNQR s.
+  /\ HD s /\ UNQRT_a s /\ UNQRT_b s /\ WUNLK s /\ UNQR s.
 
 Theorem ff_WellFormed_pubFNR :
   forall FType, WellFormed_pubFNR FType fresh_freeable.
@@ -1055,7 +1085,7 @@ Proof.
           | apply ff_FNR_pub | apply ff_FPI   | apply ff_WNR
           | apply ff_RITR    | apply ff_RINFL | apply ff_HD
           | apply ff_UNQRT_a | apply ff_UNQRT_b
-          | apply ff_UNQR ].
+          | apply ff_WUNLK   | apply ff_UNQR ].
 Qed.
 
 Lemma ff_not_FNR : ~ FNR fresh_freeable.
@@ -1078,3 +1108,113 @@ Qed.
 
 Print Assumptions ff_WellFormed_pubFNR.
 Print Assumptions FNR_pub_admits_freeable_fresh.
+
+(** * Unlinking need not be the writer's
+
+    A ninth defect, and the second of its kind: like FNR's missing conjunct it
+    is a failure of locality rather than a false statement, and like that one it
+    was found by attempting an action lemma -- here the ULKR case of T-UnlinkH
+    and T-Replace, which is the case that keeps a node awaiting reclamation
+    unreachable, so not a case one would want to leave waved through.
+
+    The obligation is this.  Unlinking [z] leaves whatever detached predecessors
+    OW allows it, and ULKR must then say they are unlinked or freeable *by the
+    same thread* -- its conclusion is indexed by the thread its hypothesis is.
+    OW gives detachment; the repaired premise of the two rules rules out a
+    [fresh] predecessor; so the predecessor is unlinked or freeable by some
+    thread.  Nothing in the published set says which.
+
+    As with FNR, the executions have no such state: [unlinked] is produced only
+    by the two writer rules and carried to [freeable] by SyncStop, so the thread
+    is always the lock holder.  And as with FNR that is a property of whole
+    executions rather than an invariant, so the action lemma does not close.
+    WFresh already says the corresponding thing about the other end of a node's
+    life -- an allocation is the lock holder's -- which is the strongest
+    indication that its absence here was an oversight rather than a decision.
+
+    The state below satisfies the other seventeen. *)
+
+Definition WellFormed_noWUNLK (FType : FName -> FieldKind) (s : LState) : Prop :=
+  OW FType s /\ RWOW s /\ AWRT s /\ IFL s /\ ULKR s /\ FLR s /\ WULK s
+  /\ FR s /\ WFresh s /\ FNR s /\ FPI FType s /\ WNR s /\ RITR s /\ RINFL s
+  /\ HD s /\ UNQRT_a s /\ UNQRT_b s /\ UNQR s.
+
+(** Node 1 is unlinked by thread 9, while the writer is thread 0. *)
+Definition unlk_foreign : LState :=
+  {| ms := {| stk := fun _ _ => None;
+              hp  := fun o _ => if Nat.ltb o 2 then Some VNull else None;
+              lk  := Some 0;
+              rt  := 0;
+              rds := fun _ => False;
+              bnd := fun _ => False |};
+     obsv  := fun o ob => (o = 0 /\ ob = Oroot) \/ (o = 1 /\ ob = Ounlk 9);
+     undf  := fun _ _ => False;
+     thrd  := fun t => t = 0 \/ t = 9;
+     flist := fun _ => None |}.
+
+Lemma uf_no_edges : forall o f o', ~ Edge unlk_foreign o f o'.
+Proof.
+  intros o f o'. unfold Edge, unlk_foreign. simpl.
+  destruct (Nat.ltb o 2); discriminate.
+Qed.
+
+Lemma uf_reaches_only_root :
+  forall p o, Reaches unlk_foreign p o -> p = [] /\ o = 0.
+Proof.
+  intros [|f p] o H; unfold Reaches in H; simpl in H.
+  - injection H as <-. split; reflexivity.
+  - discriminate.
+Qed.
+
+Lemma uf_WellFormed_noWUNLK : forall FType, WellFormed_noWUNLK FType unlk_foreign.
+Proof.
+  intros FType. unfold WellFormed_noWUNLK. repeat apply conj.
+  - intros o o' f f' x H1. exfalso. simpl in H1.
+    destruct (Nat.ltb o 2); discriminate H1.
+  - intros x t o H. simpl in H. discriminate H.
+  - intros y t H. simpl in H. discriminate H.
+  - intros t o Tr H1 H2. simpl in H2. discriminate H2.
+  - intros o o' f' t _ H. exfalso. exact (uf_no_edges _ _ _ H).
+  - intros o o' f' Tr H1 H2. simpl in H1. discriminate H1.
+  - intros lw o t _ H. simpl in H.
+    destruct H as [[_ H] | [_ H]]; discriminate H.
+  - intros t x o H. simpl in H. discriminate H.
+  - intros t x o H. simpl in H. discriminate H.
+  - intros o t t' H. simpl in H.
+    destruct H as [[_ H] | [_ H]]; discriminate H.
+  - intros o f o' t lw _ H. exfalso. exact (uf_no_edges _ _ _ H).
+  - intros t H1 H2. exact H2.
+  - intros o t H. destruct H.
+  - intros o Tr t H1 H2. simpl in H1. discriminate H1.
+  - intros o f o' H _. exfalso. exact (uf_no_edges _ _ _ H).
+  - intros o f. apply uf_no_edges.
+  - intros p o lw H1 H2.
+    destruct (uf_reaches_only_root _ _ H2) as [_ ->].
+    right. left. split; reflexivity.
+  - intros p p' o H1 H2.
+    destruct (uf_reaches_only_root _ _ H1) as [-> _].
+    destruct (uf_reaches_only_root _ _ H2) as [-> _]. reflexivity.
+Qed.
+
+Lemma uf_not_WUNLK : ~ WUNLK unlk_foreign.
+Proof.
+  intros H.
+  assert (Hob : obsv unlk_foreign 1 (Ounlk 9))
+    by (right; split; reflexivity).
+  assert (Hc : 9 = 0) by exact (H 1 9 0 eq_refl (or_introl Hob)).
+  discriminate Hc.
+Qed.
+
+Theorem unlinked_observations_need_not_be_the_writers :
+  (forall FType, WellFormed_noWUNLK FType unlk_foreign)
+  /\ lk (ms unlk_foreign) = Some 0
+  /\ obsv unlk_foreign 1 (Ounlk 9)
+  /\ ~ WUNLK unlk_foreign.
+Proof.
+  repeat apply conj;
+    [ exact uf_WellFormed_noWUNLK | reflexivity
+    | right; split; reflexivity | exact uf_not_WUNLK ].
+Qed.
+
+Print Assumptions uf_WellFormed_noWUNLK.
+Print Assumptions unlinked_observations_need_not_be_the_writers.
