@@ -81,6 +81,29 @@ Section Denotations.
       /\ (forall g, FType g = RCUField -> N g = None ->
             hp (ms s) o g = Some VNull).
 
+  (** [rcuItr] for a *reader*.  Read-side critical sections use the type with
+      no path and no field map: both are unnecessary for a thread that performs
+      no update, and a writer would invalidate them anyway.  What is left is the
+      iterator observation, the variable being defined, and one condition that
+      has no counterpart on the write side -- if the reader is a bounding thread
+      then the node it holds carries a free-list entry naming it, and every
+      thread in that entry is bounding.
+
+      That last conjunct is transcribed as the figure states it.  It is stronger
+      than the reader's own rule obviously supplies: a bounding reader holds
+      iterators on live nodes too, and those have no free-list entry at all.
+      See [reader_post_env] in [Actions.v], where it appears as a hypothesis
+      rather than something the action establishes. *)
+  Definition D_rcuItrR (s : LState) (t : TID) (x : Var) : Prop :=
+    exists o,
+      stk (ms s) x t = Some o
+      /\ obsv s o (Oiter t)
+      /\ ~ undf s x t
+      /\ (bnd (ms s) t ->
+            exists Tr, flist s o = Some Tr
+                    /\ Tr t
+                    /\ (forall t', Tr t' -> bnd (ms s) t')).
+
   Definition D_unlinked (s : LState) (t : TID) (x : Var) : Prop :=
     exists o,
       stk (ms s) x t = Some o
@@ -492,3 +515,98 @@ Print Assumptions insert_preserves_UNQR.
 Print Assumptions unlink_preserves_HD.
 Print Assumptions insert_preserves_HD.
 Print Assumptions replace_preserves_HD.
+
+(** * T-TSub, and why it is sound
+
+    The subtyping rule [rcuItr _ <: undef] lets the writer forget an iterator,
+    which the type rules occasionally need to satisfy a non-interference check.
+    Read as an inclusion of denotations it is plainly false: the denotation of
+    [rcuItr] requires [x notin U] and the denotation of [undef] requires
+    [(x,tid) in U], so the two are disjoint, and [[rcuItr]] is not empty.
+
+    It is sound anyway, and the reason is worth recording because the reading
+    that makes it false is the natural one.  The subtyping obligation is
+    Lemma Context-SubTyping-M, and it is stated with the Views entailment, not
+    with set inclusion:
+
+      p |= q  iff  forall m, |_ p * {m} _|  subset  |_ q * R({m}) _|
+
+    where [|_-_|] concretizes a logical state to the machine state it
+    instruments -- and, as the soundness chapter says, that concretization is
+    simply projection.  [U] is auxiliary; it is erased.  So the obligation is
+    not that a state in [[rcuItr]] is already in [[undef]], but that some state
+    in [[undef]] projects to the same machine state, and the proof may choose a
+    different [U] to exhibit it.
+
+    That is the theorem below.  The witness is the same state with [(x,tid)]
+    added to [U], which is well formed because [U] appears in exactly two of
+    the nineteen invariants, RWOW and AWRT, and in both as a negated hypothesis
+    -- so enlarging it weakens them.  The remaining conjunct of the [undef]
+    denotation, that the variable's referent is not on the free list, is one
+    [rcuItr] already carries.
+
+    The distinction is not pedantry.  Were the obligation set inclusion, the
+    rule would have to be dropped and every non-interference check that leans on
+    it re-examined; and a reader checking the subtyping rules against the
+    denotation figure alone would conclude exactly that. *)
+
+Definition forget (s : LState) (x : Var) (t : TID) : LState :=
+  {| ms    := ms s;
+     obsv  := obsv s;
+     undf  := fun z t' => undf s z t' \/ (z, t') = (x, t);
+     thrd  := thrd s;
+     flist := flist s |}.
+
+(** Forgetting is invisible to the machine state, which is what makes it a
+    legitimate witness under projection. *)
+Lemma forget_projects s x t : ms (forget s x t) = ms s.
+Proof. reflexivity. Qed.
+
+Lemma forget_undf s x t z t' :
+  ~ undf (forget s x t) z t' -> ~ undf s z t' /\ (z, t') <> (x, t).
+Proof.
+  intros H. split; intros Hc; apply H.
+  - left. exact Hc.
+  - right. exact Hc.
+Qed.
+
+Lemma forget_RWOW s x t : RWOW s -> RWOW (forget s x t).
+Proof.
+  intros H z t' o Hstk Hnu.
+  exact (H z t' o Hstk (proj1 (forget_undf s x t z t' Hnu))).
+Qed.
+
+Lemma forget_AWRT s x t : AWRT s -> AWRT (forget s x t).
+Proof.
+  intros H z t' Hstk Hnu.
+  exact (H z t' Hstk (proj1 (forget_undf s x t z t' Hnu))).
+Qed.
+
+Lemma forget_WellFormed FType s x t :
+  WellFormed FType s -> WellFormed FType (forget s x t).
+Proof.
+  intros (HOW & HRWOW & HAWRT & HIFL & HULKR & HFLR & HWULK & HFR & HWFresh
+          & HFNR & HFPI & HWNR & HRITR & HRINFL & HHD & HUa & HUb & HWU & HWI
+          & HUq).
+  repeat apply conj; try assumption.
+  - exact (forget_RWOW s x t HRWOW).
+  - exact (forget_AWRT s x t HAWRT).
+Qed.
+
+(** The obligation T-TSub actually carries, discharged. *)
+Theorem tsub_itr_undef FType s t x rho N :
+  WellFormed FType s ->
+  D_rcuItr s t x rho N ->
+  ms (forget s x t) = ms s
+  /\ D_undef (forget s x t) t x
+  /\ WellFormed FType (forget s x t).
+Proof.
+  intros HWF [o (Hstk & _ & _ & _ & _ & _ & _ & Hfl)].
+  split; [reflexivity |]. split.
+  - split; [right; reflexivity |].
+    intros o' Hstk'. simpl in Hstk'. rewrite Hstk in Hstk'.
+    injection Hstk' as <-. exact Hfl.
+  - exact (forget_WellFormed FType s x t HWF).
+Qed.
+
+Print Assumptions tsub_itr_undef.

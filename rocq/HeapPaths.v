@@ -127,6 +127,33 @@ Proof.
   - exfalso. apply Hna. simpl. rewrite E. split; [assumption | exact I].
 Qed.
 
+(** A prefix of an avoiding path avoids: [avoids] is structural along the path,
+    so nothing in the tail can make the head traverse the edge.  This is what
+    lets the *prefix* condition of the [rcuItr] denotation survive a write --
+    every prefix of a path that misses the written edge walks identically in the
+    updated heap. *)
+Lemma avoids_prefix : forall h p1 p2 o ou fu,
+  avoids h o (p1 ++ p2) ou fu -> avoids h o p1 ou fu.
+Proof.
+  intros h p1. induction p1 as [|g q IH]; intros p2 o ou fu Hav.
+  - exact I.
+  - destruct Hav as [Hne Hrest]. simpl. split; [exact Hne |].
+    destruct (h o g) as [[o1|]|]; try exact I.
+    exact (IH p2 o1 ou fu Hrest).
+Qed.
+
+(** A proper prefix of [l ++ [f]] is a prefix of [l].  Needed where a path is
+    extended by one field and the denotation quantifies over prefixes. *)
+Lemma prefix_of_snoc : forall (l1 l2 l : list FName) (f : FName),
+  l1 ++ l2 = l ++ [f] -> l2 <> [] -> exists sigma, l1 ++ sigma = l.
+Proof.
+  intros l1 l2 l f Heq Hne.
+  destruct (exists_last Hne) as [l2' [x Hl2]].
+  subst l2. rewrite app_assoc in Heq.
+  apply app_inj_tail in Heq. destruct Heq as [Heq1 _].
+  exists l2'. exact Heq1.
+Qed.
+
 (** A path that does *not* avoid the edge splits at its first traversal of it.
     No reachability hypothesis is needed: if the walk dies before reaching the
     edge then it avoids it vacuously.
@@ -191,7 +218,8 @@ Definition UNQR_h (h : Heap) (root : Loc) : Prop :=
 (** The tree shape survives a write to an unreachable node.  This is exactly the
     T-WriteFH case: the writer sets a field of a [rcuFresh] object, which FR
     guarantees no heap edge reaches.  It is the one heap mutation for which UNQR
-    preservation is unconditional. *)
+    preservation needs nothing beyond that unreachability -- the write creates no
+    path from the root, so there is nothing to characterize. *)
 Corollary UNQR_h_upd_unreachable : forall h root ou fu v,
   UNQR_h h root ->
   (forall p, hstar h root p <> Some ou) ->
@@ -652,6 +680,57 @@ Proof.
     reflexivity.
 Qed.
 
+(** ** T-LinkF-Null
+
+    The variant of T-Insert in which the fresh node's RCU fields are all null --
+    appending at the end of a list, or inserting a leaf.  It is the easier of
+    the two: with no outgoing edge, a path that reaches [n] stops there, so the
+    reachable set grows by exactly [n] and by nothing under it. *)
+
+Definition PointsNowhere (h : Heap) (n : Loc) : Prop :=
+  forall g x, h n g <> Some (VLoc x).
+
+Theorem hstar_link_null_char : forall h root P f n sigma x,
+  PointsNowhere h n ->
+  n <> P ->
+  hstar (upd h P f (VLoc n)) root sigma = Some x ->
+  hstar h root sigma = Some x
+  \/ (x = n /\ exists p1, sigma = p1 ++ [f] /\ hstar h root p1 = Some P).
+Proof.
+  intros h root P f n sigma x Hpn Hne Hreach.
+  destruct (hstar_upd_char h P f n sigma root)
+    as [Heq | [p1 [p2 [-> [Hp1 Hrw]]]]].
+  - left. rewrite <- Heq. exact Hreach.
+  - rewrite Hrw in Hreach. destruct p2 as [|g p'].
+    + simpl in Hreach. injection Hreach as <-.
+      right. split; [reflexivity |]. exists p1. split; [reflexivity | exact Hp1].
+    + exfalso. simpl in Hreach.
+      rewrite (upd_other h P f (VLoc n) n g) in Hreach.
+      * destruct (h n g) as [[a|]|] eqn:E; try discriminate.
+        exact (Hpn g a E).
+      * intros Hc. injection Hc as Hc1 _. contradiction.
+Qed.
+
+(** UNQR survives it, by the same argument as T-Replace: the only new path is
+    the one to [n], and the prefix reaching [P] is unique. *)
+Theorem UNQR_link_null : forall h root P f n,
+  UNQR_h h root ->
+  PointsNowhere h n ->
+  n <> P ->
+  (forall sigma, hstar h root sigma <> Some n) ->
+  UNQR_h (upd h P f (VLoc n)) root.
+Proof.
+  intros h root P f n HU Hpn Hne Hfresh sigma sigma' x H1 H2.
+  destruct (hstar_link_null_char h root P f n sigma  x Hpn Hne H1)
+    as [Ha | [Hxa [q1 [Hs1 Hq1]]]];
+  destruct (hstar_link_null_char h root P f n sigma' x Hpn Hne H2)
+    as [Hb | [Hxb [q2 [Hs2 Hq2]]]].
+  - exact (HU _ _ _ Ha Hb).
+  - exfalso. rewrite Hxb in Ha. exact (Hfresh sigma Ha).
+  - exfalso. rewrite Hxa in Hb. exact (Hfresh sigma' Hb).
+  - subst sigma sigma'. rewrite (HU q1 q2 P Hq1 Hq2). reflexivity.
+Qed.
+
 (** ** What the write makes unreachable
 
     UNQR says the structure stays a tree; it says nothing about what leaves it.
@@ -799,22 +878,81 @@ Proof.
     intro HH. injection HH as HH1 _. contradiction.
 Qed.
 
-(** Allocation.  [alloc h n] gives [n] every field, all null -- the [nullmap] of
-    the Alloc lemma.  It contributes no edges, and it only enlarges the domain,
-    so HD survives.  Note no freshness hypothesis is needed for HD: overwriting
-    an existing node with nulls would also preserve it. *)
-Definition alloc (h : Heap) (n : Loc) : Heap :=
-  fun o f => if Nat.eq_dec o n then Some VNull else h o f.
+(** Allocation.  [alloc h n fs] gives [n] the fields in [fs], all null -- the
+    [nullmap] of the Alloc lemma.
 
-Lemma HD_h_alloc : forall h n, HD_h h -> HD_h (alloc h n).
+    The field list is the repair of a defect the Iris development found and
+    [Triples.v] records: the original [alloc h n] gave [n] *every* field name,
+    and field names are drawn from an infinite supply, so one allocation put
+    infinitely many cells in the heap.  No finite map represents such a heap, so
+    there is no points-to assertion over it, and without points-to a rule whose
+    premise mentions the heap cannot be stated thread-locally at all.  A node's
+    fields are declared, here as a list, and the heap stays finite.
+
+    [alloc] only ever adds: a field outside [fs] keeps whatever the heap had.
+    So it contributes no edges, it only enlarges the domain, and HD survives
+    with no freshness hypothesis, exactly as before. *)
+Definition alloc (h : Heap) (n : Loc) (fs : list FName) : Heap :=
+  fun o f => if Nat.eq_dec o n then
+               (if in_dec Nat.eq_dec f fs then Some VNull else h o f)
+             else h o f.
+
+(** Lookup facts for [alloc], for the same reason [free] has them: the decision
+    procedure inside the definition is not the one a client's [Nat.eq_dec]
+    resolves to once another library is loaded, so the case split has to be done
+    here and exported. *)
+Lemma alloc_same : forall h n fs f, In f fs -> alloc h n fs n f = Some VNull.
 Proof.
-  intros h n HD o f o' Hedge. unfold alloc in Hedge.
-  destruct (Nat.eq_dec o n) as [->|Hne]; [discriminate |].
-  destruct (HD o f o' Hedge) as [g0 [v0 Hv0]].
-  unfold InHeap_h, alloc.
-  destruct (Nat.eq_dec o' n) as [->|Hne'].
-  - exists f, VNull. destruct (Nat.eq_dec n n); [reflexivity | contradiction].
-  - exists g0, v0. destruct (Nat.eq_dec o' n); [contradiction | exact Hv0].
+  intros h n fs f Hin. unfold alloc.
+  destruct (Nat.eq_dec n n); [| congruence].
+  destruct (in_dec Nat.eq_dec f fs); [reflexivity | contradiction].
+Qed.
+
+Lemma alloc_miss : forall h n fs f, ~ In f fs -> alloc h n fs n f = h n f.
+Proof.
+  intros h n fs f Hin. unfold alloc.
+  destruct (Nat.eq_dec n n); [| congruence].
+  destruct (in_dec Nat.eq_dec f fs); [contradiction | reflexivity].
+Qed.
+
+Lemma alloc_other : forall h n fs o f, o <> n -> alloc h n fs o f = h o f.
+Proof.
+  intros h n fs o f Hne. unfold alloc.
+  destruct (Nat.eq_dec o n); congruence.
+Qed.
+
+(** What every use of the old [alloc_same] actually needed: a freshly allocated
+    node has no outgoing edge.  Under the field list this holds of the declared
+    fields because they are null and of the others because the node was
+    unallocated. *)
+Lemma alloc_no_edge : forall h n fs f o,
+  (forall g, h n g = None) -> alloc h n fs n f <> Some (VLoc o).
+Proof.
+  intros h n fs f o Hfresh. unfold alloc.
+  destruct (Nat.eq_dec n n); [| congruence].
+  destruct (in_dec Nat.eq_dec f fs); [discriminate | rewrite Hfresh; discriminate].
+Qed.
+
+Lemma InHeap_h_alloc : forall h n fs o,
+  InHeap_h h o -> InHeap_h (alloc h n fs) o.
+Proof.
+  intros h n fs o [g [v Hv]].
+  destruct (Nat.eq_dec o n) as [->|Hne].
+  - destruct (in_dec Nat.eq_dec g fs) as [Hin | Hni].
+    + exists g, VNull. exact (alloc_same h n fs g Hin).
+    + exists g, v. rewrite (alloc_miss h n fs g Hni). exact Hv.
+  - exists g, v. rewrite (alloc_other h n fs o g Hne). exact Hv.
+Qed.
+
+Lemma HD_h_alloc : forall h n fs, HD_h h -> HD_h (alloc h n fs).
+Proof.
+  intros h n fs HD o f o' Hedge.
+  apply InHeap_h_alloc.
+  destruct (Nat.eq_dec o n) as [->|Hne].
+  - destruct (in_dec Nat.eq_dec f fs) as [Hin | Hni].
+    + rewrite (alloc_same h n fs f Hin) in Hedge. discriminate.
+    + rewrite (alloc_miss h n fs f Hni) in Hedge. exact (HD n f o' Hedge).
+  - rewrite (alloc_other h n fs o f Hne) in Hedge. exact (HD o f o' Hedge).
 Qed.
 
 (** Free.  This is the case the report calls trivial.  Removing [d] from the
@@ -912,6 +1050,8 @@ Print Assumptions UNQR_unlink.
 Print Assumptions UNQR_insert_reachable.
 Print Assumptions UNQR_unlink_reachable.
 Print Assumptions UNQR_no_back.
+Print Assumptions hstar_link_null_char.
+Print Assumptions UNQR_link_null.
 Print Assumptions unlink_unreachable.
 Print Assumptions replace_unreachable.
 Print Assumptions UNQR_h_upd_unreachable.

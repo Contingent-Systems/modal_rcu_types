@@ -8,15 +8,16 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 
 
 Since submission we have mechanized the global invariants, the reachability core
-of the soundness argument, and every atomic action in full, in Rocq
-(about 6,400 lines and 380 lemmas, axiom-free).  The build refuses to succeed if
-the development contains an admitted proof, or if any of its eighty-nine
-assumption checks reports an axiom rather than closed under the global context;
+of the soundness argument, and every atomic action in full, in Rocq (about
+14,600 lines and 868 results, axiom-free).  The build refuses to succeed if
+the development contains an admitted proof, or if any of its hundred and
+seventy-five assumption checks reports an axiom rather than closed under the
+global context;
 we mention this because a Rocq file that compiles proves considerably less than
 it looks.  This turned up more than we expected, and we think it materially
 strengthens the paper.
 
-Eight of the WellFormed invariants as published are defective:
+Ten of the WellFormed invariants as published are defective:
 
 - Unique-Reachable is vacuous as written, and admits heaps that are not trees.
 - Readers-Iterators-Only is contradictory in any state containing both a reader
@@ -50,7 +51,7 @@ Eight of the WellFormed invariants as published are defective:
   is the only thing a global invariant set is for.  Adding the conjunct restores
   it and costs nothing: SyncStop, the one action that could have been asked to
   pay for it, discharges the new conjunct from the old one.  We give a state
-  satisfying the other seventeen invariants and the published form in which a
+  satisfying the other eighteen invariants and the published form in which a
   node is both fresh and freeable, and a proof that linking it breaks
   Unlinked-Reachability.
 - Unlinking is not said to be the writer's.  WriterFresh says an allocation
@@ -62,19 +63,76 @@ Eight of the WellFormed invariants as published are defective:
   and Unlinked-Reachability's conclusion names the thread its hypothesis names.
   Like the previous item this is a failure of locality rather than a false
   statement, and it was found the same way, by attempting the case.  We give a
-  state satisfying the other seventeen in which a node is unlinked by a thread
+  state satisfying the other eighteen in which a node is unlinked by a thread
   that is not the lock holder.
+- Iterator observations are not said to belong to an active thread, and this
+  one is not merely a failure of locality.  SyncStart puts every unlinked node
+  on the free list with the current readers as its bounding set, and
+  the iterators-in-free-list invariant then demands that every thread observing
+  such a node as an iterator is in that set: it is the obligation that a grace
+  period waits for everyone who could still be looking.  Writer-Unlink rules out
+  the writer.
+  Nothing ruled out a thread that is neither the writer nor a current reader,
+  and against such a thread the grace period would complete while a live
+  reference remained -- which is the accident the whole structure exists to
+  prevent.  The three together are a family: each kind of observation
+  constrains who may hold it, WriterFresh does it for fresh, and the published
+  set had exactly one of the three.  We give a state satisfying the other
+  eighteen in which a node is observed as an iterator by a thread that is
+  neither the writer nor a reader.
+- Nothing says where free-list entries may live.  Three invariants mention the
+  free list -- iterators-in-free-list, free-list-reachability and
+  readers-in-free-list -- and all three are conditional on an entry existing;
+  none says which nodes may have one.  Nothing in the published set therefore
+  rules out an entry at a node that is not detached, not reachable, and not
+  even in the heap.  SyncStart's specification says the grace period covers
+  *exactly* the detached nodes, and re-establishing "exactly" needs to know
+  that the entries already there were at detached nodes too; it is the one
+  hypothesis of the snapshot step that no invariant supplies.  We give a state
+  satisfying all nineteen with a free-list entry at a location carrying no
+  observations at all.  The repair is a conjunct saying an entry implies the
+  node is unlinked or freeable, which SyncStart establishes and which every
+  other action either preserves trivially or -- Free and ReadEnd -- preserves
+  because it only shrinks the free list.
 
-Four of these are the consequential ones.  Unlinked-Reachability is discussed
+Five of these are the consequential ones.  Unlinked-Reachability is discussed
 under Delayed Ownership Transfer below; Heap-Domain-Closure is the invariant the
 Free case rests on, and under the published statement that case cannot be proved
 at all, which is presumably why our proof records it as trivial; and
 Fresh-Not-Reader is what the two rules that link a fresh node need, so under the
 published statement neither T-Replace nor T-Insert can be shown to preserve
-Unlinked-Reachability; and the missing statement about unlinking is what the two
-rules that *unlink* a node need, for the same invariant.
+Unlinked-Reachability; the missing statement about unlinking is what the two
+rules that *unlink* a node need, for the same invariant; and the missing
+statement about iterators is what SyncStart needs, without which a grace period
+can complete too early.
 
-A ninth defect is in the type rules rather than in an invariant. Neither
+Two more invariants are missing, and both were found by attempting the last of
+the linking rules against the Iris invariant described below.  T-LinkF-Null
+publishes a fresh node, and to do so it must know that no thread other than the
+writer observes that node.  Two invariants ought to supply that between them and
+neither does.
+
+- Nothing says the root observation marks the root.  It is the one observation
+  that carries no thread, and the published set constrains where every *tagged*
+  observation may sit while saying nothing about this one, so a well-formed
+  state may record it at a location that is not the root.  That also weakens
+  Unique-Reachable-Tree's second part, whose conclusion is "iterator or root"
+  and which is read as "every reachable node is the writer's, except the root
+  itself" -- under the published set the exception is not tied to the root.
+- WriterFresh is too weak.  It is stated with a stack reference in its
+  hypothesis -- a thread that *names* a fresh node holds the lock -- so a fresh
+  observation whose variable has left scope constrains nobody.  This corrects
+  something we said above: the family of three is right, but the member the
+  published set already had was the weak one, and it needs the same repair as
+  the two we add.
+
+One witness does for both: a state satisfying all nineteen in which the root
+observation sits at a non-root location and a fresh observation belongs to a
+thread that does not hold the lock.  Only the second repair is needed by any
+proof we give, so only it is carried; the first we report, because a reader of
+Unique-Reachable-Tree will assume it.
+
+A defect in the type rules rather than in an invariant. Neither
 T-Replace nor T-UnlinkH prevents a rcuFresh reference in the environment from
 holding a field that points at the node the rule unlinks; the aliasing premises
 quantify only over rcuItr references, and the denotation of a type environment
@@ -86,8 +144,8 @@ Both rules now carry a premise excluding it. Both worked examples still type
 check unchanged, since the fresh node each builds points at the children of the
 node being replaced rather than at that node.
 
-Five of the nine were found by attempting the proofs rather than by reading,
-and all five are cases whose proof the technical report calls trivial.  We think
+Ten of the fourteen were found by attempting the proofs rather than by reading,
+and seven of the ten are cases whose proof the technical report calls trivial.  We think
 that is the most useful thing the exercise produced: the defects that mattered
 were not the ones that looked doubtful. Every defect has
 a machine-checked proof or counterexample, the corrected set is machine-checked
@@ -95,10 +153,24 @@ satisfiable, and the development has no axioms. The corrected statements now
 appear as an appendix, with the published ones retained alongside for
 comparison.
 
-The development also now takes every atomic action end to end -- Free,
-SyncStop, ReadEnd and the three heap mutations each preserve the whole of
-WellFormed, rather than one invariant at a time -- and doing them whole was
+The development also now takes every atomic action end to end, rather than one
+invariant at a time: the six RCU primitives -- ReadBegin, ReadEnd, SyncStart,
+SyncStop, WriteBegin, WriteEnd -- and every type rule that changes the state:
+T-Root, T-ReadS, T-ReadH, T-Alloc, T-WriteFH, T-UnlinkH, T-Replace, T-Insert,
+T-LinkF-Null and T-Free.  Fifteen theorems, the three variable-binding rules
+sharing one and a reader's read composing two.  The structural and subtyping
+rules change no state and so carry no action lemma.  Doing the actions whole was
 worth more than the sum of the cases.
+
+We should be exact about what these theorems are, since their shape invites
+overreading.  Each says an action preserves WellFormed: the global invariants
+survive every atomic step.  Axiom soundness asks for more -- the post-state must
+satisfy the denotation of the post-type environment, not just the invariants,
+so that after T-Replace the fresh reference really is an rcuItr at the replaced
+node's path and the replaced one really is unlinked.  That half is not done.
+What the invariants give is the half of each case that is about the shared
+structure rather than the types, which is the half the technical report treats
+as trivial and the half where we found the defects.
 
 For Free, seventeen of the eighteen follow from a single observation, that
 freeing removes edges and therefore removes paths, so every invariant with a
@@ -132,12 +204,149 @@ deletes the root observation and the second half of Unique-Root fails.  We give
 a well-formed state where it does.  This is an encoding mismatch rather than a
 defect in anything published, and we report it as such.
 
-Two invariants turn out to be load-bearing in exactly one place each, both in
-ReadEnd: Readers-Iterators-Only, which is what says the departing thread held no
-detaching observation and so that dropping its entries is safe, and
-Writer-Not-Reader, which is what says the writer's observations survive it.
-That Readers-Iterators-Only as published is contradictory in the states where it
-is needed is therefore not a cosmetic defect.
+Readers-Iterators-Only turns out to be load-bearing in exactly one place --
+ReadEnd, where it is what says the departing thread held no detaching
+observation, so that dropping its entries is safe.  It is needed nowhere else
+except to preserve itself.  That it is contradictory as published, in exactly
+the states where it is needed, is therefore not a cosmetic defect.
+
+One further thing about ReadEnd and WriteEnd, which we report against ourselves
+because it is the failure mode a proof assistant does not catch.  Both rules
+require *every* variable of the departing thread to leave scope.  Our bridge
+from the abstract logical state to the mechanized one represented scope as a
+finite set of variable/thread pairs that are out of scope, and with variables
+drawn from an infinite supply no finite set contains every variable of a
+thread.  The hypothesis was unsatisfiable, so the two theorems that carried it
+-- proved, checked, axiom-free -- established nothing.  Flipping the polarity
+does not help, since the initial state has nothing out of scope.  Scope is now
+a predicate rather than a set, which costs nothing, and both theorems mean what
+they say.  We mention it because a vacuous theorem type-checks, closes under
+the global context and reports no axioms; only using it finds the problem, and
+what found this one was restating the two actions against the Iris invariant
+described next.
+
+We also checked the framing property the Views Framework requires, and it does
+not hold as published.  Soundness there is stated modulo composition with an
+arbitrary frame, so the invariants must be closed under the composition of
+logical states; they are not.  We give two well-formed states whose composition
+violates No-Sharing, and the reason is structural rather than incidental: every
+state carries the whole heap, so composition must reconcile two copies of it,
+and an invariant that constrains two pieces of split per-thread state at once
+cannot survive that.  Sharing the heap and adding locality conditions repairs
+it, and we give the repaired operation together with a proof that the
+invariants are closed under it and a check that the repair is not vacuous.  We
+also record what is *not* a defect, since we first thought it was: interference
+is declared as a subset of the state space, so closure under it is a typing
+obligation rather than a proof obligation.  Composition is a function, and that
+is where the real obligation lives.
+
+The repair scales badly to more than one writer -- every write must be absorbed
+by every frame, and the rely degenerates -- so we also carried out the
+alternative, which is to put the heap in an Iris invariant and leave only the
+observation map and free list in the separating part.  All fifteen atomic
+actions are now restated in that setting, and the outcome is the useful part:
+the pure action lemmas plug in unchanged.  Each restated action is its action
+lemma applied once, plus a ghost update.  Ten of those updates are at a single
+key; the other five are map-wide, and what they need turned out to be neither a
+new camera nor a new frame-preserving update but the observation that a
+map-wide change is an iterated single-key one, legal exactly when the thread
+owns every fragment it touches.  Two small induction lemmas supply it.  The one
+We then chose the physical-state predicate, which is what turns these steps
+into Hoare triples, and that is where the state model gave way.  The standard
+choice is a heap of points-to assertions, so that a thread's right to write a
+field is a resource.  It was not available: allocation as published gives the
+new node *every* field, and field names are drawn from an infinite supply, so
+one allocation puts infinitely many cells in the heap.  No finite map
+represents such a heap, so there is no camera of the usual shape over it -- they
+are all built on finite maps -- and without points-to, a rule whose premise
+mentions the heap cannot be stated outside the invariant at all, because the
+heap is bound inside it.  We give the proof, stated about the published
+definition.
+
+This is a twelfth defect, and the repair is a class declaration: allocation
+takes the node's field list and initialises exactly those fields.  The heap is
+then finite if it starts finite, which we prove for all three heap-changing
+operations.  The cost is local -- allocation gains an argument, heap-domain
+closure is unchanged, and the allocation case gains one hypothesis, that the
+field list holds every RCU field, which is what makes it a declaration rather
+than an arbitrary subset and what the fresh node's denotation needs.  We have
+made this change.
+
+With a finite heap, eight actions close completely: Free, all five heap
+mutations, T-Alloc, and the binding rules -- which is to say the entire write
+side.  Each is stated with no parameters and nothing assumed about shared state:
+the invariant is opened, every premise is *derived*, the step is taken, the
+invariant is closed.
+
+There are four kinds of premise and each is discharged differently.
+Observational ones come from the thread's own ghost fragment -- exclusive
+control of its entry at a node, and agreement turns that into "the node is
+observed freeable", which is the side condition becoming a resource.  Physical
+ones come from points-to, the lock token and the stack fragment, none of which
+existed before the field list made the heap finite.  Path premises come from
+owning the cells along the path; what that derivation does *not* use is the
+point -- no invariant, no uniqueness, no shape condition -- because reachability
+by a *named* path is a local fact about the cells on it.
+
+Negative premises, that something is absent, cannot come from a fragment at all,
+since a fragment says what is and never what is not.  They come from invariants.
+"No free-list entry here" is the free-list conjunct we add, with Writer-Unlink
+or, for a fresh node, Fresh-Not-Reader.  "This fresh node is unreachable" is
+Fresh-Reachable with the pinned root.  "No other thread observes this node as
+fresh" is the repaired WriterFresh.  "Every detaching observation is the
+writer's" and "this node is not detached" are Writer-Unlink with
+Fresh-Not-Reader.  We think that is a concrete answer to what the global
+invariants are *for* in a separation-logic reading of this system: they are
+exactly the facts a resource cannot carry -- and three of the five just named
+are invariants this work adds.
+
+Two premises are of no such kind.  The aliasing premise the unlinking rules
+carry -- no rcuFresh reference anywhere points at the node being unlinked -- is
+negative and is not an invariant.  What discharges it in the type system is the
+environment itself, whose denotation is an intersection over all of it.  Here
+the invariant records that the fresh nodes are *enumerated*, the thread holds
+the enumeration and those nodes' cells, and the premise becomes a statement
+about values the thread owns -- exactly what our checker's noFreshPointsAt
+decides by walking the environment.  The quantifier does not disappear; it moves
+from the shared state, where nothing could discharge it, to the thread's own
+resources, where the type system already had it.
+
+T-Alloc's six premises say the new location is unallocated, unreferenced,
+pointed at by nothing, unobserved, unlisted and not the root.  Those look as
+though they need an operational semantics -- something must *produce* a fresh
+address -- and we expected to have to stop there.  They do not.  An allocator is
+a function of the state, and the state is now finite in every component, so the
+locations used for anything form a finite set and a location outside it
+satisfies all six at once.  The field-list repair pays twice: it made the heap
+representable, and it made the allocator constructible.
+
+What is left is the read side and the protocol, and the two obstacles are
+particular rather than general.  The reader's read cannot be stated at all,
+because the points-to assertion is exclusive: a reader must read cells the
+writer also holds.  The repair is a fractional heap, which is standard and which
+changes the camera under everything above; it is worth saying plainly that the
+write side needed no fractions and the read side cannot be done without them,
+which is after all what read-copy-update is about.  And WriteBegin asks that the
+lock is free while SyncStop asks that no thread is still bounding -- the two
+points where the protocol *tests* or *waits on* shared state rather than acting
+on state it owns.  Those are what an operational semantics is for, a
+compare-and-set and a wait loop, and they are the only two places in the system
+that need one.  The remaining four control actions need reader-set and
+bounding-set tokens, which is the lock's construction done twice more.
+
+One last thing the field-list repair exposed, which we record rather than fix.
+The mutation rules are stated with "every field is an RCU field", which with a
+finite field list contradicts the class declaration the allocation rule needs,
+so the two cannot appear in one lemma.  The honest repair is to restrict
+No-Sharing's field conditions to declared fields.
+
+One last thing worth saying about the infinite-heap defect, because it cuts the
+other way.  The checker never had it.  Fields there are a bitset over a declared
+field list, which is the class declaration the repair introduces, and it is what
+makes the coverage side condition decidable at all.  The model that had to be
+approximated to be executable turned out to be the correct one, and the model
+written for the proof was the one that was wrong.  We have added checks to the
+prototype recording the correspondence.
 
 
 > R2: Emphasis on not appealing to implementation details 
@@ -193,7 +402,7 @@ expected when we drafted this.  There is a checker.
 
 Four layers in dependency-free C++17 -- the path domain, the types and
 environments, the type rules as transfer functions, and a statement IR with a
-forward dataflow over it -- passing 86 unit and property checks, the latter
+forward dataflow over it -- passing 93 unit and property checks, the latter
 comparing each abstract operation against the concrete semantics by
 enumeration.  On top of them a Clang front end translates a C function into the
 IR through the CFG, taking back edges from the dominator tree and refinements

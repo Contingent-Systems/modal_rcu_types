@@ -1,7 +1,7 @@
 (** * IrisGhost: ghost state for the RCU invariants.
 
     Milestone 3.  The first two milestones are deliberately Iris-free:
-    [WellFormed.v] states the eighteen invariants as pure propositions over a
+    [WellFormed.v] states the nineteen invariants as pure propositions over a
     plain record, and [HeapPaths.v] proves the reachability and heap-domain
     facts the atomic actions need.  Nothing in either mentions a logic.
 
@@ -90,7 +90,7 @@ Global Instance obs_countable : Countable obs :=
 Definition to_LState
     (m : MState)
     (O : gmap Loc (gset obs))
-    (U : gset (Var * TID))
+    (U : Var -> TID -> Prop)
     (T : gset TID)
     (F : gmap Loc (gset TID)) : LState :=
   {| ms    := m;
@@ -98,7 +98,7 @@ Definition to_LState
                           | Some s => ob ∈ s
                           | None   => False
                           end;
-     undf  := fun x t => (x, t) ∈ U;
+     undf  := U;
      thrd  := fun t => t ∈ T;
      flist := fun o => match F !! o with
                        | Some s => Some (fun t => t ∈ s)
@@ -302,7 +302,7 @@ Section invariant.
   Context (phys : MState -> iProp Σ).
 
   Definition rcu_inv_inner (γo γf : gname) : iProp Σ :=
-    ∃ (m : MState) (O : gmap Loc (gset obs)) (U : gset (Var * TID))
+    ∃ (m : MState) (O : gmap Loc (gset obs)) (U : Var -> TID -> Prop)
       (T : gset TID) (F : gmap Loc (gset TID)),
       phys m
       ∗ obs_auth γo O
@@ -342,7 +342,7 @@ Definition O_initial : gmap Loc (gset obs) := {[ 0 := {[ Oroot ]} ]}.
 Definition T_initial : gset TID := {[ 0 ]}.
 
 Definition initial_ghost : LState :=
-  to_LState (ms initial) O_initial ∅ T_initial ∅.
+  to_LState (ms initial) O_initial (fun _ _ => False) T_initial ∅.
 
 (** The bridge is faithful at the initial state.  These are stated
     componentwise rather than as [initial_ghost = initial]: the two records
@@ -370,7 +370,7 @@ Proof.
 Qed.
 
 Lemma initial_ghost_undf x t : undf initial_ghost x t <-> undf initial x t.
-Proof. simpl. split; [by intros ?%elem_of_empty | done]. Qed.
+Proof. simpl. tauto. Qed.
 
 Lemma initial_ghost_ms : ms initial_ghost = ms initial.
 Proof. reflexivity. Qed.
@@ -416,16 +416,46 @@ Print Assumptions initial_ghost_obsv.
 Definition ObsMap := gmap (Loc * TID) (gset obs).
 
 Definition to_LState_t
-    (m : MState) (Og : ObsMap) (U : gset (Var * TID))
+    (m : MState) (Og : ObsMap) (U : Var -> TID -> Prop)
     (T : gset TID) (F : gmap Loc (gset TID)) : LState :=
   {| ms    := m;
      obsv  := fun o ob => exists t s, Og !! (o, t) = Some s /\ ob ∈ s;
-     undf  := fun x t => (x, t) ∈ U;
+     undf  := U;
      thrd  := fun t => t ∈ T;
      flist := fun o => match F !! o with
                        | Some s => Some (fun t => t ∈ s)
                        | None   => None
                        end |}.
+
+(** ** Why scope is a predicate and not a finite set
+
+    [U] was a [gset (Var * TID)] -- the pairs that are out of scope -- and that
+    was wrong in a way only the departure rules could show.  ReadEnd and
+    WriteEnd require *every* variable of the leaving thread to go out of scope,
+    and with [Var = nat] no finite set contains every variable of a thread.  So
+    the hypothesis was unsatisfiable, and the two action theorems that carried
+    it proved nothing at all.
+
+    The witness is below.  It is a defect of the bridge rather than of the type
+    system, but it is exactly the kind a mechanization is for: the theorems
+    looked fine, were proved honestly, and were empty.  Flipping the polarity
+    does not help -- the *initial* state has nothing out of scope, which under
+    the flip needs the set to be everything -- so scope is a predicate.
+
+    [U] carries no ghost authority; the invariant only quantifies over it.  The
+    change therefore costs nothing but the annotation. *)
+
+Lemma no_finite_scope_set (U : gset (Var * TID)) (t : TID) :
+  ~ (forall x : Var, (x, t) ∈ U).
+Proof.
+  intros H.
+  assert (Hin : fresh (set_map fst U : gset Var) ∈ (set_map fst U : gset Var)).
+  { apply elem_of_map. exists (fresh (set_map fst U : gset Var), t).
+    split; [reflexivity | exact (H _)]. }
+  exact (is_fresh (set_map fst U : gset Var) Hin).
+Qed.
+
+Print Assumptions no_finite_scope_set.
 
 Lemma to_LState_t_obs Og m U T F o t s ob :
   Og !! (o, t) = Some s -> ob ∈ s ->

@@ -31,7 +31,7 @@
 \label{sec:inv-prelim}
 
 Four notational problems recur across the original figures and are fixed once
-here rather than eighteen times below.
+here rather than nineteen times below.
 
 \paragraph{(C0) Every observation carries the observing thread.}
 The original grammar tags only \itr:
@@ -80,14 +80,14 @@ state component.
 \subsection{The invariants}
 \label{sec:inv-list}
 
-$\textsf{WellFormed}(\sigma,O,U,T,F)$ is the conjunction of the eighteen
+$\textsf{WellFormed}(\sigma,O,U,T,F)$ is the conjunction of the nineteen
 predicates below.  Each carries a severity: \textsc{critical} means the original
 is vacuous, unprovable, unstatable, or too weak to support the use the proofs
 make of it, so a proof case discharged against it establishes nothing;
 \textsc{major} means ill-formed but with recoverable intent; \textsc{minor}
 means a typo, an unused binder, or a caption that contradicts its formula.
 
-All eighteen are mechanized in \texttt{rocq/WellFormed.v}, which also carries
+All nineteen are mechanized in \texttt{rocq/WellFormed.v}, which also carries
 machine-checked proofs of the \textsc{critical} claims and a satisfiability
 witness (\S\ref{sec:inv-impact}).  That development is axiom-free; both
 \texttt{Print Assumptions} queries report \emph{closed under the global
@@ -383,7 +383,35 @@ produced only by the two writer rules and carried to \frbl{} by
 the action lemma does not close over it.  Guarded by the lock, so it says
 nothing about a state with no writer --- the weakest form that does the job.
 
-\paragraph{18.\ UNQR --- Unique Reachability.\hfill\textsc{critical}}
+\paragraph{18.\ WITR --- Iterators are the Writer's or a Reader's.\hfill\textsc{critical}}
+\[
+\textbf{WITR} \defn \forall o,\mathit{tid} \ldotp
+  \itr\,\mathit{tid} \in O(o) \implies
+  \sigma.l = \mathit{tid} \lor \mathit{tid} \in \sigma.R
+\]
+\emph{New, and the one that completes the family.}  Each kind of observation
+constrains who may hold it.  \textbf{WF} does it for \frsh{}, \textbf{WUNLK}
+for \unlk{} and \frbl{}, and this for \itr{}; the published set had exactly one
+of the three.
+
+It is \textsc{SyncStart}'s.  \textsc{SyncStart} puts every unlinked node on the
+free list with the current readers as its bounding set, and \textbf{IFL} then
+demands that every thread observing such a node as an \itr{} is in that set ---
+it is the obligation that a grace period waits for everyone who could still be
+looking.  \textbf{WULK} rules out the writer.  Nothing ruled out a thread that
+is neither the writer nor a current reader, and against such a thread the grace
+period would complete while a live reference remained, which is precisely the
+accident the structure exists to prevent.
+
+So of the three this is the one whose absence is not merely a failure of
+locality.  \textbf{FNR}'s missing conjunct and \textbf{WUNLK} hold of every
+reachable state and fail only to be provable locally; this one is what makes
+reclamation safe, and it was unstated.  It is nonetheless as cheap as the other
+two: every action preserves it, an \itr{} being granted only to the writer by
+the two linking rules and only to a reader by a read, and \textsc{ReadEnd}
+dropping a departing thread's observations in the same step as its readership.
+
+\paragraph{19.\ UNQR --- Unique Reachability.\hfill\textsc{critical}}
 \[
 \textbf{UNQR} \defn \forall \rho,\rho',o \ldotp
   h^{*}(\sigma.rt,\rho) = \lfloor o \rfloor \land h^{*}(\sigma.rt,\rho') = \lfloor o \rfloor
@@ -509,7 +537,7 @@ The semantic changes above invalidate specific cases in Section
   site rather than assuming.
 \end{enumerate}
 
-\paragraph{Machine-checked status.}  Eight of the defects above are mechanized
+\paragraph{Machine-checked status.}  Nine of the defects above are mechanized
 in \texttt{rocq/WellFormed.v}: \texttt{UNQR\_orig\_vacuous} and
 \texttt{UNQR\_orig\_admits\_non\_trees};
 \texttt{RITR\_orig\_contradicts\_fresh};
@@ -518,27 +546,103 @@ in \texttt{rocq/WellFormed.v}: \texttt{UNQR\_orig\_vacuous} and
 together with its repair \texttt{ULKR\_closed\_reaches};
 \texttt{HD\_not\_preserved\_by\_free}; and
 \texttt{FNR\_pub\_admits\_freeable\_fresh}, which exhibits a state satisfying
-the other seventeen invariants and the published \textbf{FNR} in which a node
+the other eighteen invariants and the published \textbf{FNR} in which a node
 is both \frsh{} and \frbl{} --- with \texttt{link\_freeable\_breaks\_ULKR} in
 \texttt{rocq/Actions.v} showing that linking such a node breaks \textbf{ULKR},
 and \texttt{link\_fresh\_ULKR} showing that the repaired \textbf{FNR} closes
 the case; and
 \texttt{unlinked\_observations\_need\_not\_be\_the\_writers}, which does the same
-for \textbf{WUNLK} --- a state satisfying the other seventeen in which a node is
+for \textbf{WUNLK} --- a state satisfying the other eighteen in which a node is
 unlinked by a thread that is not the one holding the lock, so that the
-\textbf{ULKR} case of the two unlinking rules cannot close.  A ninth,
+\textbf{ULKR} case of the two unlinking rules cannot close; and
+\texttt{iterators\_need\_not\_be\_active}, the same for \textbf{WITR} --- a state
+satisfying the other eighteen in which a node is observed as an iterator by a
+thread that is neither the writer nor a reader, against which
+\textsc{SyncStart} would open a grace period that does not wait for it.  A
+tenth,
 \texttt{FPI\_not\_preserved\_by\_replace}, is a defect in
 \textsc{T-Replace} and \textsc{T-UnlinkH} rather than in an invariant
-statement; both rules now carry the repairing premise.  The remaining
+statement; both rules now carry the repairing premise.  An eleventh is
+\S\ref{sec:defect-fld} below; a twelfth --- that allocation makes the heap
+infinite, so that no points-to assertion exists over it --- is
+\S\ref{sec:inv-mech}, where attempting the last step found it; and a
+thirteenth and fourteenth are \S\ref{sec:defect-obs}, found the same way one
+step further on.  The remaining
 \textsc{major} and \textsc{minor} items are restatements whose defects are
 syntactic (capture, scope, unused binders) and are visible without proof.
 
-Five of the nine were found by attempting a proof rather than by reading ---
+\paragraph{Defect 11: the free list's domain is unconstrained.}
+\label{sec:defect-fld}
+Three invariants mention the free list --- \textbf{IFL}, \textbf{FLR} and
+\textbf{RINFL} --- and all three are conditional on an entry existing.  None of
+them says where entries may exist.  Nothing in the nineteen therefore rules out
+an entry at a node that is not detached, not reachable, and not even in the
+heap.
+
+This is not a curiosity, and it was found the way the other six were: by trying
+to prove something.  \textsc{SyncStart}'s specification says the grace period
+covers \emph{exactly} the detached nodes, and re-establishing ``exactly''
+requires knowing that the entries already present were at detached nodes too.
+It is the one hypothesis of the snapshot step that no invariant supplies.
+\texttt{free\_list\_domain\_is\_unconstrained} is the witness: a state
+satisfying all nineteen with a free-list entry at a location that carries no
+observations at all.
+
+The repair is a twentieth conjunct,
+\[
+  \textbf{FLD} \quad\equiv\quad
+  F(o) \text{ defined} \;\Rightarrow\; \exists t \ldotp
+  o \mapsto \unlk{}_t \;\vee\; o \mapsto \frbl{}_t,
+\]
+which \textsc{SyncStart} establishes and which every other action either
+preserves trivially or --- \textsc{Free} and \textsc{ReadEnd} --- preserves
+because it only shrinks the free list.  It is stated in the development and used
+as an explicit hypothesis where it is needed, rather than folded into \textsf{WellFormed}:
+adding a conjunct means reproving fifteen actions, and that is a change to make
+deliberately rather than in passing.
+
+\paragraph{Defects 13 and 14: two observations that constrain nobody.}
+\label{sec:defect-obs}
+Found the same way as \textbf{FLD}, one rule further along.
+\textsc{T-LinkF-Null} publishes a fresh node, and to do so it must know that no
+thread other than the writer observes that node.  Two invariants ought to supply
+that between them, and neither does.
+
+The first is that \rt{} marks the root.  Nothing says so.  \rt{} is the
+anonymous observation --- it carries no thread --- and the nineteen constrain
+where every \emph{tagged} observation may sit while saying nothing about this
+one, so a well-formed state may record the root observation at a location that
+is not the root.  That also weakens \textbf{UNQRT-b}, whose conclusion is
+``iterator or root'' and which is read as ``every reachable node is the
+writer's, except the root itself''.  Under the published set the exception is
+not tied to the root at all.
+
+The second is that a \frsh{} observation belongs to the lock holder.
+\textbf{WFresh} is stated with a stack reference in its hypothesis --- a thread
+that \emph{names} a fresh node holds the lock --- so a fresh observation whose
+variable has left scope constrains nobody.  That makes \textbf{WFresh} weaker
+than its own caption, and weaker than \textbf{WUNLK} and \textbf{WITR}, the two
+this work adds, which are the same statement for the other two kinds of
+observation.  The family is right; the member the published set already had was
+the weak one.
+
+One witness does for both (\texttt{root\_observation\_is\_unpinned} and
+\texttt{fresh\_observations\_need\_not\_be\_the\_writers}): a state satisfying
+all nineteen in which the root observation sits at a non-root location and a
+fresh observation belongs to a thread that does not hold the lock.  The repairs
+are the two obvious conjuncts.  Only the second is needed by any proof here, so
+only it is carried; the first is reported, because a reader of
+\textbf{UNQRT-b} will assume it.
+
+Ten of the fourteen were found by attempting a proof rather than by reading ---
 \textbf{ULKR}'s failure to chain, \textbf{FPI}'s failure to survive unlinking,
 \textbf{HD}'s failure to survive \texttt{Free}, \textbf{FNR}'s failure to
-support \textbf{ULKR} under linking, and \textbf{WUNLK}'s absence, which is the
-same case one step further along --- and all five are cases the report calls
-trivial.  That is now a pattern rather than a coincidence, and it is the
+support \textbf{ULKR} under linking, \textbf{WUNLK}'s absence, which is the same case
+one step further along, and \textbf{WITR}'s, which is \textsc{SyncStart}'s, \textbf{FLD}'s, which is
+\textsc{SyncStart}'s other one, the infinite heap, which is what choosing a
+physical-state predicate ran into, and the two unconstrained observations, which
+are what the last linking rule ran into --- and seven of the ten are cases the
+report calls trivial.  That is now a pattern rather than a coincidence, and it is the
 strongest thing the mechanization has to say about the original argument.
 
 The corrected invariants are also satisfiable
@@ -773,7 +877,7 @@ already supply --- with the one exception that produced the \textbf{FNR} repair
 above.  Unlinking and replacement preserve \textbf{FPI}.  The \textbf{FPI} case
 is the one whose failure forced the repair to \textsc{T-Replace} and
 \textsc{T-UnlinkH}, and the
-repaired premise is used exactly once in it, at the step that would otherwise
+repaired premise is used exactly once in that proof, at the step that would otherwise
 fail --- so that defect is closed from both ends, by a counterexample against the
 published rule and a proof for the repaired one.  The argument does not depend on
 which rule caused the write, so it is proved once and both rules are instances,
@@ -797,13 +901,13 @@ a time but \textbf{WellFormed} itself, as \texttt{free\_preserves\_WellFormed}.
 It is the right one to do first, because it needs no type denotations --- it is
 a state transition rather than a typing rule --- and because it is the action
 the report handled worst.  The result is lopsided in a way worth recording.
-Seventeen of the eighteen fall out of two one-line facts, that freeing removes
+Eighteen of the nineteen fall out of two one-line facts, that freeing removes
 edges and therefore removes paths: every invariant with an \textbf{Edge} or
 \textbf{Reaches} hypothesis gets \emph{weaker}, and the nine that do not mention
-the heap are untouched outright.  \textbf{HD} is the only one whose conclusion
-is about the heap, and it is the only one with any content --- and it needs the
+the heap are untouched outright.  \textbf{HD} is the only one that asserts
+something must be \emph{in} the heap, and the only one with any content --- and it needs the
 corrected statement, since under the published \textbf{HD} the theorem is false.
-So the report's verdict on the case was right about seventeen eighteenths of it
+So the report's verdict on the case was right about eighteen nineteenths of it
 and wrong about the part that mattered, which is a fair summary of what
 "trivial" was doing throughout.
 
@@ -815,7 +919,7 @@ does to observations rather than as a map operation, which is the choice
 \textsc{ReadEnd} already makes and for the same reason: two properties suffice,
 and they are the two directions.  Nothing appears that was not there, except
 \frbl{} arriving from \unlk{}; and everything survives, \unlk{} as \frbl{}.
-Every one of the eighteen cases is one of those two applied once.
+Every one of the nineteen cases is one of those two applied once.
 
 Two have content.  RINFL is where the empty bounding set is spent: it says
 every thread in a free-list entry bounds a reclamation, and afterwards there
@@ -870,18 +974,75 @@ With those, the step is three properties of the observations, the same shape
 \emph{reader's}: \textbf{RITR} then says the departing thread held no
 detaching observation, so nothing any detachment invariant depends on is among
 what is dropped.  Without \textbf{RITR} the action is unsound, and this is the
-only place in the development where it is load-bearing --- which is worth
-recording, given that \textbf{RITR} as published is unsatisfiable in exactly
-the states where it is needed.  \textbf{WNR} likewise earns its keep here and
-only here: the writer is not the departing thread, so its \itr{} observations
-are among those that survive, which is what \textbf{FPI} and
-\textbf{UNQRT}$_b$ need.
+only place in the development where \textbf{RITR} is needed for anything but
+its own preservation --- which is worth recording, given that \textbf{RITR} as
+published is unsatisfiable in exactly the states where it is needed.
+\textbf{WNR} is needed here too: the writer is not the departing thread, so its
+\itr{} observations are among those that survive, which is what \textbf{FPI}
+and \textbf{UNQRT}$_b$ need.  Unlike \textbf{RITR} it is needed in several
+places besides, being what says the writer is not a reader --- the \textbf{RITR}
+case of \textsc{T-UnlinkH}, \textsc{T-Replace} and \textsc{T-Alloc}, and the
+\textbf{WULK} case of a reader's acquisition, all turn on it.
 
-Finally the three heap mutations, so every atomic action of the system now
-preserves \textbf{WellFormed} as a step.  They are harder than the other three,
+Finally the three heap mutations, and then every remaining action:
+\textsc{ReadBegin}, the acquisition of a reference inside a read section,
+\textsc{SyncStart}, \textsc{T-Alloc}, \textsc{T-WriteFH}, the three rules that
+bind a writer's variable --- \textsc{T-Root}, \textsc{T-ReadS} and
+\textsc{T-ReadH}, which are one lemma, differing only in where the node comes
+from and not at all in what they do to the state --- \textsc{T-LinkF-Null}, and
+\textsc{WriteBegin} and \textsc{WriteEnd}.  Fifteen theorems for the whole
+system: the six RCU primitives and every type rule that changes the state, with
+the three binding rules sharing one and a reader's read composing two.  The
+structural and subtyping rules change no state and carry no action lemma.
+
+\textsc{T-LinkF-Null} is the variant of \textsc{T-Insert} in which the fresh
+node's \RCU{} fields are all null --- appending at the end of a list, or
+inserting a leaf.  The paper mentions it and does not show it, and it is not an
+instance of \textsc{T-Insert}: that rule's reachability argument requires the
+fresh node to have exactly one outgoing edge, and here it has none.  It is the
+easier of the two in exactly the place where \textsc{T-Insert} was hard, the OW
+and HD cases that had to be re-discharged there being vacuous when the node is
+the source of no edge.
+
+\textsc{SyncStart} is where \textbf{WITR} is spent and the reason it exists, and
+\textsc{T-Alloc} is Free's opposite: Free is the only action that removes a
+location and so the only one that can strand an edge, while allocation extends
+the domain and can strand nothing.  It is also where the fresh-node conditions
+\textsc{T-Insert} and \textsc{T-Replace} consume --- nothing points at the node,
+no other reference names it, its fields are null --- are established rather than
+assumed.
+
+\textsc{WriteBegin} is the one that does not go through as written, and it is
+worth stating separately because the obstacle is an invariant rather than a
+proof.  \textsc{RCU-WBegin} takes the lock and changes nothing else.  But
+\textbf{UNQRT-b} says that while a writer holds the lock every reachable node
+carries \emph{that writer's} \itr{} observation, and before the step there is no
+writer, so the invariant said nothing.  A thread that has just taken the lock
+holds no references, so on any structure larger than the bare root
+\textbf{UNQRT-b} is false immediately after a lock acquire that only takes the
+lock.
+
+The step therefore has to grant the incoming writer an \itr{} observation on
+every reachable node.  That is harmless in itself --- the observation map is
+ghost state, and a writer inside its critical section may indeed reach anything
+from the root, so recording it asserts nothing new about the heap --- but it is
+not nothing, and neither the semantics nor the invariant discussion says it
+happens.  Whether the right repair is that grant or a weaker \textbf{UNQRT-b} is
+a question about the intended reading of the observation map, and we do not
+settle it here.  What the mechanization establishes is that one of the two is
+needed: the invariant as published and the action as published cannot both
+stand.  It is the only place in the development where we record an obligation
+without choosing how to discharge it.
+
+\textsc{WriteEnd} is the counterpart, and unremarkable beside it: the departing
+writer drops its observations and its variables in the same step as the lock,
+exactly as \textsc{ReadEnd} does, and \textsc{ToRCUWrite}'s condition that
+nothing is left \unlk{} or \frbl{} --- and, by the same argument, nothing left
+\frsh{} --- makes most of the nineteen vacuous rather than merely easier.  That
+is the sense in which a write critical section is a closed unit.  They are harder than the other three,
 for a reason that appears only when the action is attempted in full: each
 writes a field \emph{and} changes the writer's observations, and for
-\textsc{Free}, \textsc{SyncStop} and \textsc{ReadEnd} the ten heap-free
+\textsc{Free}, \textsc{SyncStop} and \textsc{ReadEnd} the eleven heap-free
 invariants were identities precisely because nothing touched the observation
 map.  Here they are not.  \textsc{T-Insert} promotes a node from \frsh{} to
 \itr{}, \textsc{T-UnlinkH} demotes one from \itr{} to \unlk{}, and
@@ -904,16 +1065,17 @@ Two earlier repairs are spent in these three.  The premise excluding a
 \textsf{rcuFresh} predecessor of the node being unlinked --- the repair
 \textbf{FPI} forced --- is used twice in each unlinking rule, once in
 \textbf{ULKR} and once in \textbf{FPI}.  \textbf{FNR}'s third conjunct is used
-again in the \textbf{WULK} case of \textsc{T-Insert} and \textsc{T-Replace},
+again in the \textbf{WULK} case of each of the three rules that link a fresh
+node --- \textsc{T-Insert}, \textsc{T-Replace} and \textsc{T-LinkF-Null} ---
 where the node just promoted to \itr{} has to be shown to carry neither \unlk{}
-nor \frbl{}.  And \textbf{WUNLK} is the one thing the assembled cases needed
-that the published set did not have.
+nor \frbl{}.  And \textbf{WUNLK} is the one thing these three needed that the
+published set did not have.
 
-One structural observation came out of doing the breadth.  Ten of the eighteen
+One structural observation came out of doing the breadth.  Eleven of the nineteen
 invariants --- \textbf{RWOW}, \textbf{AWRT}, \textbf{IFL}, \textbf{WULK},
 \textbf{WF}, \textbf{FNR}, \textbf{RITR}, \textbf{RINFL}, \textbf{WNR},
-\textbf{WUNLK} --- do not mention the heap, so a field write transfers them
-definitionally and their cases are the identity.  The eight that do --- \textbf{OW}, \textbf{ULKR},
+\textbf{WUNLK}, \textbf{WITR} --- do not mention the heap, so a field write
+transfers them definitionally and their cases are the identity.  The eight that do --- \textbf{OW}, \textbf{ULKR},
 \textbf{FLR}, \textbf{FPI}, \textbf{FR}, \textbf{HD} and the two halves of
 \textbf{UNQRT} --- each needed a real argument, and three of them turned up
 defects.  The split falls exactly on that line.  It is worth stating because the
@@ -934,13 +1096,14 @@ Reducing the six that way is what turned a proof case into a proposition, and
 it is the reason the \textbf{FNR} gap became visible: \textbf{ULKR}'s
 obligation is a formula about $o_n$ that has to be discharged from the
 invariants, and once written down it plainly could not be.  The defect it
-exposed is not in any of the eight --- \textbf{FNR} is one of the nine that a
+exposed is not in any of the eight --- \textbf{FNR} is one of the eleven that a
 write transfers definitionally --- which is the point.  An invariant can be
 heap-free and still be the thing a heap obligation needs.
 
 \textbf{UNQRT}$_b$ is worth a paragraph of its own, because it is the only
-invariant that couples the heap change to the observation change --- each rule updates
-both, and \textbf{UNQRT}$_b$ is where the two have to agree --- and because
+invariant that couples \emph{reachability} with the observation map --- \textbf{OW}
+and \textbf{HD} couple observations with individual edges, which a write changes
+locally, whereas \textbf{UNQRT}$_b$ asks about every path from the root --- and because
 doing it exposes an asymmetry the report's case structure does not have.
 \textsc{T-Insert} is easy: nothing loses an observation, and everything
 reachable afterwards was either reachable before or is the inserted node, which
@@ -955,5 +1118,353 @@ path-length argument as \texttt{UNQR\_no\_back}; their proofs differ only
 because the replacement characterisation, unlike the unlinking one, rewrites
 paths through the written edge rather than excluding them.
 
-What remains is the Hoare triples themselves, which wait on a choice of heap
-assertion for the object language rather than on anything here.
+What remains is worth stating precisely, because the shape of these theorems
+invites overreading them.  Each says that an action preserves
+\textbf{WellFormed}: the global invariants survive every atomic step.  Axiom
+soundness asks for more.  In the form the soundness chapter states it,
+\[\forall m \ldotp \llbracket \alpha \rrbracket (\lfloor \llbracket \Gamma_{1}
+\rrbracket_{tid} * \{m\} \rfloor) \subseteq \lfloor \llbracket \Gamma_{2}
+\rrbracket_{tid} * \mathcal{R}(\{m\}) \rfloor\]
+the post-state must satisfy the denotation of the \emph{post-type environment},
+not merely the invariants --- that after \textsc{T-Replace} the fresh reference
+really is an \textsf{rcuItr} at the replaced node's path and the replaced one
+really is \textsf{unlinked}, with their field maps as the rule records them.
+
+That is now proved, for every component of every writer-side rule's output
+environment: fifteen theorems.  \texttt{alloc\_post\_env} gives
+$x : \textsf{rcuFresh}\,\N_\emptyset$ and \texttt{free\_post\_env} gives
+$x : \textsf{undef}$; \texttt{bind\_post\_env} gives $y :
+\textsf{rcuItr}\,\rho\,\N$ for \textsc{T-Root}, \textsc{T-ReadS} and
+\textsc{T-ReadH}; \texttt{write\_fresh\_post\_env} gives the fresh node's
+extended field map.  Each of the four heap mutations has all of its components:
+the node retyped, the \emph{parent} with the written field recorded in its map,
+and --- where the write moves a node --- the third reference whose path changes.
+\textsc{T-Insert} lengthens the displaced node's path by one field
+(\texttt{insert\_post\_env\_displaced}) and \textsc{T-UnlinkH} shortens the
+promoted node's by one (\texttt{unlink\_post\_env\_promoted}), which are the two
+places where the type system's paths and the heap's have to be shown to agree
+after the structure moves.
+
+Two of those cases need an invariant rather than a premise.  The parent's map,
+in \textsc{T-UnlinkH} and \textsc{T-Replace}, may not already record a field
+pointing at the node the rule unlinks, and it is OW that rules this out --- the
+parent and the unlinked node are both the writer's iterators, hence neither
+detached, so a second edge between them is impossible.
+
+What is \emph{not} proved is the read-side.  A reader's \textsf{rcuItr} carries
+no path and no field map, and that denotation is not in this development at
+all, so the reader's instances of \textsc{T-ReadS} and \textsc{T-ReadH} have
+their invariant half and not their type half.  Writing it down is a small piece
+of work that has to precede the proof rather than being part of it.
+
+\paragraph{Framing, and an eleventh defect.}  The Views framework requires the
+views to form a partial commutative monoid and the validity predicate to be
+closed under the operation; framing is unsound without it.  Section
+\ref{sec:soundness} gives the operation --- Figure \ref{fig:comp} --- and asserts
+the closure: \emph{WellFormed states are closed under both composition (with
+another WellFormed state) and interference}.
+
+That assertion does not hold, and the reason is structural rather than
+incidental: the heap component of the composition is not separating.
+$\bullet_h$ is defined at \emph{every} location, taking the common value where
+the two views agree and \textsf{undef} where they differ.  Two views may
+therefore each hold one edge into a node and compose to a view holding both,
+which is exactly what \textbf{OW} denies.
+\texttt{composition\_does\_not\_preserve\_WellFormed} in
+\texttt{rocq/Compose.v} is the witness: two well-formed views, heaps agreeing
+wherever both are defined, no shared stack, no shared free list, the same lock,
+root, readers and bounding threads --- every side condition the figure attaches
+is met --- whose composition fails \textbf{OW}.
+
+\paragraph{The repair.}  The counterexample says the operation is wrong, not
+that framing is impossible, and \texttt{WellFormed\_comp} gives a composition
+under which \textbf{WellFormed} is closed.  Two changes, and the second is the
+one worth reporting.
+
+First, the heap is \emph{shared} rather than split: composable views agree on
+it.  That is the right reading for this structure --- every thread reads the
+whole of it, and a separating heap would leave a reader unable to see the path
+it is traversing --- and it disposes of the counterexample, since agreeing views
+cannot between them hold two edges into one node unless one of them already
+did.
+
+That alone is not enough, and the five invariants it leaves broken have a common
+shape.  \textbf{IFL} relates an observation to a free-list entry; \textbf{WULK}
+and \textbf{FNR} relate two observations; \textbf{FR} and \textbf{WF} relate a
+stack binding to an observation.  Each is a relation between two pieces of
+\emph{per-thread} state about one location, and composition is precisely the
+operation that can put those two pieces in different views.  The other fourteen
+either relate the shared heap to per-thread state or are monotone in the
+observations, and they survive untouched.  So the split is not arbitrary: an
+invariant is closed under composition exactly when it does not constrain two
+pieces of split state at once.
+
+The second change follows from that reading.  A location's auxiliary state may
+not be split --- observations and free-list entry live in one view --- and a
+view's stack names only locations it owns.  With those, closure holds for all
+nineteen.  They are stronger conditions than the published figure attaches, and
+they are what it is missing.
+
+Finally \texttt{repaired\_composition\_is\_not\_vacuous}, because a composition
+defined on nothing would make the closure theorem true and useless --- the
+failure mode \textbf{RITR} exhibits, one floor up.
+
+One detail confirms the reading.  The report's own proofs of the atomic actions
+state their composition hypotheses as $\textsf{WellFormed}(\sigma, O_1, U_1,
+T_1, F_1)$ and $\textsf{WellFormed}(\sigma, O_2, U_2, T_2, F_2)$ --- the
+\emph{same} $\sigma$ for both views.  So the proofs already treat the machine
+state as shared, and it is the figure that is out of step with them.  The repair
+is not a design change; it is what the rest of the development was assuming.
+
+\paragraph{Interference: a reading, not a defect.}  The same sentence asserts
+closure under interference, and it is worth saying why that one is a different
+kind of claim.  Composition is declared as a function $\bullet : \mathcal{M}
+\rightarrow \mathcal{M} \rightarrow \mathcal{M}$, so landing in $\mathcal{M}$ is
+an obligation and the counterexample above discharges it negatively.
+Interference is declared as a relation $\mathcal{R} \subseteq \mathcal{M} \times
+\mathcal{M}$, so it relates well-formed states to well-formed states by
+construction, and the parenthetical restates the typing rather than adding to
+it.
+
+The formula in Figure \ref{fig:comp} does not on its own entail that, and a
+reader mechanizing from the figure will get it wrong ---
+\texttt{interference\_does\_not\_preserve\_WellFormed} shows a pair the formula
+relates in which the successor is not well formed, because
+$\mathcal{R}_0$ constrains the successor heap only by requiring that nodes
+already observed as iterators or as the root stay allocated.  So $\mathcal{R}_0$
+has to be read as intersected with $\mathcal{M} \times \mathcal{M}$.  That is a
+reading, and we record it as one.
+
+What the typing does \emph{not} settle is the direction that matters for
+framing, which is whether $\mathcal{R}$ is permissive \emph{enough}: the
+obligation for each action requires the frame to absorb that action's effect,
+so every action's guarantee must be contained in the rely.  Nothing above
+establishes that, and it is where the remaining risk sits.
+
+\paragraph{Where framing should go instead.}  Both difficulties have one
+source: every view carries a copy of the whole heap.  With a single writer that
+is awkward; with several it is untenable, since every write must then be
+absorbed by every frame and the rely degenerates to ``some other thread did
+something that preserved the invariants''.  Repairing the operator and the
+relation buys a single-writer proof whose structure does not survive the
+generalisation.
+
+\texttt{rocq/Triples.v} tests the alternative, which is the one
+\texttt{IrisGhost.v} was already built for: put the heap in the invariant rather
+than in the views.  Composition is then on the ghost state alone --- observations
+and the free list --- which is genuinely separating, so the counterexample
+cannot be written down; framing is Iris framing, with no bespoke monoid and no
+hand-rolled interference relation; and the atomic-action lemmas become the
+obligation to re-establish the invariant before closing it.
+
+That last point is what the experiment checks, and it holds.  \textsc{Free}
+restated against the invariant is \texttt{free\_update}, and its entire pure
+content is \texttt{free\_preserves\_WellFormed} applied once: the action lemma
+plugs in unchanged.  One thing was missing from the ghost layer and had to be
+added, \texttt{fl\_delete}, which drops a free-list entry --- the operation
+\textsc{Free} needs and which exclusive control of the entry is what licenses.
+Framing is not mentioned in the proof because it is not needed there.
+
+\textsc{T-UnlinkH} is the second, and the one that matters, because it changes
+the observations as well as the heap and because what it changes is \emph{one
+thread's} view of one location: the writer's iterator on the node being
+unlinked, while a reader's iterator on that same node must survive untouched.
+\texttt{unlink\_update} discharges it, and again the pure content is the action
+lemma applied once.  The per-thread ghost state earns its place here rather than
+in a design note --- the revocation is an update at the key $(z, l)$, and a
+reader's observation at $(z, t)$ is simply a different key.
+
+It needed two things the \textsc{Free} case did not, and both are worth
+recording.  The invariant has to carry \textbf{ObsWF}, that an entry at $(o,t)$
+records only observations of $t$ or the anonymous \rt{}; without it, revoking
+the writer's entry would not rule out a writer-tagged iterator sitting in some
+other thread's entry.  And the writer must hold \emph{exactly} its iterator
+observation on the node --- the singleton fragment, not merely some fragment ---
+which is what makes the revocation legal and what discharges the requirement
+that every other observation survives.
+
+Ten of the fifteen went through in that form: \textsc{Free},
+\textsc{T-UnlinkH}, \textsc{T-WriteFH}, \textsc{ReadBegin}, \textsc{T-Alloc},
+a reader's read, the three binding rules, \textsc{T-Insert},
+\textsc{T-LinkF-Null} and \textsc{T-Replace}.  In every one the pure content is
+the action lemma applied once and the ghost work is an update at a single key
+--- two, for \textsc{T-Replace}, which promotes and demotes in the same step.
+
+The other five change the ghost state at many keys at once.  \textsc{SyncStart}
+gives every detached node a free-list entry; \textsc{SyncStop} turns every
+\unlk{} observation into a \frbl{} one; \textsc{ReadEnd} and \textsc{WriteEnd}
+retire a thread's entries; \textsc{WriteBegin} grants the incoming writer an
+iterator on every reachable node.  The ghost layer had only single-key
+operations, so none of them could be stated at all.
+
+What they need turns out to be neither a new camera nor a new frame-preserving
+update.  A map-wide change is an iterated single-key change, and what makes it
+legal is owning every fragment it touches --- or the key being free, which is
+the other way to earn the right to write there.  \texttt{tobs\_upd\_list} and
+\texttt{fl\_upd\_list} are that induction, and it is four lines each.  Worth
+noticing is what they do \emph{not} ask: that the intermediate maps satisfy
+\textsf{WellFormed}.  The fold happens inside one opening of the invariant, so the
+half-finished states never appear in it and only the endpoint must be well
+formed.  That is what lets \textsc{SyncStop} recolour every observation in a
+single step.
+
+With those, all fifteen are in that form.  Three of the five are worth a
+sentence each.
+
+\textsc{SyncStop} reads like the one action that is not thread-local: every
+\unlk{} observation becomes \frbl{}, which sounds like a change to every
+thread's entries, and would mean a reader had to surrender its fragments for
+the writer to recolour them.  It is not.  \textbf{WUNLK} says only the writer
+holds a detaching observation and \textbf{ObsWF} says an entry records only its
+own thread's, so the keys whose contents actually change are exactly the
+writer's; everywhere else the recolouring is the identity and no update is
+needed.  \textbf{WUNLK} is one of the two invariants this development added,
+and this is where it pays for itself: without it the step is global.
+
+\textsc{ReadEnd} and \textsc{WriteEnd} retire a thread's observations, and
+``retire'' is deliberately not ``delete''.  The anonymous root observation may
+be filed under any thread --- \textbf{ObsWF} permits it, and the counterexample
+state \texttt{ce\_Og} is one where it is filed under a reader --- and the action
+lemmas require it to survive a departure.  So the retirement keeps \rt{} and
+drops the rest, which is what makes the survival condition provable instead of
+an extra assumption about where the root lives.
+
+\textsc{SyncStart} needed something the nineteen do not supply, which is
+\S\ref{sec:defect-fld}.
+
+\paragraph{A defect in the bridge, found the same way.}
+Restating \textsc{ReadEnd} and \textsc{WriteEnd} turned up something worse than
+a missing operation.  Both require \emph{every} variable of the departing
+thread to leave scope.  The bridge represented scope as a finite set of
+variable/thread pairs that are out of scope, and with variables drawn from an
+infinite supply no finite set contains every variable of a thread.  The
+hypothesis was unsatisfiable, so the two action theorems that carried it ---
+proved, checked, axiom-free --- established nothing whatever.
+
+\texttt{no\_finite\_scope\_set} is the witness.  Flipping the polarity does not
+help: the initial state has nothing out of scope, which under the flip needs the
+set to be everything.  Scope is now a predicate rather than a set, which costs
+nothing --- it carries no ghost authority, the invariant merely quantifies over
+it --- and makes both theorems mean what they say.
+
+This is a defect in the mechanization rather than in the type system, and it is
+reported here for that reason.  A vacuous theorem is the one failure mode a
+proof assistant does not catch: it type-checks, it closes under the global
+context, and it reports no axioms.  Only using the theorem finds it.
+
+\paragraph{Choosing \texttt{phys}, and the twelfth defect.}
+That leaves the physical state, which was a parameter and the physical step a
+hypothesis.  Choosing \texttt{phys} is what turns a step on the invariant's
+contents into a Hoare triple, and attempting it is what found the last defect.
+
+The standard choice is a heap of points-to assertions, so that a thread's right
+to write a field is a resource.  It was not available.  Allocation as published
+gives the new node \emph{every} field, and field names are drawn from an
+infinite supply, so one allocation puts infinitely many cells in the heap.  No
+finite map represents such a heap, so there is no \texttt{gen\_heap} over it and
+no camera of the usual shape either --- they are all built on finite maps.  And
+without points-to a rule whose premise mentions the heap cannot be stated
+outside the invariant at all, because the heap is bound inside it.
+\texttt{no\_finite\_heap\_map} is the proof, stated about the published
+definition, which the development retains under the name \texttt{alloc\_all} so
+that the defect can be written down.
+
+The repair is a class declaration: allocation takes the node's field list and
+initialises exactly those fields.  The heap is then finite if it starts finite,
+which \texttt{Represents\_upd}, \texttt{Represents\_free} and
+\texttt{Represents\_alloc} establish for the three heap-changing operations.
+The cost is small and local --- \texttt{alloc} gains an argument, heap-domain
+closure is unchanged, and the allocation case gains one hypothesis, that the
+field list holds every RCU field, which is what makes it a declaration rather
+than an arbitrary subset and what the fresh node's denotation needs.
+
+\paragraph{Eight closed triples: the whole write side.}
+With a finite heap there are points-to assertions, and with them eight actions
+close completely: \textsc{Free}, all five heap mutations, \textsc{T-Alloc}, and
+the binding rules --- which is to say the entire write side.  Each is stated
+with no parameters and nothing assumed about shared state: the invariant is
+opened, every premise is \emph{derived}, the step is taken, the invariant is
+closed.
+
+There are four kinds of premise, and each is discharged differently.
+\emph{Observational} ones come from the thread's own ghost fragment ---
+exclusive control of its entry at a node, and the agreement lemma turns that
+into ``the node is observed \frbl{}''.  The typing side condition becomes a
+resource.  \emph{Physical} ones come from points-to, the lock token and the
+stack fragment, none of which existed before the field list made the heap
+finite.  \emph{Path} premises come from \texttt{ppt}, the fold of points-to
+along a named path; what that derivation does \emph{not} use is the point ---
+no invariant, no uniqueness, no shape condition, because reachability by a
+\emph{named} path is a local fact about the cells on it.
+
+\emph{Negative} premises --- that something is absent --- cannot come from a
+fragment at all, since a fragment says what is and never what is not.  They come
+from invariants.  ``No free-list entry here'' is \textbf{FLD} with
+\textbf{WULK}, or with \textbf{FNR} for a fresh node.  ``This fresh node is
+unreachable'' is \textbf{FR} with the pinned root.  ``No other thread observes
+this node as fresh'' is the repaired \textbf{WFresh}.  ``Every detaching
+observation is the writer's'' is \textbf{WUNLK}.  ``This node is not detached''
+is \textbf{WULK} and \textbf{FNR} together.  That is a concrete answer to what
+the global invariants are \emph{for} in a separation-logic reading of this
+system: they are exactly the facts a resource cannot carry --- and three of the
+five just named are invariants this chapter adds.
+
+\paragraph{Two premises of no such kind.}
+The aliasing premise the unlinking rules carry --- no \frsh{} reference anywhere
+points at the node being unlinked --- is negative and is not an invariant.  What
+discharges it in the type system is the environment itself, whose denotation is
+an intersection over all of it.  Here the invariant records that the fresh nodes
+are \emph{enumerated}: every location observed \frsh{} lies in a set whose
+authority the invariant holds.  The thread holds the matching exclusive fragment
+and those nodes' cells, so the premise becomes
+$\forall q,g \ldotp \mathit{val}(q,g) \neq z$ --- about values the thread owns,
+mentioning no shared state, and exactly what the checker's
+\texttt{noFreshPointsAt} decides by walking the environment.  The quantifier
+does not disappear; it moves from the shared state, where nothing could
+discharge it, to the thread's own resources, where the type system already had
+it.  That is what translating a type environment into separation logic means.
+
+\textsc{T-Alloc}'s six premises say the new location is unallocated,
+unreferenced, pointed at by nothing, unobserved, unlisted and not the root.
+Those look as though they need an operational semantics --- something must
+\emph{produce} a fresh address --- and we expected to have to stop there.  They
+do not.  An allocator is a function of the state, and the state is now finite in
+every component, so the locations used for anything form a finite set and a
+location outside it satisfies all six at once.  The field-list repair pays
+twice: it made the heap representable, and it made the allocator constructible.
+
+\paragraph{What is left, and it is specific.}
+The read side and the protocol remain, and the two obstacles are particular
+rather than general.
+
+The reader's read cannot be stated at all, because the points-to assertion is
+exclusive: a reader must read cells the writer also holds, and exclusive
+ownership forbids it.  The repair is a fractional heap, which is standard and
+which changes the camera under everything above.  It is worth saying plainly
+that the write side needed no fractions and the read side cannot be done without
+them --- which is, after all, what read-copy-update is about.
+
+\textsc{WriteBegin} asks that the lock is free, and \textsc{SyncStop} that no
+thread is still bounding.  Those are the two points where the protocol
+\emph{tests} or \emph{waits on} shared state rather than acting on state it
+owns, and neither is a fact any thread can hold.  They are what an operational
+semantics is for --- a compare-and-set and a wait loop --- and they are the only
+two places in the system that need one.  \textsc{ReadBegin}, \textsc{ReadEnd},
+\textsc{SyncStart} and \textsc{WriteEnd} need reader-set and bounding-set
+tokens, which is the lock's construction done twice more.
+
+One last thing the field-list repair exposed, which we record rather than fix.
+The mutation rules are stated with ``every field is an RCU field'', which with a
+finite field list contradicts the class declaration the allocation rule needs,
+so the two cannot appear in one lemma.  The honest repair is to restrict
+No-Sharing's field conditions to declared fields.
+
+So the remainder is a fractional heap for the read side, and a compare-and-set
+and a wait loop for the two points where the protocol tests shared state.  The
+read-side denotation is now mechanized --- \texttt{D\_rcuItrR}, transcribed from
+the figure --- together with the reader's acquisition
+(\texttt{reader\_post\_env}).  That one is worth a caution: the denotation's
+bounding-thread conjunct asks that a bounding reader's node already carry a
+free-list entry, which the reader's own rule does not establish and which a
+bounding reader holding an iterator on a live node would violate.  It appears in
+the theorem as a hypothesis rather than as something proved.

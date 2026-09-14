@@ -194,9 +194,65 @@ static void premises() {
   }
 }
 
+// ===========================================================================
+// The class declaration
+// ===========================================================================
+//
+// The mechanization's twelfth defect was that allocation gave the new node
+// *every* field name, of which there are infinitely many, so the heap admitted
+// no finite representation and therefore no points-to assertion.  The repair is
+// a class declaration: allocation takes the node's field list.
+//
+// The checker never had the defect.  Fields are a bitset over numFields, and
+// rcuFields is that declaration -- which is why coversRCUFields can be decided
+// at all.  These checks record the correspondence: they are the decidable form
+// of the hypothesis the mechanized allocation rule now carries, that the field
+// list holds every RCU field, and of what goes wrong without it.
+
+static void classDeclaration() {
+  std::cout << "\n== the class declaration ==\n";
+
+  // A freshly allocated node starts with nothing written, so it covers no RCU
+  // field.  The denotation's "every RCU field outside dom(N) is null" is what
+  // makes that sound, and it is exactly the conjunct that needs the field list
+  // to be finite: over an infinite supply of field names it quantifies over
+  // infinitely many cells.
+  Result a = tAlloc(TypeEnv{}, currentF);
+  expectOk(a, "allocation produces a fresh node");
+  expect(!coversRCUFields(a.env[currentF].fields, BOTH, NF),
+         "a new node's field map covers no RCU field yet");
+
+  // Writing each declared field in turn reaches coverage, in finitely many
+  // steps.  That is the whole content of the repair.
+  TypeEnv g = a.env;
+  g[current] = tItr(Path{V(0, BOTH)});
+  Result w1 = tWriteFH(g, currentF, Left, current);
+  expectOk(w1, "writing the fresh node's left field");
+  Result w2 = tWriteFH(w1.env, currentF, Right, current);
+  expectOk(w2, "writing the fresh node's right field");
+  expect(coversRCUFields(w2.env[currentF].fields, BOTH, NF),
+         "after both declared fields, the node covers every RCU field");
+
+  // And the coverage premise is load-bearing: a node missing one declared field
+  // is not a legitimate replacement, because the untracked field may differ and
+  // the replacement would move a subtree rather than preserve it.
+  TypeEnv g2;
+  g2[parent] = tItr(Path{V(0, BOTH)}, FieldMap{{Left, fvVar(current)}});
+  g2[current] = tItr(Path{V(0, BOTH), F(LeftF)},
+                     FieldMap{{Left, fvNull()}, {Right, fvNull()}});
+  g2[currentF] = tFresh(FieldMap{{Left, fvNull()}});
+  expectNo(tReplace(g2, parent, Left, current, currentF, BOTH, NF),
+           "a fresh node missing a declared field is not a replacement");
+
+  g2[currentF] = tFresh(FieldMap{{Left, fvNull()}, {Right, fvNull()}});
+  expectOk(tReplace(g2, parent, Left, current, currentF, BOTH, NF),
+           "... and covering every declared field, it is");
+}
+
 int main() {
   bstDelete();
   premises();
+  classDeclaration();
   std::cout << "\n" << (checks - failures) << "/" << checks << " checks passed\n";
   return failures ? 1 : 0;
 }

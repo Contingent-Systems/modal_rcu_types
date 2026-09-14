@@ -5,3 +5,5 @@ HeapPaths.v
 IrisGhost.v
 Denotations.v
 Actions.v
+Compose.v
+Triples.v

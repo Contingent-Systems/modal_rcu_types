@@ -104,7 +104,7 @@ Section WellFormedness.
   (** Field kinds are static program information. *)
   Variable FType : FName -> FieldKind.
 
-  (** ** The eighteen invariants *)
+  (** ** The nineteen invariants *)
 
   (** 1. OW -- No Sharing.  In-degree at most one for live nodes.  (The
       published caption describes a different property entirely: "none of the
@@ -264,7 +264,7 @@ Section WellFormedness.
       being unlinked, and ULKR's conclusion names a thread, so the case does not
       close without knowing that the predecessor's [unlinked] observation is the
       writer's.  See [unlinked_observations_need_not_be_the_writers] below for a
-      state satisfying the other seventeen in which it is not.
+      state satisfying the other eighteen in which it is not.
 
       Guarded by the lock, so it says nothing about a state with no writer --
       which is the weakest form that does the job. *)
@@ -273,7 +273,22 @@ Section WellFormedness.
       lk (ms s) = Some lw ->
       (obsv s o (Ounlk t) \/ obsv s o (Ofree t)) -> t = lw.
 
-  (** 18. UNQR -- unique reachability: distinct paths reach distinct nodes.
+  (** 18. WITR -- iterator observations are the writer's or a reader's.
+
+      The third of a family, and the one that completes it.  Each kind of
+      observation constrains who may hold it: WFresh does it for [fresh], WUNLK
+      for [unlinked] and [freeable], and this for [iterator].  The published set
+      had exactly one of the three.
+
+      It is needed by SyncStart, whose IFL case is the obligation that a thread
+      holding an [iterator] on a node about to be put on the free list is one of
+      the readers the grace period will wait for.  WULK rules out the writer;
+      nothing ruled out a thread that is neither writer nor reader.  See
+      [iterators_need_not_be_active] below. *)
+  Definition WITR (s : LState) : Prop :=
+    forall o t, obsv s o (Oiter t) -> lk (ms s) = Some t \/ rds (ms s) t.
+
+  (** 19. UNQR -- unique reachability: distinct paths reach distinct nodes.
       This is the tree-shape invariant on which every framing side condition in
       T-UnlinkH, T-Replace and T-Insert depends. *)
   Definition UNQR (s : LState) : Prop :=
@@ -284,7 +299,7 @@ Section WellFormedness.
   Definition WellFormed (s : LState) : Prop :=
     OW s /\ RWOW s /\ AWRT s /\ IFL s /\ ULKR s /\ FLR s /\ WULK s
     /\ FR s /\ WFresh s /\ FNR s /\ FPI s /\ WNR s /\ RITR s /\ RINFL s
-    /\ HD s /\ UNQRT_a s /\ UNQRT_b s /\ WUNLK s /\ UNQR s.
+    /\ HD s /\ UNQRT_a s /\ UNQRT_b s /\ WUNLK s /\ WITR s /\ UNQR s.
 
 End WellFormedness.
 
@@ -659,7 +674,7 @@ End Defects.
     "corrected" into something no state satisfies, and every proof over it then
     goes through vacuously.  We exhibit a model -- the initial state of any RCU
     program, a root with null fields and the writer holding the lock -- and
-    check it satisfies all eighteen, for any field typing and any reading of
+    check it satisfies all nineteen, for any field typing and any reading of
     the open FLR direction. *)
 
 Definition initial : LState :=
@@ -758,6 +773,9 @@ Proof.
   intros o t lw _ [H | H]; simpl in H; destruct H as [_ H]; discriminate H.
 Qed.
 
+Lemma initial_WITR : WITR initial.
+Proof. intros o t H. simpl in H. destruct H as [_ H]. discriminate H. Qed.
+
 Lemma initial_UNQR : UNQR initial.
 Proof.
   intros p p' o H1 H2.
@@ -771,7 +789,7 @@ Proof.
   intros FType. unfold WellFormed.
   (* [repeat split] is too eager: it descends through binders and splits the
      conjunction inside [obsv initial] itself.  [apply conj] matches only a
-     literal [and] head, so it decomposes exactly the eighteen conjuncts. *)
+     literal [and] head, so it decomposes exactly the nineteen conjuncts. *)
   repeat apply conj;
     first [ apply initial_OW      | apply initial_RWOW  | apply initial_AWRT
           | apply initial_IFL     | apply initial_ULKR  | apply initial_FLR
@@ -779,7 +797,8 @@ Proof.
           | apply initial_FNR     | apply initial_FPI   | apply initial_WNR
           | apply initial_RITR    | apply initial_RINFL | apply initial_HD
           | apply initial_UNQRT_a | apply initial_UNQRT_b
-          | apply initial_WUNLK    | apply initial_UNQR ].
+          | apply initial_WUNLK    | apply initial_WITR
+          | apply initial_UNQR ].
 Qed.
 
 (** The corrected set is satisfiable; the published RITR makes it not, in any
@@ -904,7 +923,7 @@ Print Assumptions HD_not_preserved_by_free.
     that, and costs nothing: [sync_stop_preserves_FNR] in [Actions.v] discharges
     it from the second conjunct, by exactly the argument just given.
 
-    The witness below satisfies the other seventeen invariants and the published
+    The witness below satisfies the other eighteen invariants and the published
     FNR, and has a node that is both fresh and freeable. *)
 
 (** The published form: FNR without the third conjunct. *)
@@ -1061,6 +1080,12 @@ Proof.
   injection H as H. exact H.
 Qed.
 
+Lemma ff_WITR : WITR fresh_freeable.
+Proof.
+  intros o t H. exfalso. simpl in H.
+  destruct H as [[_ H] | [_ [H | H]]]; discriminate H.
+Qed.
+
 Lemma ff_UNQR : UNQR fresh_freeable.
 Proof.
   intros p p' o H1 H2.
@@ -1072,7 +1097,7 @@ Qed.
 Definition WellFormed_pubFNR (FType : FName -> FieldKind) (s : LState) : Prop :=
   OW FType s /\ RWOW s /\ AWRT s /\ IFL s /\ ULKR s /\ FLR s /\ WULK s
   /\ FR s /\ WFresh s /\ FNR_pub s /\ FPI FType s /\ WNR s /\ RITR s /\ RINFL s
-  /\ HD s /\ UNQRT_a s /\ UNQRT_b s /\ WUNLK s /\ UNQR s.
+  /\ HD s /\ UNQRT_a s /\ UNQRT_b s /\ WUNLK s /\ WITR s /\ UNQR s.
 
 Theorem ff_WellFormed_pubFNR :
   forall FType, WellFormed_pubFNR FType fresh_freeable.
@@ -1085,7 +1110,7 @@ Proof.
           | apply ff_FNR_pub | apply ff_FPI   | apply ff_WNR
           | apply ff_RITR    | apply ff_RINFL | apply ff_HD
           | apply ff_UNQRT_a | apply ff_UNQRT_b
-          | apply ff_WUNLK   | apply ff_UNQR ].
+          | apply ff_WUNLK   | apply ff_WITR | apply ff_UNQR ].
 Qed.
 
 Lemma ff_not_FNR : ~ FNR fresh_freeable.
@@ -1132,12 +1157,12 @@ Print Assumptions FNR_pub_admits_freeable_fresh.
     life -- an allocation is the lock holder's -- which is the strongest
     indication that its absence here was an oversight rather than a decision.
 
-    The state below satisfies the other seventeen. *)
+    The state below satisfies the other eighteen. *)
 
 Definition WellFormed_noWUNLK (FType : FName -> FieldKind) (s : LState) : Prop :=
   OW FType s /\ RWOW s /\ AWRT s /\ IFL s /\ ULKR s /\ FLR s /\ WULK s
   /\ FR s /\ WFresh s /\ FNR s /\ FPI FType s /\ WNR s /\ RITR s /\ RINFL s
-  /\ HD s /\ UNQRT_a s /\ UNQRT_b s /\ UNQR s.
+  /\ HD s /\ UNQRT_a s /\ UNQRT_b s /\ WITR s /\ UNQR s.
 
 (** Node 1 is unlinked by thread 9, while the writer is thread 0. *)
 Definition unlk_foreign : LState :=
@@ -1191,6 +1216,8 @@ Proof.
   - intros p o lw H1 H2.
     destruct (uf_reaches_only_root _ _ H2) as [_ ->].
     right. left. split; reflexivity.
+  - intros o t H. exfalso. simpl in H.
+    destruct H as [[_ H] | [_ H]]; discriminate H.
   - intros p p' o H1 H2.
     destruct (uf_reaches_only_root _ _ H1) as [-> _].
     destruct (uf_reaches_only_root _ _ H2) as [-> _]. reflexivity.
@@ -1218,3 +1245,373 @@ Qed.
 
 Print Assumptions uf_WellFormed_noWUNLK.
 Print Assumptions unlinked_observations_need_not_be_the_writers.
+
+(** * Iterators need not be held by an active thread
+
+    A tenth defect, the third of the family, and the one that shows the family
+    is a family.  Each kind of observation constrains who may hold it, and the
+    published set says so for exactly one of the three: WFresh, that an
+    allocation is the lock holder's.  Nothing said who may hold [unlinked] or
+    [freeable] -- that is WUNLK, above -- and nothing said who may hold
+    [iterator].
+
+    This one is SyncStart's.  SyncStart puts every unlinked node on the free
+    list with the current readers as its bounding set, and IFL then demands that
+    every thread observing such a node as an [iterator] is in that set: it is
+    the obligation that a grace period waits for everyone who could still be
+    looking.  WULK rules out the writer.  Nothing rules out a thread that is
+    neither the writer nor a current reader, and against such a thread the grace
+    period would complete while a live reference remained -- which is precisely
+    the accident the whole structure exists to prevent.
+
+    So of the three this is the one whose absence is not merely a locality
+    failure.  The other two hold of every reachable state and fail only to be
+    provable locally; this one is what makes the reclamation safe, and it is
+    unstated.  It is nonetheless just as cheap: every action preserves it, since
+    an [iterator] is granted only to the writer by the two linking rules and
+    only to a reader by a read, and ReadEnd drops a departing thread's
+    observations in the same step as its readership.
+
+    The state below satisfies the other eighteen. *)
+
+Definition WellFormed_noWITR (FType : FName -> FieldKind) (s : LState) : Prop :=
+  OW FType s /\ RWOW s /\ AWRT s /\ IFL s /\ ULKR s /\ FLR s /\ WULK s
+  /\ FR s /\ WFresh s /\ FNR s /\ FPI FType s /\ WNR s /\ RITR s /\ RINFL s
+  /\ HD s /\ UNQRT_a s /\ UNQRT_b s /\ WUNLK s /\ UNQR s.
+
+(** Node 1 is observed as an iterator by thread 9, which is neither the writer
+    (thread 0) nor a reader (there are none). *)
+Definition itr_foreign : LState :=
+  {| ms := {| stk := fun _ _ => None;
+              hp  := fun o _ => if Nat.ltb o 2 then Some VNull else None;
+              lk  := Some 0;
+              rt  := 0;
+              rds := fun _ => False;
+              bnd := fun _ => False |};
+     obsv  := fun o ob => (o = 0 /\ ob = Oroot) \/ (o = 1 /\ ob = Oiter 9);
+     undf  := fun _ _ => False;
+     thrd  := fun t => t = 0 \/ t = 9;
+     flist := fun _ => None |}.
+
+Lemma if_no_edges : forall o f o', ~ Edge itr_foreign o f o'.
+Proof.
+  intros o f o'. unfold Edge, itr_foreign. simpl.
+  destruct (Nat.ltb o 2); discriminate.
+Qed.
+
+Lemma if_reaches_only_root :
+  forall p o, Reaches itr_foreign p o -> p = [] /\ o = 0.
+Proof.
+  intros [|f p] o H; unfold Reaches in H; simpl in H.
+  - injection H as <-. split; reflexivity.
+  - discriminate.
+Qed.
+
+Lemma if_WellFormed_noWITR : forall FType, WellFormed_noWITR FType itr_foreign.
+Proof.
+  intros FType. unfold WellFormed_noWITR. repeat apply conj.
+  - intros o o' f f' x H1. exfalso. simpl in H1.
+    destruct (Nat.ltb o 2); discriminate H1.
+  - intros x t o H. simpl in H. discriminate H.
+  - intros y t H. simpl in H. discriminate H.
+  - intros t o Tr H1 H2. simpl in H2. discriminate H2.
+  - intros o o' f' t _ H. exfalso. exact (if_no_edges _ _ _ H).
+  - intros o o' f' Tr H1 H2. simpl in H1. discriminate H1.
+  - (* WULK: the writer is thread 0, and node 1's iterator is thread 9's *)
+    intros lw o t H1 H2. simpl in H1. injection H1 as <-. simpl in H2.
+    destruct H2 as [[_ H] | [_ H]]; discriminate H.
+  - intros t x o H. simpl in H. discriminate H.
+  - intros t x o H. simpl in H. discriminate H.
+  - intros o t t' H. simpl in H.
+    destruct H as [[_ H] | [_ H]]; discriminate H.
+  - intros o f o' t lw _ H. exfalso. exact (if_no_edges _ _ _ H).
+  - intros t H1 H2. exact H2.
+  - intros o t H. destruct H.
+  - intros o Tr t H1 H2. simpl in H1. discriminate H1.
+  - intros o f o' H _. exfalso. exact (if_no_edges _ _ _ H).
+  - intros o f. apply if_no_edges.
+  - intros p o lw H1 H2.
+    destruct (if_reaches_only_root _ _ H2) as [_ ->].
+    right. left. split; reflexivity.
+  - intros o t lw _ [H | H]; simpl in H;
+      destruct H as [[_ H] | [_ H]]; discriminate H.
+  - intros p p' o H1 H2.
+    destruct (if_reaches_only_root _ _ H1) as [-> _].
+    destruct (if_reaches_only_root _ _ H2) as [-> _]. reflexivity.
+Qed.
+
+Lemma if_not_WITR : ~ WITR itr_foreign.
+Proof.
+  intros H.
+  assert (Hob : obsv itr_foreign 1 (Oiter 9)) by (right; split; reflexivity).
+  destruct (H 1 9 Hob) as [Hc | Hc]; [discriminate Hc | exact Hc].
+Qed.
+
+Theorem iterators_need_not_be_active :
+  (forall FType, WellFormed_noWITR FType itr_foreign)
+  /\ obsv itr_foreign 1 (Oiter 9)
+  /\ lk (ms itr_foreign) = Some 0
+  /\ ~ rds (ms itr_foreign) 9
+  /\ ~ WITR itr_foreign.
+Proof.
+  repeat apply conj;
+    [ exact if_WellFormed_noWITR | right; split; reflexivity | reflexivity
+    | intros H; exact H | exact if_not_WITR ].
+Qed.
+
+Print Assumptions if_WellFormed_noWITR.
+Print Assumptions iterators_need_not_be_active.
+
+(** ** Defect 11: the free list's domain is unconstrained
+
+    Three conjuncts mention [flist] -- IFL, FLR and RINFL -- and all three are
+    conditional on an entry existing.  None of them says where entries may
+    exist.  So nothing in the nineteen rules out an entry at a node that is not
+    detached, not reachable, and not even in the heap.
+
+    That is not a curiosity.  SyncStart's specification says the grace period
+    covers *exactly* the detached nodes, and re-establishing "exactly" needs to
+    know that the entries already there were at detached nodes too.  It is the
+    one hypothesis of the snapshot step that no invariant supplies, and the
+    witness below is why: the state satisfies all nineteen and has an entry at
+    a location with no observations at all.
+
+    The repair is a twentieth conjunct,
+
+      FLD s := forall o Tr, flist s o = Some Tr ->
+                 exists t, obsv s o (Ounlk t) \/ obsv s o (Ofree t)
+
+    which SyncStart establishes and every other action either preserves
+    trivially or -- Free and ReadEnd -- preserves because it only shrinks the
+    free list.  It is stated here and used as an explicit hypothesis where it is
+    needed rather than being folded into [WellFormed], because adding a
+    conjunct means re-proving fifteen actions and that is a change to make
+    deliberately. *)
+
+Definition FLD (s : LState) : Prop :=
+  forall o Tr, flist s o = Some Tr ->
+    exists t, obsv s o (Ounlk t) \/ obsv s o (Ofree t).
+
+Definition fl_stray : LState :=
+  {| ms    := ms initial;
+     obsv  := obsv initial;
+     undf  := undf initial;
+     thrd  := thrd initial;
+     flist := fun o => if Nat.eqb o 1 then Some (fun _ => False) else None |}.
+
+Lemma fl_stray_entry : flist fl_stray 1 = Some (fun _ => False).
+Proof. reflexivity. Qed.
+
+Lemma fl_stray_entry_inv o Tr :
+  flist fl_stray o = Some Tr -> Tr = (fun _ => False).
+Proof.
+  simpl. destruct (Nat.eqb o 1); [| discriminate]. intros H.
+  injection H as <-. reflexivity.
+Qed.
+
+Lemma fl_stray_IFL : IFL fl_stray.
+Proof. intros t o Tr Hit _. destruct Hit as [_ Hc]. discriminate. Qed.
+
+Lemma fl_stray_FLR : FLR fl_stray.
+Proof.
+  intros o o' f' Tr _ He. exfalso. exact (initial_no_edges o' f' o He).
+Qed.
+
+Lemma fl_stray_RINFL : RINFL fl_stray.
+Proof.
+  intros o Tr t Hfl Hin. rewrite (fl_stray_entry_inv o Tr Hfl) in Hin.
+  destruct Hin.
+Qed.
+
+Theorem fl_stray_WellFormed : forall FType, WellFormed FType fl_stray.
+Proof.
+  intros FType. unfold WellFormed.
+  repeat apply conj;
+    first [ apply initial_OW      | apply initial_RWOW  | apply initial_AWRT
+          | apply fl_stray_IFL    | apply initial_ULKR  | apply fl_stray_FLR
+          | apply initial_WULK    | apply initial_FR    | apply initial_WFresh
+          | apply initial_FNR     | apply initial_FPI   | apply initial_WNR
+          | apply initial_RITR    | apply fl_stray_RINFL | apply initial_HD
+          | apply initial_UNQRT_a | apply initial_UNQRT_b
+          | apply initial_WUNLK   | apply initial_WITR
+          | apply initial_UNQR ].
+Qed.
+
+(** The entry is at a node with no observations, so it is not detached, and
+    FLD is not a consequence of the nineteen. *)
+Theorem free_list_domain_is_unconstrained :
+  (forall FType, WellFormed FType fl_stray) /\ ~ FLD fl_stray.
+Proof.
+  split; [exact fl_stray_WellFormed |].
+  intros H. destruct (H 1 (fun _ => False) fl_stray_entry) as [t [Hc | Hc]];
+    destruct Hc as [_ Hd]; discriminate.
+Qed.
+
+Print Assumptions fl_stray_WellFormed.
+Print Assumptions free_list_domain_is_unconstrained.
+
+(** ** Defects 13 and 14: two observations that constrain nobody
+
+    Found the same way as FLD, by attempting the last of the linking rules
+    against the Iris invariant.  T-LinkF-Null needs to know that no thread other
+    than the writer has an observation of the node being linked in.  Two
+    invariants ought to supply it between them, and neither does.
+
+    The first is that [root] marks the root.  Nothing says so.  [Oroot] is the
+    anonymous observation, and the nineteen constrain where every *tagged*
+    observation may sit but say nothing about this one -- so a well-formed state
+    may record the root observation at a location that is not the root.  That
+    also weakens UNQRT-b, whose conclusion is "iterator or root" and which is
+    read as "reachable nodes are the writer's, except the root itself".
+
+    The second is that a [fresh] observation belongs to the lock holder.
+    WFresh is stated with a stack reference in its hypothesis -- a thread that
+    *names* a fresh node holds the lock -- so a fresh observation whose variable
+    has left scope constrains nobody.  That makes WFresh weaker than its own
+    caption, and weaker than WUNLK and WITR, the two added above, which are the
+    same statement for the other two kinds of observation.  The family the
+    response describes is right; the member it already had was the weak one.
+
+    One witness does for both: a state satisfying all nineteen in which the root
+    observation sits at a non-root location and a fresh observation belongs to a
+    thread that does not hold the lock. *)
+
+Definition RTO (s : LState) : Prop :=
+  forall o, obsv s o Oroot -> o = rt (ms s).
+
+Definition WFreshW (s : LState) : Prop :=
+  forall o t, obsv s o (Ofresh t) -> lk (ms s) = Some t.
+
+Definition obs_stray : LState :=
+  {| ms    := ms initial;
+     obsv  := fun o ob => (ob = Oroot /\ (o = 0 \/ o = 1))
+                          \/ (o = 2 /\ ob = Ofresh 5);
+     undf  := undf initial;
+     thrd  := thrd initial;
+     flist := flist initial |}.
+
+Lemma os_OW : forall FType, OW FType obs_stray.
+Proof.
+  intros FType o o' f f' x H1 H2 _ _. exfalso.
+  exact (initial_no_edges _ _ _ H1).
+Qed.
+
+Lemma os_RWOW : RWOW obs_stray.
+Proof. intros x t o H. simpl in H. discriminate H. Qed.
+
+Lemma os_AWRT : AWRT obs_stray.
+Proof. intros y t H. simpl in H. discriminate H. Qed.
+
+Lemma os_IFL : IFL obs_stray.
+Proof. intros t o Tr H1 H2. simpl in H2. discriminate H2. Qed.
+
+Lemma os_ULKR : ULKR obs_stray.
+Proof.
+  intros o o' f' t H1 H2. exfalso. simpl in H1.
+  destruct H1 as [H | H];
+    destruct H as [[Hc _] | [_ Hc]]; discriminate Hc.
+Qed.
+
+Lemma os_FLR : FLR obs_stray.
+Proof. intros o o' f' Tr H1 H2. simpl in H1. discriminate H1. Qed.
+
+Lemma os_WULK : WULK obs_stray.
+Proof.
+  intros lw o t H1 H2. simpl in H2.
+  destruct H2 as [[H _] | [_ H]]; discriminate H.
+Qed.
+
+Lemma os_FR : FR obs_stray.
+Proof. intros t x o H1 H2. simpl in H1. discriminate H1. Qed.
+
+Lemma os_WFresh : WFresh obs_stray.
+Proof. intros t x o H1 H2. simpl in H1. discriminate H1. Qed.
+
+Lemma os_FNR : FNR obs_stray.
+Proof.
+  intros o t t' H. split; [| split];
+    intros [[Hc _] | [_ Hc]]; discriminate Hc.
+Qed.
+
+Lemma os_FPI : forall FType, FPI FType obs_stray.
+Proof.
+  intros FType o f o' t lw H1 H2 H3 H4. exfalso.
+  exact (initial_no_edges _ _ _ H2).
+Qed.
+
+Lemma os_WNR : WNR obs_stray.
+Proof. intros t H1 H2. exact H2. Qed.
+
+Lemma os_RITR : RITR obs_stray.
+Proof. intros o t H. destruct H. Qed.
+
+Lemma os_RINFL : RINFL obs_stray.
+Proof. intros o Tr t H1 H2. simpl in H1. discriminate H1. Qed.
+
+Lemma os_HD : HD obs_stray.
+Proof. intros o f o' H _. exfalso. exact (initial_no_edges _ _ _ H). Qed.
+
+Lemma os_UNQRT_a : UNQRT_a obs_stray.
+Proof. intros o f. apply initial_no_edges. Qed.
+
+Lemma os_UNQRT_b : UNQRT_b obs_stray.
+Proof.
+  intros p o lw H1 H2.
+  destruct (initial_reaches_only_root _ _ H2) as [_ ->]. right.
+  simpl. left. split; [reflexivity | left; reflexivity].
+Qed.
+
+Lemma os_WUNLK : WUNLK obs_stray.
+Proof.
+  intros o t lw _ [H | H]; simpl in H;
+    destruct H as [[Hc _] | [_ Hc]]; discriminate Hc.
+Qed.
+
+Lemma os_WITR : WITR obs_stray.
+Proof.
+  intros o t H. simpl in H.
+  destruct H as [[Hc _] | [_ Hc]]; discriminate Hc.
+Qed.
+
+Lemma os_UNQR : UNQR obs_stray.
+Proof.
+  intros p p' o H1 H2.
+  destruct (initial_reaches_only_root _ _ H1) as [-> _].
+  destruct (initial_reaches_only_root _ _ H2) as [-> _]. reflexivity.
+Qed.
+
+Theorem obs_stray_WellFormed : forall FType, WellFormed FType obs_stray.
+Proof.
+  intros FType. unfold WellFormed.
+  repeat apply conj;
+    first [ apply os_OW      | apply os_RWOW  | apply os_AWRT
+          | apply os_IFL     | apply os_ULKR  | apply os_FLR
+          | apply os_WULK    | apply os_FR    | apply os_WFresh
+          | apply os_FNR     | apply os_FPI   | apply os_WNR
+          | apply os_RITR    | apply os_RINFL | apply os_HD
+          | apply os_UNQRT_a | apply os_UNQRT_b
+          | apply os_WUNLK   | apply os_WITR
+          | apply os_UNQR ].
+Qed.
+
+Theorem root_observation_is_unpinned :
+  (forall FType, WellFormed FType obs_stray) /\ ~ RTO obs_stray.
+Proof.
+  split; [exact obs_stray_WellFormed |].
+  intros H. assert (Hc : (1 : Loc) = 0).
+  { apply H. simpl. left. split; [reflexivity | right; reflexivity]. }
+  discriminate Hc.
+Qed.
+
+Theorem fresh_observations_need_not_be_the_writers :
+  (forall FType, WellFormed FType obs_stray) /\ ~ WFreshW obs_stray.
+Proof.
+  split; [exact obs_stray_WellFormed |].
+  intros H. assert (Hc : lk (ms obs_stray) = Some 5).
+  { apply (H 2). simpl. right. split; reflexivity. }
+  simpl in Hc. discriminate Hc.
+Qed.
+
+Print Assumptions obs_stray_WellFormed.
+Print Assumptions root_observation_is_unpinned.
+Print Assumptions fresh_observations_need_not_be_the_writers.
