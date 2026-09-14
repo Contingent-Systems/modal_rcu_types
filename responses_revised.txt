@@ -9,9 +9,9 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
-14,600 lines and 868 results, axiom-free).  The build refuses to succeed if
+15,500 lines and 897 results, axiom-free).  The build refuses to succeed if
 the development contains an admitted proof, or if any of its hundred and
-seventy-five assumption checks reports an axiom rather than closed under the
+eighty-three assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
 it looks.  This turned up more than we expected, and we think it materially
@@ -319,6 +319,70 @@ a function of the state, and the state is now finite in every component, so the
 locations used for anything form a finite set and a location outside it
 satisfies all six at once.  The field-list repair pays twice: it made the heap
 representable, and it made the allocator constructible.
+
+We have also now made a start on the other half, the type environment as a
+resource, and it produced one thing worth reporting.  The obvious reading, one
+resource per variable, does not work: two iterators may name the same node and
+two paths overlap in their prefix, so a per-variable reading would demand two
+exclusive fragments for one location and two owners for one cell.  The aliasing
+side conditions are exactly what rule that out, but they are conditions on the
+*environment* rather than on the individual variable, so a per-variable reading
+cannot see them.
+
+What works is to own the resources *once*, as maps -- the thread's stack
+entries, its observations, its free-list entries, and a set of cells -- and make
+each variable's requirement a pure condition on those maps.  A path is then a
+fold of lookups in the cell map, an alias is two variables reading the same
+entry, and nothing is duplicated because a map has one entry per key.  We prove
+that what the writer holds implies the denotation of its type environment, for
+every type the write side produces, and that this reading survives an
+allocation.  A consequence worth recording: no fractional permissions are needed
+on the write side, because overlapping paths share cells by being the same entry
+rather than by splitting ownership.  The read side still needs them, for the
+different reason that a reader and a writer must hold the same cell at once.
+
+We then stated one rule that way end to end: T-Alloc with a type environment on
+both sides, so the thread hands in the resources its environment reads as Gamma
+and gets back the resources its environment reads as Gamma with the allocated
+variable rebound to rcuFresh.  Nothing new is proved in it -- the step is the
+closed triple's and the environment's survival is the monotonicity lemma -- but
+it is the shape all fifteen should have, and the first of them to have it.
+
+The other seven rules do not grow the maps at a new location; they overwrite an
+entry, so what they need is framing rather than monotonicity: the environment
+survives a step whose footprint it does not read.  There are only three kinds of
+footprint -- a cell, a location's observations, a stack slot -- so there are
+three lemmas rather than seven.  The cell case is where the aliasing side
+conditions land: a path is a fold of lookups, so the cells it reads are a
+concrete list, and a write outside that list cannot change the fold.  Its
+hypothesis is exactly the question our MayAlias procedure decides.  The decision
+procedure and the framing lemma are the same condition, one decided and one
+proved, which is the tightest connection between the two halves of this work
+that we have.
+
+What is left for each rule is the variable it *touches*, and that needed one
+thing the reading did not yet have: field maps.  Restricting types to empty
+field maps made three of the post-types inexpressible -- T-WriteFH produces a
+fresh node with a field written, and T-Insert and T-Replace take field maps as
+premises -- so the reading now carries them, read on the thread's own maps in
+the same way as everything else.  That also completes the framing lemmas'
+hypotheses: a step must not touch a tracked field either.
+
+With that, the touched variable is not a lemma but the definition supplied.  The
+three cases that occur -- demotion to unlinked, to freeable, and promotion of a
+fresh node to an iterator one field beyond its parent -- are in the development
+so the claim is checkable rather than asserted.  Only the promotion has any
+content, and the content is that the new path is the old one extended.
+
+Two smaller things this turned up.  The denotation of freeable was stated as an
+equality of *functions*, and in the ghost encoding the free-list entry is a
+membership test on a finite set; proving those equal needs functional
+extensionality, which we do not assume.  A denotation that cannot be established
+without an axiom is a defect in the denotation, and it is stated extensionally
+now.  And undef has no resource reading at all: its second conjunct is about the
+free list at a node the thread no longer references, which is state it does not
+own -- that conjunct belongs in an invariant rather than in a type, and we
+report it rather than move it.
 
 What is left is the read side and the protocol, and the two obstacles are
 particular rather than general.  The reader's read cannot be stated at all,

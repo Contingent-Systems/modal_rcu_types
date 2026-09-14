@@ -1433,6 +1433,91 @@ every component, so the locations used for anything form a finite set and a
 location outside it satisfies all six at once.  The field-list repair pays
 twice: it made the heap representable, and it made the allocator constructible.
 
+\paragraph{The type environment as a resource.}
+The eight triples say the invariants survive and hand the thread its fragments
+back.  Axiom soundness asks for more: that the post-state satisfies the
+denotation of the post-type environment.  The pure half of that is already
+proved --- there is a \texttt{post\_env} theorem for every write-side rule ---
+so what was missing is the bridge, a reading of a type environment as a resource
+from which the pure denotation follows.
+
+The obvious reading, one resource per variable, does not work, and the reason is
+worth stating because it is the same reason twice.  Two iterators may name the
+same node, and two paths overlap in their prefix; a per-variable reading would
+demand two exclusive fragments for one location and two owners for one cell.
+The aliasing side conditions are exactly what rule that out, but they are
+conditions on the \emph{environment}, not on the individual variable, so a
+per-variable reading cannot see them.
+
+What works is to own the resources \emph{once}, as maps, and make each
+variable's requirement a pure condition on those maps.  The thread holds its
+stack entries, its observations, its free-list entries and a set of cells; a
+path is then a fold of lookups in the cell map, an alias is two variables
+reading the same entry, and nothing is duplicated because a map has one entry
+per key.  \texttt{writer\_env} is the resulting theorem: what the writer holds
+implies the environment denotation, for every type the write side produces.  And
+\texttt{EnvOK\_alloc} is the same reading across a step --- the environment
+survives an allocation because the new node is one nothing else mentions, which
+is the allocator's condition used a second time.
+
+This has a consequence worth recording.  \emph{No fractions are needed on the
+write side}: overlapping paths share cells by being the same map entry, not by
+splitting ownership.  The read side still needs them, for the different reason
+that a reader and a writer must hold the same cell at once.
+
+And then one rule stated that way end to end.  \texttt{alloc\_typed} is
+\textsc{T-Alloc} with a type environment on both sides: the thread hands in the
+resources its environment reads as $\Gamma$ and gets back the resources its
+environment reads as $\Gamma$ with the allocated variable rebound to
+\texttt{rcuFresh}.  Nothing new is proved in it --- the step is the closed
+triple's, the environment's survival is the monotonicity lemma, and the
+freshness conditions the latter needs are the allocator's, read off the thread's
+own maps because they are submaps of the invariant's.  It is the shape all
+fifteen should have, and the first of them to have it.
+
+The other seven rules do not grow the maps at a new location; they overwrite an
+entry.  So what they need is not monotonicity but \emph{framing}: the
+environment survives a step whose footprint it does not read.  And there are
+only three kinds of footprint --- a cell, a location's observations, a stack
+slot --- so there are three lemmas rather than seven.
+
+The cell case is the one with content, and it is where the aliasing side
+conditions land.  A path is a fold of lookups, so the cells it reads are a
+concrete list, and a write outside that list cannot change the fold.  That is
+\texttt{EnvOK\_cell}, and its hypothesis --- the written cell is on no path the
+environment reads --- is exactly the question \texttt{MayAlias} decides in
+\S\ref{sec:pathfrag}.  The decision procedure and the framing lemma are the
+same condition, one decided and one proved, which is the tightest connection
+between the two halves of this work that we have.
+
+What is left for each rule is the variable it \emph{touches}, and that turned
+out to need one thing the reading did not yet have: field maps.  Restricting
+types to empty field maps made three of the post-types inexpressible ---
+\textsc{T-WriteFH} produces a fresh node with a field written, and
+\textsc{T-Insert} and \textsc{T-Replace} take field maps as premises --- so the
+reading now carries them.  A field map is read on the thread's own maps too:
+$N(f) = y$ is a lookup in the cell map whose target is a variable the
+environment also names.  That is \texttt{FieldOK}, and it is what makes the framing
+lemmas' hypotheses complete: a step must not touch a tracked field either.
+
+With that, the touched variable is not a lemma but the definition supplied.  The
+three cases that occur --- demotion to \unlk{}, to \frbl{}, and promotion of a
+fresh node to an iterator one field beyond its parent --- are written out in the
+development so the claim is checkable rather than asserted.  Only the promotion
+has any content, and the content is that the new path is the old one extended:
+the fold reaches the parent and then takes the cell the rule just wrote.
+
+Two things this reading turned up.  The denotation of \texttt{freeable} was
+stated as $F(o) = \lambda t. \bot$ --- an equality of \emph{functions} --- and
+in the ghost encoding the entry is $\lambda t.\, t \in S$ for a finite set $S$;
+proving those equal needs functional extensionality, which this development does
+not assume.  A denotation that cannot be established without an axiom is a
+defect in the denotation, and it is stated extensionally now.  And
+\texttt{undef} has no resource reading at all: its second conjunct is about the
+free list at a node the thread no longer references, which is state it does not
+own.  That conjunct belongs in an invariant rather than in a type, and we report
+it rather than move it.
+
 \paragraph{What is left, and it is specific.}
 The read side and the protocol remain, and the two obstacles are particular
 rather than general.

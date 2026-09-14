@@ -111,13 +111,21 @@ Section Denotations.
       /\ lk (ms s) = Some t
       /\ ~ undf s x t.
 
+  (** The last conjunct is stated extensionally -- an entry with no bounding
+      threads -- rather than as an equality with [fun _ => False].  The two say
+      the same thing, but the equality is an equality of *functions*, and in the
+      ghost encoding the entry is [fun t => t in S] for a [gset] [S]; proving
+      that equal to [fun _ => False] needs functional extensionality, which this
+      development does not assume.  A denotation that cannot be established
+      without an axiom is a defect in the denotation, not a reason for the
+      axiom. *)
   Definition D_freeable (s : LState) (t : TID) (x : Var) : Prop :=
     exists o,
       stk (ms s) x t = Some o
       /\ obsv s o (Ofree t)
       /\ lk (ms s) = Some t
       /\ ~ undf s x t
-      /\ flist s o = Some (fun _ => False).
+      /\ (exists Tr, flist s o = Some Tr /\ forall t', ~ Tr t').
 
   Definition D_undef (s : LState) (t : TID) (x : Var) : Prop :=
     undf s x t /\ (forall o, stk (ms s) x t = Some o -> flist s o = None).
