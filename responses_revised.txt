@@ -9,9 +9,9 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
-15,500 lines and 897 results, axiom-free).  The build refuses to succeed if
+16,300 lines and 905 results, axiom-free).  The build refuses to succeed if
 the development contains an admitted proof, or if any of its hundred and
-eighty-three assumption checks reports an axiom rather than closed under the
+ninety assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
 it looks.  This turned up more than we expected, and we think it materially
@@ -373,6 +373,44 @@ three cases that occur -- demotion to unlinked, to freeable, and promotion of a
 fresh node to an iterator one field beyond its parent -- are in the development
 so the claim is checkable rather than asserted.  Only the promotion has any
 content, and the content is that the new path is the old one extended.
+
+Making the rules compose with that reading removed the last two ad-hoc
+resources: the fresh nodes had been a separate assertion, and the paths had been
+one assertion per iterator.  Both are now conditions on the single cell map the
+writer owns.  The path case is the instructive one -- one assertion per iterator
+cannot be right, because two iterators' paths overlap in their prefix and a
+points-to is exclusive.  All five mutation rules are now stated with their paths
+and their fresh nodes as pure facts about that map, which is the same form the
+environment reading uses, so the two sides of a rule are written in the same
+language.
+
+With that, a mutation goes end to end.  T-LinkF-Null is now stated with a type
+environment on both sides: the variables the step does not touch are framed
+across it by the two framing lemmas, and the one it does touch gets its new
+type.  The only work in the touched case is that the fresh node's new path is
+the parent's extended by the field just written, and that its chain of iterator
+observations is the parent's chain plus one step.  None of that is about RCU --
+it is the bookkeeping that connects a rule's resources to a rule's types, it is
+the same bookkeeping for all five mutations, and having done it once the
+remaining four are a transcription.
+
+T-UnlinkH follows, and it is the transcription the first one was supposed to
+make possible.  It touches three variables rather than one -- the parent's field
+map is retargeted, the victim is demoted to unlinked, and the node below is
+promoted to the parent's field -- and each is one of three small toolkit
+lemmas, with the rest of the environment framed by the same two lemmas in the
+same order.  It took no new ideas, which is what the toolkit was for.
+
+T-WriteFH, T-Insert and T-Replace follow without incident, and with them every
+heap mutation and the allocation are stated with a type environment on both
+sides.  The pattern is uniform: the untouched variables are framed by the two
+lemmas, and the touched ones are supplied, each being one of three forms.
+T-WriteFH is the smallest, changing no observation at all; T-Insert touches
+three variables, the last of which moves one step further down the structure;
+T-Replace is a promotion and a demotion at once.  That the last three needed no
+new machinery is the substance of the claim: what varies between the rules is
+which of the three touched-variable forms occur and how many times, and what
+does not vary is anything about RCU.
 
 Two smaller things this turned up.  The denotation of freeable was stated as an
 equality of *functions*, and in the ghost encoding the free-list entry is a

@@ -2148,42 +2148,94 @@ Section heapghost.
       rewrite Heq. exact Hp.
   Qed.
 
-  (** A path, as a resource.
-
-      The mutation rules ask that the node they operate on is reachable from
-      the root by a named path.  That premise is about many cells at once, and
-      it is carried by owning them: [ppt γ o ρ o'] is the fold of points-to
-      along ρ, and it is what an [rcuItr] with a path should mean.  It is not
-      persistent, which is right -- the cells are exclusive, and under a single
-      writer the writer owns the spine it is about to modify.
-
-      [ppt_hstar] is the derivation, and it is the induction the premise needed.
-      Note what it does *not* need: nothing about the shape of the heap, no
-      invariant, and no uniqueness.  Reachability by a *named* path is a local
-      fact about the cells on it, which is why a resource can carry it. *)
-  Fixpoint ppt (γ : gname) (o : Loc) (p : list FName) (o' : Loc) : iProp Σ :=
-    match p with
-    | []      => ⌜o = o'⌝
-    | f :: q  => ∃ o1, pt γ o f (VLoc o1) ∗ ppt γ o1 q o'
-    end.
-
-  Lemma ppt_hstar γ H (h : Heap) o p o' :
-    Represents h H ->
-    hp_auth γ H -∗ ppt γ o p o' -∗ ⌜hstar h o p = Some o'⌝.
-  Proof.
-    iIntros (HR) "Ha Hp". iInduction p as [|f q IH] "IH" forall (o).
-    - iDestruct "Hp" as %->. by iPureIntro.
-    - iDestruct "Hp" as (o1) "[Hc Hq]".
-      iDestruct (pt_agree with "Ha Hc") as %Hag.
-      iDestruct ("IH" with "Ha Hq") as %Hrest.
-      iPureIntro. simpl. rewrite HR Hag. exact Hrest.
-  Qed.
+  (** A path was once a resource of its own here -- a fold of points-to along
+      the path, [ppt].  It is gone, and its removal is the same lesson as
+      [fresh_cells]': one assertion per iterator cannot be right, because two
+      iterators' paths overlap in their prefix and a points-to is exclusive.
+      What replaced it is [cells] with [hstarC]: the thread owns a cell *map*
+      once, and a path is a pure fold of lookups in it.  Overlapping paths then
+      share cells by being the same entry, which is also why the write side
+      needs no fractional permissions. *)
 
 End heapghost.
 
+(** * The type environment as a resource
+
+    The eight closed triples say the invariants survive and hand the thread its
+    fragments back.  Axiom soundness asks for more: that the post-state
+    satisfies the denotation of the post-type environment.  The pure half of
+    that is already proved -- [Actions.v] has a [post_env] theorem for every
+    write-side rule -- so what is missing is the bridge, a reading of a type
+    environment as a resource from which the pure denotation follows.
+
+    The obvious reading, one resource per variable, does not work, and the
+    reason is worth stating because it is the same reason twice.  Two iterators
+    may name the same node, and two paths overlap in their prefix; a per-
+    variable reading would demand two exclusive fragments for one location and
+    two owners for one cell.  The type system's aliasing side conditions are
+    exactly what rules that out, but they are conditions on the environment, not
+    on the individual variable, so a per-variable reading cannot see them.
+
+    What works is to own the resources *once*, as maps, and make each variable's
+    requirement a pure condition on those maps.  The thread holds its stack
+    entries, its observations and a set of cells; a path is then a pure lookup
+    in the cell map, an alias is two variables reading the same entry, and
+    nothing is duplicated because a map has one entry per key.  It also means no
+    fractions are needed on the write side -- overlapping paths share cells by
+    being the same entry, not by splitting ownership. *)
+
+Section cellmap.
+  Context `{!heapG Σ}.
+
+  Definition cells (γ : gname) (C : gmap (Loc * FName) Val) : iProp Σ :=
+    [∗ map] k ↦ v ∈ C, pt γ k.1 k.2 v.
+
+  Lemma cells_agree γ H C :
+    hp_auth γ H -∗ cells γ C -∗
+    ⌜forall k v, C !! k = Some v -> H !! k = Some v⌝.
+  Proof.
+    iIntros "Ha Hc". rewrite /cells.
+    iInduction C as [|k v C Hk] "IH" using map_ind.
+    - iPureIntro. intros k' v' Hlk. by rewrite lookup_empty in Hlk.
+    - rewrite big_sepM_insert; [| exact Hk].
+      iDestruct "Hc" as "[Hone Hrest]".
+      iDestruct (pt_agree with "Ha Hone") as %Hag.
+      iDestruct ("IH" with "Ha Hrest") as %Hrest.
+      iPureIntro. intros k' v' Hlk.
+      destruct (decide (k' = k)) as [-> | Hne].
+      + rewrite lookup_insert_eq in Hlk. injection Hlk as <-.
+        by destruct k.
+      + rewrite lookup_insert_ne in Hlk; [| done]. exact (Hrest k' v' Hlk).
+  Qed.
+
+End cellmap.
+
+(** A path is a lookup in the cell map: pure, and about the thread's own
+    resources rather than about the heap. *)
+Fixpoint hstarC (C : gmap (Loc * FName) Val) (o : Loc) (p : list FName)
+  : option Loc :=
+  match p with
+  | []      => Some o
+  | f :: p' => match C !! (o, f) with
+               | Some (VLoc o') => hstarC C o' p'
+               | _              => None
+               end
+  end.
+
+Lemma hstarC_hstar (C : gmap (Loc * FName) Val) (h : Heap) o p q :
+  (forall k v, C !! k = Some v -> h k.1 k.2 = Some v) ->
+  hstarC C o p = Some q -> hstar h o p = Some q.
+Proof.
+  intros Hsub. revert o. induction p as [|f p IH]; intros o Hp; simpl in *.
+  - exact Hp.
+  - destruct (C !! (o, f)) as [[o1|]|] eqn:E; try discriminate.
+    rewrite (Hsub (o, f) (VLoc o1) E). exact (IH o1 Hp).
+Qed.
+
+Print Assumptions hstarC_hstar.
+
 Print Assumptions pt_agree.
 Print Assumptions pt_alloc_list.
-Print Assumptions ppt_hstar.
 Print Assumptions pt_delete_list.
 
 (** ** The lock
@@ -2632,21 +2684,24 @@ Section atomic.
       carried by the cell being written and the unreachability of the fresh
       node derived rather than assumed. *)
   Lemma write_fresh_atomic N γm γh γl γs γo γf γr E lw on f oy x g
-        sn sy v vy :
+        sn sy v vy C :
     ↑N ⊆ E ->
     on <> root -> oy <> root ->
     Ofresh lw ∈ sn -> Oiter lw ∈ sy ->
+    (* the witness that the target is in the heap is a condition on the cell
+       map, since the rule only reads it *)
+    C !! (oy, g) = Some vy ->
     rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr -∗
     lk_tok γl lw -∗
     tobs_ctl γo on lw sn -∗
     tobs_ctl γo oy lw sy -∗
     sv γs x lw on -∗
-    pt γh on f v -∗
-    pt γh oy g vy
+    cells γh C -∗
+    pt γh on f v
     ={E}=∗ lk_tok γl lw ∗ tobs_ctl γo on lw sn ∗ tobs_ctl γo oy lw sy
-           ∗ sv γs x lw on ∗ pt γh on f (VLoc oy) ∗ pt γh oy g vy.
+           ∗ sv γs x lw on ∗ cells γh C ∗ pt γh on f (VLoc oy).
   Proof.
-    iIntros (HN Hnr Hyr Hin Hiy) "#Hinv Hlk Hon Hoy Hsv Hptn Hpty".
+    iIntros (HN Hnr Hyr Hin Hiy Hcy) "#Hinv Hlk Hon Hoy Hsv Hcells Hptn".
     iInv "Hinv" as (m Og U T F Fr)
       ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HFrc & %Hwf)" "Hclose".
     (* the premises, one resource at a time *)
@@ -2662,8 +2717,9 @@ Section atomic.
     iDestruct (sv_agree with "Hb Hsv") as %Hsvag.
     assert (Hstk : stk m x lw = Some on) by (rewrite HRS; exact Hsvag).
     iDestruct "Hhp" as (H) "(%HR & %HS & Ha)".
-    iDestruct (pt_agree with "Ha Hpty") as %Hagy.
-    assert (Hcelly : hp m oy g = Some vy) by (rewrite HR; exact Hagy).
+    iDestruct (cells_agree with "Ha Hcells") as %Hcellag.
+    assert (Hcelly : hp m oy g = Some vy)
+      by (rewrite HR; exact (Hcellag (oy, g) vy Hcy)).
     (* the two negative premises *)
     assert (Hno_in : forall o' f', ~ Edge (to_LState_t m Og U T F) o' f' on).
     { destruct Hwf as (_ & _ & _ & _ & _ & _ & _ & HFR & _).
@@ -2831,26 +2887,27 @@ Section atomic_link.
       resource as before read differently: the thread holds all of the node's
       declared cells, one of them a pointer and the rest null, and the class
       declaration says there are no others. *)
-  Lemma insert_atomic N γm γh γl γs γo γf γr E lw op f on oo f4 rho x sp :
+  Lemma insert_atomic N γm γh γl γs γo γf γr E lw op f on oo f4 rho x sp C :
     ↑N ⊆ E ->
     on <> root -> In f4 fs ->
     (forall g, FType g = RCUField) ->
     Oiter lw ∈ sp ->
+    hstarC C root rho = Some op ->
+    (forall g, In g fs ->
+       C !! (on, g) = Some (if decide (g = f4) then VLoc oo else VNull)) ->
     rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr -∗
     lk_tok γl lw -∗
     tobs_ctl γo op lw sp -∗
     tobs_ctl γo on lw {[Ofresh lw]} -∗
     sv γs x lw on -∗
-    ppt γh root rho op -∗
-    pt γh op f (VLoc oo) -∗
-    ([∗ list] g ∈ fs, pt γh on g (if decide (g = f4) then VLoc oo else VNull))
+    cells γh C -∗
+    pt γh op f (VLoc oo)
     ={E}=∗ lk_tok γl lw ∗ tobs_ctl γo op lw sp
            ∗ tobs_ctl γo on lw {[Oiter lw]} ∗ sv γs x lw on
-           ∗ ppt γh root rho op ∗ pt γh op f (VLoc on)
-           ∗ ([∗ list] g ∈ fs,
-                pt γh on g (if decide (g = f4) then VLoc oo else VNull)).
+           ∗ cells γh C ∗ pt γh op f (VLoc on).
   Proof.
-    iIntros (HN Hnr Hf4 Hall Hip) "#Hinv Hlk Hop Hon Hsv Hpath Hptf Hcells".
+    iIntros (HN Hnr Hf4 Hall Hip HpathC Hcell0)
+            "#Hinv Hlk Hop Hon Hsv Hcells Hptf".
     iInv "Hinv" as (m Og U T F Fr)
       ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HFrc & %Hwf)" "Hclose".
     iDestruct (tobs_ctl_agree with "Ho Hop") as %Hlop.
@@ -2866,24 +2923,16 @@ Section atomic_link.
     iDestruct (sv_agree with "Hb Hsv") as %Hsvag.
     assert (Hstk : stk m x lw = Some on) by (rewrite HRS; exact Hsvag).
     iDestruct "Hhp" as (H) "(%HR & %HS & Ha)".
-    iDestruct (ppt_hstar with "Ha Hpath") as %Hrho; [exact HR |].
+    iDestruct (cells_agree with "Ha Hcells") as %Hcellag.
+    assert (Hsub : forall k v', C !! k = Some v' -> hp m k.1 k.2 = Some v')
+      by (intros k v' Hk; rewrite HR; exact (Hcellag k v' Hk)).
+    assert (Hrho : hstar (hp m) root rho = Some op)
+      by exact (hstarC_hstar C (hp m) root rho op Hsub HpathC).
     iDestruct (pt_agree with "Ha Hptf") as %Hagf.
     assert (Hedge : hp m op f = Some (VLoc oo)) by (rewrite HR; exact Hagf).
-    iAssert ([∗ list] p ∈ ((fun g => ((on, g),
-                if decide (g = f4) then VLoc oo else VNull)) <$> fs),
-               pt γh p.1.1 p.1.2 p.2)%I with "[Hcells]" as "Hcells'".
-    { rewrite big_sepL_fmap. iApply (big_sepL_mono with "Hcells").
-      iIntros (k g _) "Hc". iExact "Hc". }
-    iDestruct (pt_list_agree with "Ha Hcells'") as %Hcellag.
     assert (Hcell : forall g, In g fs ->
               hp m on g = Some (if decide (g = f4) then VLoc oo else VNull)).
-    { intros g Hg. rewrite HR.
-      apply (Hcellag ((on, g),
-               if decide (g = f4) then VLoc oo else VNull)).
-      apply (list_elem_of_fmap_2
-               (fun g' => ((on, g'),
-                  if decide (g' = f4) then VLoc oo else VNull)) fs g).
-      by apply list_elem_of_In. }
+    { intros g Hg. exact (Hsub (on, g) _ (Hcell0 g Hg)). }
     assert (Hpo : PointsOnlyAt (hp m) on f4 oo).
     { split.
       - rewrite (Hcell f4 Hf4). by rewrite decide_True.
@@ -2928,11 +2977,6 @@ Section atomic_link.
                 Hrho' HU) as [HWF' Hwf'].
     iMod (phys_write with "Hp Hptf") as "(Hp & Hptf & _)".
     iMod (tobs_set with "Ho Hon") as "[Ho Hon]".
-    iAssert ([∗ list] g ∈ fs,
-               pt γh on g (if decide (g = f4) then VLoc oo else VNull))%I
-      with "[Hcells']" as "Hcells".
-    { rewrite big_sepL_fmap. iApply (big_sepL_mono with "Hcells'").
-      iIntros (k g _) "Hc". iExact "Hc". }
     iMod ("Hclose" with "[Hp Ho Hf Hfr]") as "_".
     { iNext.
       iExists (write_ms m op f (VLoc on)),
@@ -2965,80 +3009,6 @@ End atomic_link.
 Print Assumptions link_null_atomic.
 Print Assumptions insert_atomic.
 
-(** * The type environment as a resource
-
-    The eight closed triples say the invariants survive and hand the thread its
-    fragments back.  Axiom soundness asks for more: that the post-state
-    satisfies the denotation of the post-type environment.  The pure half of
-    that is already proved -- [Actions.v] has a [post_env] theorem for every
-    write-side rule -- so what is missing is the bridge, a reading of a type
-    environment as a resource from which the pure denotation follows.
-
-    The obvious reading, one resource per variable, does not work, and the
-    reason is worth stating because it is the same reason twice.  Two iterators
-    may name the same node, and two paths overlap in their prefix; a per-
-    variable reading would demand two exclusive fragments for one location and
-    two owners for one cell.  The type system's aliasing side conditions are
-    exactly what rules that out, but they are conditions on the environment, not
-    on the individual variable, so a per-variable reading cannot see them.
-
-    What works is to own the resources *once*, as maps, and make each variable's
-    requirement a pure condition on those maps.  The thread holds its stack
-    entries, its observations and a set of cells; a path is then a pure lookup
-    in the cell map, an alias is two variables reading the same entry, and
-    nothing is duplicated because a map has one entry per key.  It also means no
-    fractions are needed on the write side -- overlapping paths share cells by
-    being the same entry, not by splitting ownership. *)
-
-Section cellmap.
-  Context `{!heapG Σ}.
-
-  Definition cells (γ : gname) (C : gmap (Loc * FName) Val) : iProp Σ :=
-    [∗ map] k ↦ v ∈ C, pt γ k.1 k.2 v.
-
-  Lemma cells_agree γ H C :
-    hp_auth γ H -∗ cells γ C -∗
-    ⌜forall k v, C !! k = Some v -> H !! k = Some v⌝.
-  Proof.
-    iIntros "Ha Hc". rewrite /cells.
-    iInduction C as [|k v C Hk] "IH" using map_ind.
-    - iPureIntro. intros k' v' Hlk. by rewrite lookup_empty in Hlk.
-    - rewrite big_sepM_insert; [| exact Hk].
-      iDestruct "Hc" as "[Hone Hrest]".
-      iDestruct (pt_agree with "Ha Hone") as %Hag.
-      iDestruct ("IH" with "Ha Hrest") as %Hrest.
-      iPureIntro. intros k' v' Hlk.
-      destruct (decide (k' = k)) as [-> | Hne].
-      + rewrite lookup_insert_eq in Hlk. injection Hlk as <-.
-        by destruct k.
-      + rewrite lookup_insert_ne in Hlk; [| done]. exact (Hrest k' v' Hlk).
-  Qed.
-
-End cellmap.
-
-(** A path is a lookup in the cell map: pure, and about the thread's own
-    resources rather than about the heap. *)
-Fixpoint hstarC (C : gmap (Loc * FName) Val) (o : Loc) (p : list FName)
-  : option Loc :=
-  match p with
-  | []      => Some o
-  | f :: p' => match C !! (o, f) with
-               | Some (VLoc o') => hstarC C o' p'
-               | _              => None
-               end
-  end.
-
-Lemma hstarC_hstar (C : gmap (Loc * FName) Val) (h : Heap) o p q :
-  (forall k v, C !! k = Some v -> h k.1 k.2 = Some v) ->
-  hstarC C o p = Some q -> hstar h o p = Some q.
-Proof.
-  intros Hsub. revert o. induction p as [|f p IH]; intros o Hp; simpl in *.
-  - exact Hp.
-  - destruct (C !! (o, f)) as [[o1|]|] eqn:E; try discriminate.
-    rewrite (Hsub (o, f) (VLoc o1) E). exact (IH o1 Hp).
-Qed.
-
-Print Assumptions hstarC_hstar.
 
 (** * The premise no fragment can state
 
@@ -3154,25 +3124,26 @@ Section atomic_unlink.
     Oiter lw ∈ sx -> Oiter lw ∈ sw ->
     (* the aliasing premise, now about the thread's own resources *)
     FrCells Fr fs C val ->
+    hstarC C root rho = Some ox ->
+    (* the child's field is only read, so it is a condition on the cell map
+       rather than a resource taken apart from it *)
+    C !! (oz, f2) = Some (VLoc ow) ->
     (forall q g, val q g <> VLoc oz) ->
     rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr -∗
     lk_tok γl lw -∗
     tobs_ctl γo ox lw sx -∗
     tobs_ctl γo oz lw {[Oiter lw]} -∗
     tobs_ctl γo ow lw sw -∗
-    ppt γh root rho ox -∗
+    cells γh C -∗
     pt γh ox f1 (VLoc oz) -∗
-    pt γh oz f2 (VLoc ow) -∗
-    fr_frag γr Fr -∗
-    cells γh C
+    fr_frag γr Fr
     ={E}=∗ lk_tok γl lw ∗ tobs_ctl γo ox lw sx
            ∗ tobs_ctl γo oz lw {[Ounlk lw]} ∗ tobs_ctl γo ow lw sw
-           ∗ ppt γh root rho ox ∗ pt γh ox f1 (VLoc ow)
-           ∗ pt γh oz f2 (VLoc ow)
-           ∗ fr_frag γr Fr ∗ cells γh C.
+           ∗ cells γh C ∗ pt γh ox f1 (VLoc ow)
+           ∗ fr_frag γr Fr.
   Proof.
-    iIntros (HN Hall Hix Hiw HFrC Hnf)
-            "#Hinv Hlk Hox Hoz How Hpath Hpt1 Hpt2 Hfrg Hcells".
+    iIntros (HN Hall Hix Hiw HFrC HpathC Hcell2 Hnf)
+            "#Hinv Hlk Hox Hoz How Hcells Hpt1 Hfrg".
     iInv "Hinv" as (m Og U T F Fr0)
       ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HFrc & %Hwf)" "Hclose".
     iDestruct (fr_agree with "Hfr Hfrg") as %->.
@@ -3189,12 +3160,15 @@ Section atomic_unlink.
     iDestruct "Hp" as "(Hm & Hlka & %Hrt & Hhp & Hst)".
     iDestruct (lk_agree with "Hlka Hlk") as %Hlkm.
     iDestruct "Hhp" as (H) "(%HR & %HS & Ha)".
-    iDestruct (ppt_hstar with "Ha Hpath") as %Hrho; [exact HR |].
-    iDestruct (pt_agree with "Ha Hpt1") as %Hag1.
-    iDestruct (pt_agree with "Ha Hpt2") as %Hag2.
     iDestruct (cells_agree with "Ha Hcells") as %Hcellag.
+    assert (Hsub : forall k v', C !! k = Some v' -> hp m k.1 k.2 = Some v')
+      by (intros k v' Hk; rewrite HR; exact (Hcellag k v' Hk)).
+    assert (Hrho : hstar (hp m) root rho = Some ox)
+      by exact (hstarC_hstar C (hp m) root rho ox Hsub HpathC).
+    iDestruct (pt_agree with "Ha Hpt1") as %Hag1.
     assert (He1 : hp m ox f1 = Some (VLoc oz)) by (rewrite HR; exact Hag1).
-    assert (He2 : hp m oz f2 = Some (VLoc ow)) by (rewrite HR; exact Hag2).
+    assert (He2 : hp m oz f2 = Some (VLoc ow))
+      by exact (Hsub (oz, f2) (VLoc ow) Hcell2).
     (* the free-list premise, from FLD and WULK *)
     assert (Hfl : flist (to_LState_t m Og U T F) ow = None).
     { destruct Hwf as (_ & _ & _ & _ & _ & _ & HWU & _).
@@ -3271,6 +3245,9 @@ Section atomic_unlink.
     (forall g, FType g = RCUField) ->
     Oiter lw ∈ sp ->
     FrCells Fr fs C val ->
+    hstarC C root rho = Some op ->
+    (forall g, In g fs -> C !! (on, g) = Some (valo g)) ->
+    (forall g, In g fs -> C !! (oo, g) = Some (valo g)) ->
     (forall q g, val q g <> VLoc oo) ->
     rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr -∗
     lk_tok γl lw -∗
@@ -3278,21 +3255,16 @@ Section atomic_unlink.
     tobs_ctl γo on lw {[Ofresh lw]} -∗
     tobs_ctl γo oo lw {[Oiter lw]} -∗
     sv γs x lw on -∗
-    ppt γh root rho op -∗
+    cells γh C -∗
     pt γh op f (VLoc oo) -∗
-    ([∗ list] g ∈ fs, pt γh on g (valo g)) -∗
-    ([∗ list] g ∈ fs, pt γh oo g (valo g)) -∗
-    fr_frag γr Fr -∗
-    cells γh C
+    fr_frag γr Fr
     ={E}=∗ lk_tok γl lw ∗ tobs_ctl γo op lw sp
            ∗ tobs_ctl γo on lw {[Oiter lw]} ∗ tobs_ctl γo oo lw {[Ounlk lw]}
-           ∗ sv γs x lw on ∗ ppt γh root rho op ∗ pt γh op f (VLoc on)
-           ∗ ([∗ list] g ∈ fs, pt γh on g (valo g))
-           ∗ ([∗ list] g ∈ fs, pt γh oo g (valo g))
-           ∗ fr_frag γr Fr ∗ cells γh C.
+           ∗ sv γs x lw on ∗ cells γh C ∗ pt γh op f (VLoc on)
+           ∗ fr_frag γr Fr.
   Proof.
-    iIntros (HN Hno Hnr Hf0 Hall Hip HFrC Hnf)
-            "#Hinv Hlk Hop Hon Hoo Hsv Hpath Hptf Hcn Hco Hfrg Hcells".
+    iIntros (HN Hno Hnr Hf0 Hall Hip HFrC HpathC Hcn0 Hco0 Hnf)
+            "#Hinv Hlk Hop Hon Hoo Hsv Hcells Hptf Hfrg".
     iInv "Hinv" as (m Og U T F Fr0)
       ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HFrc & %Hwf)" "Hclose".
     iDestruct (fr_agree with "Hfr Hfrg") as %->.
@@ -3310,12 +3282,17 @@ Section atomic_unlink.
     iDestruct (sv_agree with "Hb Hsv") as %Hsvag.
     assert (Hstk : stk m x lw = Some on) by (rewrite HRS; exact Hsvag).
     iDestruct "Hhp" as (H) "(%HR & %HS & Ha)".
-    iDestruct (ppt_hstar with "Ha Hpath") as %Hrho; [exact HR |].
+    iDestruct (cells_agree with "Ha Hcells") as %Hcellag.
+    assert (Hsub : forall k v', C !! k = Some v' -> hp m k.1 k.2 = Some v')
+      by (intros k v' Hk; rewrite HR; exact (Hcellag k v' Hk)).
+    assert (Hrho : hstar (hp m) root rho = Some op)
+      by exact (hstarC_hstar C (hp m) root rho op Hsub HpathC).
     iDestruct (pt_agree with "Ha Hptf") as %Hagf.
     assert (Hedge : hp m op f = Some (VLoc oo)) by (rewrite HR; exact Hagf).
-    iDestruct (cells_agree with "Ha Hcells") as %Hcellag.
-    iDestruct (cells_agree_one _ _ (fun _ g => valo g) with "Ha Hcn") as %Hcn.
-    iDestruct (cells_agree_one _ _ (fun _ g => valo g) with "Ha Hco") as %Hco.
+    assert (Hcn : forall g, In g fs -> H !! (on, g) = Some (valo g))
+      by (intros g Hg; exact (Hcellag (on, g) _ (Hcn0 g Hg))).
+    assert (Hco : forall g, In g fs -> H !! (oo, g) = Some (valo g))
+      by (intros g Hg; exact (Hcellag (oo, g) _ (Hco0 g Hg))).
     (* the two nodes agree on every field: on the declared ones because the
        thread holds both with the same value, elsewhere because there are no
        others *)
@@ -4306,6 +4283,79 @@ Proof.
      | exact (hstarC_snoc C root rho op f on Hpath Hcell) | exact Hpre].
 Qed.
 
+(** A prefix of a path extended by one field is either a prefix of the path or
+    the whole of it.  This is what lets the promoted node inherit its parent's
+    chain of iterator observations. *)
+Lemma app_snoc_split {A : Type} (p1 : list A) : forall p2 rho f,
+  p1 ++ p2 = rho ++ [f] -> (exists p2', p1 ++ p2' = rho) \/ p1 = rho ++ [f].
+Proof.
+  induction p1 as [|a p1 IH]; intros p2 rho f Happ.
+  - left. by exists rho.
+  - destruct rho as [|b rho]; simpl in Happ.
+    + injection Happ as <- Hp. apply app_eq_nil in Hp as [-> ->].
+      by right.
+    + injection Happ as <- Hp.
+      destruct (IH p2 rho f Hp) as [[p2' Hp'] | Hp'].
+      * left. exists p2'. simpl. by rewrite Hp'.
+      * right. simpl. by rewrite Hp'.
+Qed.
+
+Lemma hstarC_delete C k o p q :
+  ~ In k (pathcells C o p) ->
+  hstarC C o p = Some q -> hstarC (delete k C) o p = Some q.
+Proof.
+  revert o. induction p as [|f p IH]; intros o Hni Hp; simpl in *.
+  - exact Hp.
+  - destruct (C !! (o, f)) as [[o1|]|] eqn:E; try discriminate.
+    assert (Hne : k <> (o, f)) by (intros ->; apply Hni; by left).
+    rewrite lookup_delete_ne; [| intros Hc; by apply Hne].
+    rewrite E. apply IH; [| exact Hp]. intros Hc. apply Hni. by right.
+Qed.
+
+(** The shape every rule's environment obligation has: the variables the step
+    does not touch are framed, the ones it does are supplied.  Stating it once
+    means each rule names its touched variables and discharges a [TyOK] for
+    each, with no filtering. *)
+Lemma EnvOK_step root t U FType fs Sm Ob C Fl touched rest :
+  EnvOK root t U FType fs Sm Ob C Fl rest ->
+  (forall x ty, In (x, ty) touched -> TyOK root t U FType fs Sm Ob C Fl x ty) ->
+  EnvOK root t U FType fs Sm Ob C Fl (touched ++ rest).
+Proof.
+  intros Hrest Htouched x ty Hin.
+  apply in_app_or in Hin. destruct Hin as [Hin | Hin];
+    [exact (Htouched x ty Hin) | exact (Hrest x ty Hin)].
+Qed.
+
+(** Retargeting one field of a variable's map.  This is what happens to the
+    *parent* in every mutation: its path and its observation are unchanged, and
+    one entry of its field map now names a different variable.  The new entry is
+    the cell the rule just wrote. *)
+Lemma FieldOK_update t Sm Ob C o N f y oy sg :
+  (forall g w, g <> f -> N g = Some w ->
+     match w with
+     | FVar z => exists oz sz, Sm !! (z, t) = Some oz
+                            /\ C !! (o, g) = Some (VLoc oz)
+                            /\ Ob !! oz = Some sz /\ Oiter t ∈ sz
+     | FNull  => C !! (o, g) = Some VNull
+     end) ->
+  Sm !! (y, t) = Some oy -> C !! (o, f) = Some (VLoc oy) ->
+  Ob !! oy = Some sg -> Oiter t ∈ sg ->
+  FieldOK t Sm Ob C o (fun g => if decide (g = f) then Some (FVar y) else N g).
+Proof.
+  intros Hold Hsy Hcy Hoy Hity g w Hw.
+  destruct (decide (g = f)) as [Heq | Hne].
+  - subst g. destruct (decide (f = f)) as [_ | Hc];
+      [| exfalso; by apply Hc].
+    injection Hw as <-. by exists oy, sg.
+  - destruct (decide (g = f)) as [Hc | _]; [exfalso; by apply Hne |].
+    exact (Hold g w Hne Hw).
+Qed.
+
+Print Assumptions EnvOK_step.
+Print Assumptions FieldOK_update.
+
+Print Assumptions app_snoc_split.
+
 Print Assumptions TyOK_demoted.
 Print Assumptions TyOK_promoted.
 
@@ -4589,6 +4639,765 @@ Print Assumptions bind_atomic.
 
 
 
+Section typed_link.
+  Context `{!rcuG Σ, !physG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ,
+            !invGS_gen hlc Σ}.
+  Context (FType : FName -> FieldKind).
+  Context (root : Loc) (fs : list FName).
+
+  (** * A mutation, end to end
+
+      \textsc{T-LinkF-Null} with a type environment on both sides.  The
+      environment's variables split in two, as they do for every rule: the ones
+      the step does not touch are framed across it, and the one it does gets its
+      new type.
+
+      The framing is the two lemmas, applied in the order the step changes
+      things -- observations first, then the cell, so both hypotheses are about
+      the cell map the caller started with.  The touched variable is
+      [TyOK_promoted], and the only work in it is that the fresh node's new path
+      is the parent's extended by the field just written.
+
+      Nothing here is about RCU.  It is the bookkeeping that connects a rule's
+      resources to a rule's types, and it is the same bookkeeping for all five
+      mutations. *)
+  Lemma link_null_typed N γm γh γl γs γo γf γr E lw x xp op f on rho f0
+        U Sm Ob C Fl G sp v Np :
+    ↑N ⊆ E ->
+    on <> root -> In f0 fs -> op <> on -> x <> xp ->
+    (* what the environment already says about the parent and the fresh node *)
+    In (xp, TItr rho Np) G ->
+    Sm !! (xp, lw) = Some op -> Ob !! op = Some sp -> Oiter lw ∈ sp ->
+    Sm !! (x, lw) = Some on -> Ob !! on = Some {[Ofresh lw]} -> ~ U x lw ->
+    (forall g, In g fs -> C !! (on, g) = Some VNull) ->
+    C !! (op, f) = Some v ->
+    hstarC C root rho = Some op ->
+    ~ In (op, f) (pathcells C root rho) ->
+    (* and the framing conditions for everything else *)
+    ReadsObs root C Sm lw
+      (List.filter (fun p => negb (Nat.eqb (fst p) x)) G) on ->
+    ReadsCell root C Sm lw
+      (List.filter (fun p => negb (Nat.eqb (fst p) x)) G) (op, f) ->
+    EnvOK root lw U FType fs Sm Ob C Fl G ->
+    rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr -∗
+    writer γo γs γh γl γf lw Sm Ob C Fl -∗
+    sv γs x lw on
+    ={E}=∗ writer γo γs γh γl γf lw Sm
+             (<[on := {[Oiter lw]}]> Ob) (<[(op, f) := VLoc on]> C) Fl
+           ∗ sv γs x lw on
+           ∗ ⌜EnvOK root lw U FType fs Sm
+                (<[on := {[Oiter lw]}]> Ob) (<[(op, f) := VLoc on]> C) Fl
+                ((x, TItr (rho ++ [f]) (fun _ => None))
+                   :: List.filter (fun p => negb (Nat.eqb (fst p) x)) G)⌝.
+  Proof.
+    iIntros (HN Hnr Hf0 Hpn Hxp Hin Hstkp Hobp Hitp Hstkx Hobx Hundf
+             Hnull Hcellf HpathC Hoff HRO HRC Hok) "#Hinv Hw Hsv".
+    iDestruct "Hw" as "(Hlk & Hsm & Hob & Hcells & Hflo)".
+    assert (Hinf : In (xp, TItr rho Np)
+              (List.filter (fun p => negb (Nat.eqb (fst p) x)) G)).
+    { apply List.filter_In. split; [exact Hin |]. simpl.
+      apply Bool.negb_true_iff. apply Nat.eqb_neq.
+      intros Hc. apply Hxp. by rewrite Hc. }
+    (* the two observation entries the step reads *)
+    rewrite /obs_own (big_sepM_delete _ Ob op sp); [| exact Hobp].
+    iDestruct "Hob" as "[Hop Hob]".
+    rewrite (big_sepM_delete _ (delete op Ob) on {[Ofresh lw]});
+      [| rewrite lookup_delete_ne; [exact Hobx | intros Hc; by apply Hpn]].
+    iDestruct "Hob" as "[Hon Hob]".
+    (* and the cell it writes *)
+    rewrite /cells (big_sepM_delete _ C (op, f) v); [| exact Hcellf].
+    iDestruct "Hcells" as "[Hptf Hcells]".
+    assert (Hnull' : forall g, In g fs ->
+              delete (op, f) C !! (on, g) = Some VNull).
+    { intros g Hg. rewrite lookup_delete_ne; [exact (Hnull g Hg) |].
+      intros Hc. injection Hc as Ha Hb. exact (Hpn Ha). }
+    iMod (link_null_atomic FType root fs N γm γh γl γs γo γf γr E lw op f on
+            rho x f0 sp v (delete (op, f) C) HN Hnr Hf0 Hitp
+            (hstarC_delete C (op, f) root rho op Hoff HpathC) Hnull'
+            with "Hinv Hlk Hop Hon Hsv Hcells Hptf")
+      as "(Hlk & Hop & Hon & Hsv & Hcells & Hptf)".
+    iModIntro.
+    iSplitL "Hlk Hsm Hop Hon Hob Hcells Hptf Hflo".
+    { rewrite /writer /obs_own /cells. iFrame "Hlk Hsm Hflo".
+      iSplitL "Hop Hon Hob".
+      - rewrite (big_sepM_delete _ (<[on := {[Oiter lw]}]> Ob) op sp).
+        + iFrame "Hop".
+          rewrite (big_sepM_delete _ (delete op (<[on := {[Oiter lw]}]> Ob))
+                     on {[Oiter lw]}).
+          * iFrame "Hon".
+            rewrite delete_insert_ne; [| intros Hc; by apply Hpn].
+            by rewrite delete_insert_eq.
+          * rewrite lookup_delete_ne; [| intros Hc; by apply Hpn].
+            by rewrite lookup_insert_eq.
+        + rewrite lookup_insert_ne; [exact Hobp | intros Hc; by apply Hpn].
+      - rewrite (big_sepM_delete _ (<[(op, f) := VLoc on]> C) (op, f)
+                   (VLoc on)); [| by rewrite lookup_insert_eq].
+        iFrame "Hptf". by rewrite delete_insert_eq. }
+    iFrame. iPureIntro.
+    (* frame the rest of the environment, then give the touched variable its
+       new type *)
+    assert (Hframed : EnvOK root lw U FType fs Sm
+              (<[on := {[Oiter lw]}]> Ob) (<[(op, f) := VLoc on]> C) Fl
+              (List.filter (fun p => negb (Nat.eqb (fst p) x)) G)).
+    { apply EnvOK_cell; [exact HRC |].
+      apply EnvOK_obs; [exact HRO |].
+      intros y ty Hiny. apply List.filter_In in Hiny.
+      exact (Hok y ty (proj1 Hiny)). }
+    intros y ty Hiny. destruct Hiny as [Heq | Hiny];
+      [| exact (Hframed y ty Hiny)].
+    injection Heq as <- <-. simpl.
+    (* the promoted node: its path is the parent's, extended *)
+    destruct (Hok xp _ Hin)
+      as (op' & sp' & Hstkp' & Hobp' & Hitp' & _ & _ & Hpp & Hprep).
+    rewrite Hstkp in Hstkp'. injection Hstkp' as <-.
+    apply (TyOK_promoted root lw U FType fs Sm _ _ Fl x on op f rho
+             {[Oiter lw]} (fun _ => None)).
+    - exact Hstkx.
+    - exact Hundf.
+    - by rewrite lookup_insert_eq.
+    - by apply elem_of_singleton.
+    - intros g w Hc. discriminate Hc.
+    - apply hstarC_stable_cell; [exact Hoff | exact HpathC].
+    - by rewrite lookup_insert_eq.
+    - intros rho1 rho2 Happ.
+      destruct (app_snoc_split rho1 rho2 rho f Happ) as [[rho2' Hpre] | ->].
+      + destruct (Hprep rho1 rho2' Hpre) as (o' & sg' & Hp' & Hob' & Hit').
+        exists o', sg'. repeat apply conj.
+        * apply hstarC_stable_cell; [| exact Hp'].
+          intros Hc. apply Hoff. rewrite -Hpre.
+          exact (pathcells_prefix C root rho1 rho2' (op, f) Hc).
+        * rewrite lookup_insert_ne; [exact Hob' |].
+          intros ->.
+          exact (proj1 (proj2 HRO) xp rho Np rho1 rho2' Hinf Hpre Hp').
+        * exact Hit'.
+      + exists on, {[Oiter lw]}. repeat apply conj.
+        * apply (hstarC_snoc _ root rho op f on);
+            [apply hstarC_stable_cell; [exact Hoff | exact HpathC]
+             | by rewrite lookup_insert_eq].
+        * by rewrite lookup_insert_eq.
+        * by apply elem_of_singleton.
+  Qed.
+
+End typed_link.
+
+Print Assumptions link_null_typed.
+
+Section typed_unlink.
+  Context `{!rcuG Σ, !physG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ,
+            !invGS_gen hlc Σ}.
+  Context (FType : FName -> FieldKind).
+  Context (root : Loc) (fs : list FName).
+
+  (** * The transcription
+
+      \textsc{T-UnlinkH} with a type environment on both sides, written against
+      the same toolkit as \textsc{T-LinkF-Null} and touching three variables
+      rather than one: the parent's field map is retargeted, the victim is
+      demoted to [unlinked], and the node below is promoted to the parent's
+      field.  Each is one of [FieldOK_update], [TyOK_demoted] and
+      [TyOK_promoted]; the rest of the environment is framed by the same two
+      lemmas in the same order.
+
+      This is the second of five and it took no new ideas, which is what the
+      toolkit was for. *)
+  Lemma unlink_typed N γm γh γl γs γo γf γr E lw xx xz xw ox f1 oz f2 ow rho
+        U Sm Ob C Fl Fr val sx sw sxo rest :
+    ↑N ⊆ E ->
+    (forall g, FType g = RCUField) ->
+    ox <> oz -> ox <> ow -> oz <> ow ->
+    (* what the environment says about the three *)
+    Sm !! (xx, lw) = Some ox -> Ob !! ox = Some sx -> Oiter lw ∈ sx ->
+    Sm !! (xz, lw) = Some oz -> Ob !! oz = Some {[Oiter lw]} -> ~ U xz lw ->
+    Sm !! (xw, lw) = Some sxo -> sxo = ow ->
+    Ob !! ow = Some sw -> Oiter lw ∈ sw -> ~ U xw lw -> ~ U xx lw ->
+    (* the heap the step reads and writes *)
+    C !! (ox, f1) = Some (VLoc oz) ->
+    C !! (oz, f2) = Some (VLoc ow) ->
+    hstarC C root rho = Some ox ->
+    ~ In (ox, f1) (pathcells C root rho) ->
+    (forall rho1 rho2, rho1 ++ rho2 = rho ->
+       exists o' sg', hstarC C root rho1 = Some o'
+                   /\ Ob !! o' = Some sg' /\ Oiter lw ∈ sg') ->
+    (* the victim is not on the parent's path: uniqueness of paths, which the
+       invariant gives and which the rule's premises make available *)
+    (forall rho1 rho2, rho1 ++ rho2 = rho -> hstarC C root rho1 <> Some oz) ->
+    FrCells Fr fs C val ->
+    (forall q g, val q g <> VLoc oz) ->
+    (* the framing conditions for the rest *)
+    ReadsObs root C Sm lw rest oz ->
+    ReadsCell root C Sm lw rest (ox, f1) ->
+    EnvOK root lw U FType fs Sm Ob C Fl rest ->
+    rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr -∗
+    writer γo γs γh γl γf lw Sm Ob C Fl -∗
+    fr_frag γr Fr
+    ={E}=∗ writer γo γs γh γl γf lw Sm
+             (<[oz := {[Ounlk lw]}]> Ob) (<[(ox, f1) := VLoc ow]> C) Fl
+           ∗ fr_frag γr Fr
+           ∗ ⌜EnvOK root lw U FType fs Sm
+                (<[oz := {[Ounlk lw]}]> Ob) (<[(ox, f1) := VLoc ow]> C) Fl
+                ([(xx, TItr rho
+                     (fun g => if decide (g = f1)
+                               then Some (FVar xw) else None));
+                  (xz, TUnlinked);
+                  (xw, TItr (rho ++ [f1]) (fun _ => None))] ++ rest)⌝.
+  Proof.
+    iIntros (HN Hall Hxz Hxw Hzw Hstkx Hobx Hitx Hstkz Hobz Hundz
+             Hstkw Hsxo Hobw Hitw Hundw Hundx Hc1 Hc2 HpathC Hoff
+             Hpre Hnoz HFrC Hnf HRO HRC Hrest) "#Hinv Hw Hfrg".
+    subst sxo.
+    iDestruct "Hw" as "(Hlk & Hsm & Hob & Hcells & Hflo)".
+    (* the three observation entries *)
+    rewrite /obs_own (big_sepM_delete _ Ob ox sx); [| exact Hobx].
+    iDestruct "Hob" as "[Hox Hob]".
+    rewrite (big_sepM_delete _ (delete ox Ob) oz {[Oiter lw]});
+      [| rewrite lookup_delete_ne; [exact Hobz | exact Hxz]].
+    iDestruct "Hob" as "[Hoz Hob]".
+    rewrite (big_sepM_delete _ (delete oz (delete ox Ob)) ow sw);
+      [| rewrite lookup_delete_ne; [| exact Hzw];
+         rewrite lookup_delete_ne; [exact Hobw | exact Hxw]].
+    iDestruct "Hob" as "[How Hob]".
+    (* and the one cell it writes *)
+    rewrite /cells (big_sepM_delete _ C (ox, f1) (VLoc oz)); [| exact Hc1].
+    iDestruct "Hcells" as "[Hpt1 Hcells]".
+    assert (Hc2' : delete (ox, f1) C !! (oz, f2) = Some (VLoc ow)).
+    { rewrite lookup_delete_ne; [exact Hc2 |].
+      intros Hcc. injection Hcc as Ha Hb. by apply Hxz. }
+    assert (HFrC' : FrCells Fr fs (delete (ox, f1) C) val).
+    { intros q g Hq Hg. rewrite lookup_delete_ne; [exact (HFrC q g Hq Hg) |].
+      intros Hcc. injection Hcc as Ha Hb.
+      pose proof (HFrC q g Hq Hg) as Hv.
+      rewrite Ha Hb in Hc1. rewrite Hc1 in Hv.
+      injection Hv as Hv. exact (Hnf q g (eq_sym Hv)). }
+    iMod (unlink_atomic FType root fs N γm γh γl γs γo γf γr E lw ox f1 oz f2
+            ow rho sx sw Fr val (delete (ox, f1) C) HN Hall Hitx Hitw HFrC'
+            (hstarC_delete C (ox, f1) root rho ox Hoff HpathC) Hc2' Hnf
+            with "Hinv Hlk Hox Hoz How Hcells Hpt1 Hfrg")
+      as "(Hlk & Hox & Hoz & How & Hcells & Hpt1 & Hfrg)".
+    iModIntro.
+    iSplitL "Hlk Hsm Hox Hoz How Hob Hcells Hpt1 Hflo"; last first.
+    { iFrame. iPureIntro. apply EnvOK_step.
+      - apply EnvOK_cell; [exact HRC |]. by apply EnvOK_obs.
+      - intros y ty Hin.
+        destruct Hin as [Heq | [Heq | [Heq | []]]]; injection Heq as Hv1 Hv2;
+          rewrite -Hv1 -Hv2.
+        + (* the parent: same path, one field retargeted *)
+          exists ox, sx. repeat apply conj.
+          * exact Hstkx.
+          * rewrite lookup_insert_ne; [exact Hobx | intros ->; by apply Hxz].
+          * exact Hitx.
+          * exact Hundx.
+          * apply (FieldOK_update _ _ _ _ _ _ _ xw ow sw).
+            -- intros g w _ Hc. discriminate Hc.
+            -- exact Hstkw.
+            -- by rewrite lookup_insert_eq.
+            -- rewrite lookup_insert_ne; [exact Hobw | intros ->; by apply Hzw].
+            -- exact Hitw.
+          * apply hstarC_stable_cell; [exact Hoff | exact HpathC].
+          * intros rho1 rho2 Happ. destruct (Hpre rho1 rho2 Happ)
+              as (o' & sg' & Hp' & Hob' & Hit').
+            exists o', sg'. repeat apply conj.
+            -- apply hstarC_stable_cell; [| exact Hp'].
+               intros Hcc. apply Hoff. rewrite -Happ.
+               exact (pathcells_prefix C root rho1 rho2 (ox, f1) Hcc).
+            -- rewrite lookup_insert_ne; [exact Hob' |].
+               intros Heq. rewrite -Heq in Hp'.
+               exact (Hnoz rho1 rho2 Happ Hp').
+            -- exact Hit'.
+        + exact (TyOK_demoted root lw U FType fs Sm Ob C Fl xz oz
+                   Hstkz Hundz).
+        + (* the node below, promoted to the parent's field *)
+          apply (TyOK_promoted root lw U FType fs Sm _ _ Fl xw ow ox f1 rho
+                   sw (fun _ => None)).
+          * exact Hstkw.
+          * exact Hundw.
+          * rewrite lookup_insert_ne; [exact Hobw | intros ->; by apply Hzw].
+          * exact Hitw.
+          * intros g w Hc. discriminate Hc.
+          * apply hstarC_stable_cell; [exact Hoff | exact HpathC].
+          * by rewrite lookup_insert_eq.
+          * intros rho1 rho2 Happ.
+            destruct (app_snoc_split rho1 rho2 rho f1 Happ) as [[r2 Hp] | ->].
+            -- destruct (Hpre rho1 r2 Hp) as (o' & sg' & Hp' & Hob' & Hit').
+               exists o', sg'. repeat apply conj.
+               ++ apply hstarC_stable_cell; [| exact Hp'].
+                  intros Hcc. apply Hoff. rewrite -Hp.
+                  exact (pathcells_prefix C root rho1 r2 (ox, f1) Hcc).
+               ++ rewrite lookup_insert_ne; [exact Hob' |].
+                  intros Heq. rewrite -Heq in Hp'.
+                  exact (Hnoz rho1 r2 Hp Hp').
+               ++ exact Hit'.
+            -- exists ow, sw. repeat apply conj.
+               ++ apply (hstarC_snoc _ root rho ox f1 ow);
+                    [apply hstarC_stable_cell; [exact Hoff | exact HpathC]
+                     | by rewrite lookup_insert_eq].
+               ++ rewrite lookup_insert_ne;
+                    [exact Hobw | intros ->; by apply Hzw].
+               ++ exact Hitw. }
+    (* the maps go back together *)
+    rewrite /writer /obs_own /cells. iFrame "Hlk Hsm Hflo".
+    iSplitL "Hox Hoz How Hob".
+    - rewrite (big_sepM_delete _ (<[oz := {[Ounlk lw]}]> Ob) ox sx);
+        [| rewrite lookup_insert_ne; [exact Hobx | intros ->; by apply Hxz]].
+      iFrame "Hox".
+      rewrite (big_sepM_delete _ (delete ox (<[oz := {[Ounlk lw]}]> Ob)) oz
+                 {[Ounlk lw]});
+        [| rewrite lookup_delete_ne; [by rewrite lookup_insert_eq | exact Hxz]].
+      iFrame "Hoz".
+      rewrite delete_insert_ne; [| exact Hxz]. rewrite delete_insert_eq.
+      rewrite (big_sepM_delete _ (delete oz (delete ox Ob)) ow sw);
+        [| rewrite lookup_delete_ne; [| exact Hzw];
+           rewrite lookup_delete_ne; [exact Hobw | exact Hxw]].
+      iFrame.
+    - rewrite (big_sepM_delete _ (<[(ox, f1) := VLoc ow]> C) (ox, f1)
+                 (VLoc ow)); [| by rewrite lookup_insert_eq].
+      iFrame "Hpt1". by rewrite delete_insert_eq.
+  Qed.
+
+End typed_unlink.
+
+Print Assumptions unlink_typed.
+
+Section typed_rest.
+  Context `{!rcuG Σ, !physG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ,
+            !invGS_gen hlc Σ}.
+  Context (FType : FName -> FieldKind).
+  Context (root : Loc) (fs : list FName).
+
+  (** * The remaining three
+
+      \textsc{T-WriteFH}, \textsc{T-Insert} and \textsc{T-Replace}, written
+      against the same toolkit.  Each is the two framing lemmas for the
+      untouched variables and a handful of [TyOK]s for the touched ones; the
+      only thing that varies is which of the three touched-variable forms occur
+      and how many times.
+
+      \textsc{T-WriteFH} is the smallest: it changes no observation at all, so
+      only the cell framing applies, and the one touched variable stays
+      [rcuFresh] with a field added. *)
+  Lemma write_fresh_typed N γm γh γl γs γo γf γr E lw x xy on f oy g
+        U Sm Ob C Fl sn sy v vy N0 rest :
+    ↑N ⊆ E ->
+    on <> root -> oy <> root -> on <> oy ->
+    Sm !! (x, lw) = Some on -> Ob !! on = Some sn -> Ofresh lw ∈ sn ->
+    ~ U x lw ->
+    Sm !! (xy, lw) = Some oy -> Ob !! oy = Some sy -> Oiter lw ∈ sy ->
+    C !! (on, f) = Some v -> C !! (oy, g) = Some vy ->
+    (forall h w, h <> f -> N0 h = Some w ->
+       match w with
+       | FVar z => exists oz sz, Sm !! (z, lw) = Some oz
+                              /\ C !! (on, h) = Some (VLoc oz)
+                              /\ Ob !! oz = Some sz /\ Oiter lw ∈ sz
+       | FNull  => C !! (on, h) = Some VNull
+       end) ->
+    (forall h, In h fs ->
+       (fun h' => if decide (h' = f) then Some (FVar xy) else N0 h') h = None ->
+       C !! (on, h) = Some VNull) ->
+    ReadsCell root C Sm lw rest (on, f) ->
+    EnvOK root lw U FType fs Sm Ob C Fl rest ->
+    rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr -∗
+    writer γo γs γh γl γf lw Sm Ob C Fl
+    ={E}=∗ writer γo γs γh γl γf lw Sm Ob (<[(on, f) := VLoc oy]> C) Fl
+           ∗ ⌜EnvOK root lw U FType fs Sm Ob (<[(on, f) := VLoc oy]> C) Fl
+                ([(x, TFresh (fun h => if decide (h = f)
+                                       then Some (FVar xy) else N0 h))]
+                 ++ rest)⌝.
+  Proof.
+    iIntros (HN Hnr Hyr Hny Hstk Hob Hfr Hundf Hstky Hoby Hity Hcf Hcg
+             Hold Hnull HRC Hrest) "#Hinv Hw".
+    iDestruct "Hw" as "(Hlk & Hsm & Hob & Hcells & Hflo)".
+    rewrite /obs_own (big_sepM_delete _ Ob on sn); [| exact Hob].
+    iDestruct "Hob" as "[Hon Hobr]".
+    rewrite (big_sepM_delete _ (delete on Ob) oy sy);
+      [| rewrite lookup_delete_ne; [exact Hoby | exact Hny]].
+    iDestruct "Hobr" as "[Hoy Hobr]".
+    rewrite /cells (big_sepM_delete _ C (on, f) v); [| exact Hcf].
+    iDestruct "Hcells" as "[Hptn Hcells]".
+    assert (Hcg' : delete (on, f) C !! (oy, g) = Some vy).
+    { rewrite lookup_delete_ne; [exact Hcg |].
+      intros Hcc. injection Hcc as Ha Hb. by apply Hny. }
+    iDestruct (big_sepM_lookup_acc _ Sm (x, lw) on Hstk with "Hsm")
+      as "[Hsv Hsmback]".
+    iMod (write_fresh_atomic FType root fs N γm γh γl γs γo γf γr E lw on f oy
+            x g sn sy v vy (delete (on, f) C) HN Hnr Hyr Hfr Hity Hcg'
+            with "Hinv Hlk Hon Hoy Hsv Hcells Hptn")
+      as "(Hlk & Hon & Hoy & Hsv & Hcells & Hptn)".
+    iModIntro.
+    iSplitL "Hlk Hsv Hsmback Hon Hoy Hobr Hcells Hptn Hflo".
+    { rewrite /writer /obs_own /cells. iFrame "Hlk Hflo".
+      iSplitL "Hsv Hsmback"; [by iApply "Hsmback" |].
+      iSplitL "Hon Hoy Hobr".
+      - rewrite (big_sepM_delete _ Ob on sn); [| exact Hob]. iFrame "Hon".
+        rewrite (big_sepM_delete _ (delete on Ob) oy sy);
+          [| rewrite lookup_delete_ne; [exact Hoby | exact Hny]].
+        iFrame.
+      - rewrite (big_sepM_delete _ (<[(on, f) := VLoc oy]> C) (on, f)
+                   (VLoc oy)); [| by rewrite lookup_insert_eq].
+        iFrame "Hptn". by rewrite delete_insert_eq. }
+    iPureIntro. apply EnvOK_step.
+    - by apply EnvOK_cell.
+    - intros y ty Hin. destruct Hin as [Heq | []].
+      injection Heq as Hv1 Hv2. rewrite -Hv1 -Hv2. simpl.
+      exists on, sn. repeat apply conj;
+        [exact Hstk | exact Hob | exact Hfr | exact Hundf | |].
+      + apply (FieldOK_update _ _ _ _ _ _ _ xy oy sy).
+        * intros h w Hne Hw. specialize (Hold h w Hne Hw).
+          destruct w as [z | ].
+          -- destruct Hold as (oz & sz & Hsz & Hcz & Hoz & Hitz).
+             exists oz, sz. repeat apply conj;
+               [exact Hsz | | exact Hoz | exact Hitz].
+             rewrite lookup_insert_ne; [exact Hcz |].
+             intros Hcc. injection Hcc as Hb. by apply Hne.
+          -- rewrite lookup_insert_ne; [exact Hold |].
+             intros Hcc. injection Hcc as Hb. by apply Hne.
+        * exact Hstky.
+        * by rewrite lookup_insert_eq.
+        * exact Hoby.
+        * exact Hity.
+      + intros h Hh Hnone.
+        assert (Hhf : h <> f).
+        { intros ->. rewrite decide_True in Hnone; [discriminate | reflexivity]. }
+        rewrite lookup_insert_ne;
+          [exact (Hnull h Hh Hnone) | intros Hcc; injection Hcc as Hb;
+                                      by apply Hhf].
+  Qed.
+
+  (** \textsc{T-Insert} links a fresh node that already points at the node it
+      displaces.  Three touched variables again: the parent is retargeted, the
+      fresh node is promoted to the parent's field, and the displaced node
+      moves one step further down -- which is the same promotion lemma applied
+      to the cell the fresh node already held. *)
+  Lemma insert_typed N γm γh γl γs γo γf γr E lw xp x xo op f on oo f4 rho f0
+        U Sm Ob C Fl sp so rest :
+    ↑N ⊆ E ->
+    on <> root -> In f4 fs -> In f0 fs ->
+    (forall g, FType g = RCUField) ->
+    op <> on -> on <> oo -> op <> oo ->
+    Sm !! (xp, lw) = Some op -> Ob !! op = Some sp -> Oiter lw ∈ sp ->
+    ~ U xp lw ->
+    Sm !! (x, lw) = Some on -> Ob !! on = Some {[Ofresh lw]} -> ~ U x lw ->
+    Sm !! (xo, lw) = Some oo -> Ob !! oo = Some so -> Oiter lw ∈ so ->
+    ~ U xo lw ->
+    C !! (op, f) = Some (VLoc oo) ->
+    (forall g, In g fs ->
+       C !! (on, g) = Some (if decide (g = f4) then VLoc oo else VNull)) ->
+    hstarC C root rho = Some op ->
+    ~ In (op, f) (pathcells C root rho) ->
+    (forall rho1 rho2, rho1 ++ rho2 = rho ->
+       exists o' sg', hstarC C root rho1 = Some o'
+                   /\ Ob !! o' = Some sg' /\ Oiter lw ∈ sg') ->
+    (forall rho1 rho2, rho1 ++ rho2 = rho -> hstarC C root rho1 <> Some on) ->
+    ReadsObs root C Sm lw rest on ->
+    ReadsCell root C Sm lw rest (op, f) ->
+    EnvOK root lw U FType fs Sm Ob C Fl rest ->
+    rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr -∗
+    writer γo γs γh γl γf lw Sm Ob C Fl
+    ={E}=∗ writer γo γs γh γl γf lw Sm
+             (<[on := {[Oiter lw]}]> Ob) (<[(op, f) := VLoc on]> C) Fl
+           ∗ ⌜EnvOK root lw U FType fs Sm
+                (<[on := {[Oiter lw]}]> Ob) (<[(op, f) := VLoc on]> C) Fl
+                ([(xp, TItr rho (fun g => if decide (g = f)
+                                          then Some (FVar x) else None));
+                  (x, TItr (rho ++ [f])
+                        (fun g => if decide (g = f4)
+                                  then Some (FVar xo) else None));
+                  (xo, TItr ((rho ++ [f]) ++ [f4]) (fun _ => None))]
+                 ++ rest)⌝.
+  Proof.
+    iIntros (HN Hnr Hf4 Hf0 Hall Hpn Hno Hpo Hstkp Hobp Hitp Hundp
+             Hstkx Hobx Hundx Hstko Hobo Hito Hundo Hcf Hcells0 HpathC Hoff
+             Hpre Hnon HRO HRC Hrest) "#Hinv Hw".
+    iDestruct "Hw" as "(Hlk & Hsm & Hob & Hcells & Hflo)".
+    rewrite /obs_own (big_sepM_delete _ Ob op sp); [| exact Hobp].
+    iDestruct "Hob" as "[Hop Hobr]".
+    rewrite (big_sepM_delete _ (delete op Ob) on {[Ofresh lw]});
+      [| rewrite lookup_delete_ne; [exact Hobx | exact Hpn]].
+    iDestruct "Hobr" as "[Hon Hobr]".
+    rewrite /cells (big_sepM_delete _ C (op, f) (VLoc oo)); [| exact Hcf].
+    iDestruct "Hcells" as "[Hptf Hcells]".
+    iDestruct (big_sepM_lookup_acc _ Sm (x, lw) on Hstkx with "Hsm")
+      as "[Hsv Hsmback]".
+    assert (Hcells' : forall g, In g fs ->
+              delete (op, f) C !! (on, g)
+              = Some (if decide (g = f4) then VLoc oo else VNull)).
+    { intros g Hg. rewrite lookup_delete_ne; [exact (Hcells0 g Hg) |].
+      intros Hcc. injection Hcc as Ha Hb. by apply Hpn. }
+    iMod (insert_atomic FType root fs N γm γh γl γs γo γf γr E lw op f on oo
+            f4 rho x sp (delete (op, f) C) HN Hnr Hf4 Hall Hitp
+            (hstarC_delete C (op, f) root rho op Hoff HpathC) Hcells'
+            with "Hinv Hlk Hop Hon Hsv Hcells Hptf")
+      as "(Hlk & Hop & Hon & Hsv & Hcells & Hptf)".
+    iModIntro.
+    iSplitL "Hlk Hsv Hsmback Hop Hon Hobr Hcells Hptf Hflo".
+    { rewrite /writer /obs_own /cells. iFrame "Hlk Hflo".
+      iSplitL "Hsv Hsmback"; [by iApply "Hsmback" |].
+      iSplitL "Hop Hon Hobr".
+      - rewrite (big_sepM_delete _ (<[on := {[Oiter lw]}]> Ob) op sp);
+          [| rewrite lookup_insert_ne; [exact Hobp | intros ->; by apply Hpn]].
+        iFrame "Hop".
+        rewrite (big_sepM_delete _ (delete op (<[on := {[Oiter lw]}]> Ob)) on
+                   {[Oiter lw]});
+          [| rewrite lookup_delete_ne; [by rewrite lookup_insert_eq | exact Hpn]].
+        iFrame "Hon".
+        rewrite delete_insert_ne; [| exact Hpn]. by rewrite delete_insert_eq.
+      - rewrite (big_sepM_delete _ (<[(op, f) := VLoc on]> C) (op, f)
+                   (VLoc on)); [| by rewrite lookup_insert_eq].
+        iFrame "Hptf". by rewrite delete_insert_eq. }
+    iPureIntro.
+    (* the fresh node's new path, which the other two are stated against *)
+    assert (HpathC' : hstarC (<[(op, f) := VLoc on]> C) root rho = Some op)
+      by exact (hstarC_stable_cell C (op, f) (VLoc on) root rho op Hoff HpathC).
+    assert (Hnewpath : hstarC (<[(op, f) := VLoc on]> C) root (rho ++ [f])
+                       = Some on)
+      by (apply (hstarC_snoc _ root rho op f on);
+          [exact HpathC' | by rewrite lookup_insert_eq]).
+    assert (Hcell4 : <[(op, f) := VLoc on]> C !! (on, f4) = Some (VLoc oo)).
+    { rewrite lookup_insert_ne.
+      - rewrite (Hcells0 f4 Hf4). by rewrite decide_True.
+      - intros Hcc. injection Hcc as Ha Hb. by apply Hpn. }
+    assert (Hprefix' : forall rho1 rho2, rho1 ++ rho2 = rho ++ [f] ->
+              exists o' sg', hstarC (<[(op, f) := VLoc on]> C) root rho1
+                             = Some o'
+                          /\ <[on := {[Oiter lw]}]> Ob !! o' = Some sg'
+                          /\ Oiter lw ∈ sg').
+    { intros rho1 rho2 Happ.
+      destruct (app_snoc_split rho1 rho2 rho f Happ) as [[r2 Hp] | ->].
+      - destruct (Hpre rho1 r2 Hp) as (o' & sg' & Hp' & Hob' & Hit').
+        exists o', sg'. repeat apply conj.
+        + apply hstarC_stable_cell; [| exact Hp'].
+          intros Hcc. apply Hoff. rewrite -Hp.
+          exact (pathcells_prefix C root rho1 r2 (op, f) Hcc).
+        + rewrite lookup_insert_ne; [exact Hob' |].
+          intros Heq. rewrite -Heq in Hp'. exact (Hnon rho1 r2 Hp Hp').
+        + exact Hit'.
+      - exists on, {[Oiter lw]}. repeat apply conj;
+          [exact Hnewpath | by rewrite lookup_insert_eq
+           | by apply elem_of_singleton]. }
+    apply EnvOK_step.
+    - apply EnvOK_cell; [exact HRC |]. by apply EnvOK_obs.
+    - intros y ty Hin.
+      destruct Hin as [Heq | [Heq | [Heq | []]]]; injection Heq as Hv1 Hv2;
+        rewrite -Hv1 -Hv2.
+      + (* the parent, retargeted at the fresh node *)
+        exists op, sp. repeat apply conj.
+        * exact Hstkp.
+        * rewrite lookup_insert_ne; [exact Hobp | intros ->; by apply Hpn].
+        * exact Hitp.
+        * exact Hundp.
+        * apply (FieldOK_update _ _ _ _ _ _ _ x on {[Oiter lw]});
+            [intros h w _ Hc; discriminate Hc | exact Hstkx
+             | by rewrite lookup_insert_eq | by rewrite lookup_insert_eq
+             | by apply elem_of_singleton].
+        * exact HpathC'.
+        * intros rho1 rho2 Happ. destruct (Hpre rho1 rho2 Happ)
+            as (o' & sg' & Hp' & Hob' & Hit').
+          exists o', sg'. repeat apply conj.
+          -- apply hstarC_stable_cell; [| exact Hp'].
+             intros Hcc. apply Hoff. rewrite -Happ.
+             exact (pathcells_prefix C root rho1 rho2 (op, f) Hcc).
+          -- rewrite lookup_insert_ne; [exact Hob' |].
+             intros Heq. rewrite -Heq in Hp'. exact (Hnon rho1 rho2 Happ Hp').
+          -- exact Hit'.
+      + (* the fresh node, promoted, keeping its one field *)
+        exists on, {[Oiter lw]}. repeat apply conj.
+        * exact Hstkx.
+        * by rewrite lookup_insert_eq.
+        * by apply elem_of_singleton.
+        * exact Hundx.
+        * apply (FieldOK_update _ _ _ _ _ _ _ xo oo so);
+            [intros h w _ Hc; discriminate Hc | exact Hstko | exact Hcell4 | |].
+          -- rewrite lookup_insert_ne; [exact Hobo | intros ->; by apply Hno].
+          -- exact Hito.
+        * exact Hnewpath.
+        * exact Hprefix'.
+      + (* the displaced node, one step further down *)
+        apply (TyOK_promoted root lw U FType fs Sm _ _ Fl xo oo on f4
+                 (rho ++ [f]) so (fun _ => None)).
+        * exact Hstko.
+        * exact Hundo.
+        * rewrite lookup_insert_ne; [exact Hobo | intros ->; by apply Hno].
+        * exact Hito.
+        * intros h w Hc. discriminate Hc.
+        * exact Hnewpath.
+        * exact Hcell4.
+        * intros rho1 rho2 Happ.
+          destruct (app_snoc_split rho1 rho2 (rho ++ [f]) f4 Happ)
+            as [[r2 Hp] | ->].
+          -- exact (Hprefix' rho1 r2 Hp).
+          -- exists oo, so. repeat apply conj.
+             ++ exact (hstarC_snoc _ root (rho ++ [f]) on f4 oo
+                         Hnewpath Hcell4).
+             ++ rewrite lookup_insert_ne;
+                  [exact Hobo | intros ->; by apply Hno].
+             ++ exact Hito.
+  Qed.
+
+  (** \textsc{T-Replace} is the last, and it is the two forms of the other two
+      at once: the fresh node is promoted to the parent's field and the node it
+      replaces is demoted to \unlk{}.  Two observation entries change, so the
+      observation framing applies twice. *)
+  Lemma replace_typed N γm γh γl γs γo γf γr E lw xp x xo op f oo on rho f0
+        U Sm Ob C Fl Fr val valo sp rest :
+    ↑N ⊆ E ->
+    on <> oo -> on <> root -> In f0 fs ->
+    (forall g, FType g = RCUField) ->
+    op <> on -> op <> oo ->
+    Sm !! (xp, lw) = Some op -> Ob !! op = Some sp -> Oiter lw ∈ sp ->
+    ~ U xp lw ->
+    Sm !! (x, lw) = Some on -> Ob !! on = Some {[Ofresh lw]} -> ~ U x lw ->
+    Sm !! (xo, lw) = Some oo -> Ob !! oo = Some {[Oiter lw]} -> ~ U xo lw ->
+    C !! (op, f) = Some (VLoc oo) ->
+    (forall g, In g fs -> C !! (on, g) = Some (valo g)) ->
+    (forall g, In g fs -> C !! (oo, g) = Some (valo g)) ->
+    hstarC C root rho = Some op ->
+    ~ In (op, f) (pathcells C root rho) ->
+    (forall rho1 rho2, rho1 ++ rho2 = rho ->
+       exists o' sg', hstarC C root rho1 = Some o'
+                   /\ Ob !! o' = Some sg' /\ Oiter lw ∈ sg') ->
+    (forall rho1 rho2, rho1 ++ rho2 = rho -> hstarC C root rho1 <> Some on) ->
+    (forall rho1 rho2, rho1 ++ rho2 = rho -> hstarC C root rho1 <> Some oo) ->
+    FrCells Fr fs C val ->
+    (forall q g, val q g <> VLoc oo) ->
+    ReadsObs root C Sm lw rest on -> ReadsObs root C Sm lw rest oo ->
+    ReadsCell root C Sm lw rest (op, f) ->
+    EnvOK root lw U FType fs Sm Ob C Fl rest ->
+    rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr -∗
+    writer γo γs γh γl γf lw Sm Ob C Fl -∗
+    fr_frag γr Fr
+    ={E}=∗ writer γo γs γh γl γf lw Sm
+             (<[on := {[Oiter lw]}]> (<[oo := {[Ounlk lw]}]> Ob))
+             (<[(op, f) := VLoc on]> C) Fl
+           ∗ fr_frag γr Fr
+           ∗ ⌜EnvOK root lw U FType fs Sm
+                (<[on := {[Oiter lw]}]> (<[oo := {[Ounlk lw]}]> Ob))
+                (<[(op, f) := VLoc on]> C) Fl
+                ([(xp, TItr rho (fun g => if decide (g = f)
+                                          then Some (FVar x) else None));
+                  (x, TItr (rho ++ [f]) (fun _ => None));
+                  (xo, TUnlinked)] ++ rest)⌝.
+  Proof.
+    iIntros (HN Hno Hnr Hf0 Hall Hpn Hpo Hstkp Hobp Hitp Hundp
+             Hstkx Hobx Hundx Hstko Hobo Hundo Hcf Hcn0 Hco0 HpathC Hoff
+             Hpre Hnon Hnoo HFrC Hnf HROn HROo HRC Hrest) "#Hinv Hw Hfrg".
+    iDestruct "Hw" as "(Hlk & Hsm & Hob & Hcells & Hflo)".
+    rewrite /obs_own (big_sepM_delete _ Ob on {[Ofresh lw]}); [| exact Hobx].
+    iDestruct "Hob" as "[Hon Hobr]".
+    rewrite (big_sepM_delete _ (delete on Ob) oo {[Oiter lw]});
+      [| rewrite lookup_delete_ne; [exact Hobo | intros ->; by apply Hno]].
+    iDestruct "Hobr" as "[Hoo Hobr]".
+    rewrite (big_sepM_delete _ (delete oo (delete on Ob)) op sp);
+      [| rewrite lookup_delete_ne; [| intros ->; by apply Hpo];
+         rewrite lookup_delete_ne; [exact Hobp | intros ->; by apply Hpn]].
+    iDestruct "Hobr" as "[Hop Hobr]".
+    rewrite /cells (big_sepM_delete _ C (op, f) (VLoc oo)); [| exact Hcf].
+    iDestruct "Hcells" as "[Hptf Hcells]".
+    iDestruct (big_sepM_lookup_acc _ Sm (x, lw) on Hstkx with "Hsm")
+      as "[Hsv Hsmback]".
+    assert (Hcn' : forall g, In g fs ->
+              delete (op, f) C !! (on, g) = Some (valo g)).
+    { intros g Hg. rewrite lookup_delete_ne; [exact (Hcn0 g Hg) |].
+      intros Hcc. injection Hcc as Ha Hb. by apply Hpn. }
+    assert (Hco' : forall g, In g fs ->
+              delete (op, f) C !! (oo, g) = Some (valo g)).
+    { intros g Hg. rewrite lookup_delete_ne; [exact (Hco0 g Hg) |].
+      intros Hcc. injection Hcc as Ha Hb. by apply Hpo. }
+    assert (HFrC' : FrCells Fr fs (delete (op, f) C) val).
+    { intros q g Hq Hg. rewrite lookup_delete_ne; [exact (HFrC q g Hq Hg) |].
+      intros Hcc. injection Hcc as Ha Hb.
+      pose proof (HFrC q g Hq Hg) as Hv. rewrite Ha Hb in Hcf.
+      rewrite Hcf in Hv. injection Hv as Hv. exact (Hnf q g (eq_sym Hv)). }
+    iMod (replace_atomic FType root fs N γm γh γl γs γo γf γr E lw op f oo on
+            rho x f0 sp Fr val valo (delete (op, f) C) HN Hno Hnr Hf0 Hall Hitp
+            HFrC' (hstarC_delete C (op, f) root rho op Hoff HpathC) Hcn' Hco'
+            Hnf with "Hinv Hlk Hop Hon Hoo Hsv Hcells Hptf Hfrg")
+      as "(Hlk & Hop & Hon & Hoo & Hsv & Hcells & Hptf & Hfrg)".
+    iModIntro.
+    iSplitL "Hlk Hsv Hsmback Hop Hon Hoo Hobr Hcells Hptf Hflo".
+    { rewrite /writer /obs_own /cells. iFrame "Hlk Hflo".
+      iSplitL "Hsv Hsmback"; [by iApply "Hsmback" |].
+      iSplitL "Hop Hon Hoo Hobr".
+      - rewrite big_sepM_insert_delete. iFrame "Hon".
+        rewrite delete_insert_ne; [| intros ->; by apply Hno].
+        rewrite big_sepM_insert_delete. iFrame "Hoo".
+        rewrite (big_sepM_delete _ (delete oo (delete on Ob)) op sp);
+          [| rewrite lookup_delete_ne; [| intros ->; by apply Hpo];
+             rewrite lookup_delete_ne; [exact Hobp | intros ->; by apply Hpn]].
+        iFrame.
+      - rewrite (big_sepM_delete _ (<[(op, f) := VLoc on]> C) (op, f)
+                   (VLoc on)); [| by rewrite lookup_insert_eq].
+        iFrame "Hptf". by rewrite delete_insert_eq. }
+    iFrame. iPureIntro.
+    assert (HpathC' : hstarC (<[(op, f) := VLoc on]> C) root rho = Some op)
+      by exact (hstarC_stable_cell C (op, f) (VLoc on) root rho op Hoff HpathC).
+    assert (Hnewpath : hstarC (<[(op, f) := VLoc on]> C) root (rho ++ [f])
+                       = Some on)
+      by (apply (hstarC_snoc _ root rho op f on);
+          [exact HpathC' | by rewrite lookup_insert_eq]).
+    assert (Hprefix : forall rho1 rho2, rho1 ++ rho2 = rho ->
+              exists o' sg', hstarC (<[(op, f) := VLoc on]> C) root rho1
+                             = Some o'
+                          /\ <[on := {[Oiter lw]}]>
+                               (<[oo := {[Ounlk lw]}]> Ob) !! o' = Some sg'
+                          /\ Oiter lw ∈ sg').
+    { intros rho1 rho2 Happ. destruct (Hpre rho1 rho2 Happ)
+        as (o' & sg' & Hp' & Hob' & Hit').
+      exists o', sg'. repeat apply conj.
+      - apply hstarC_stable_cell; [| exact Hp'].
+        intros Hcc. apply Hoff. rewrite -Happ.
+        exact (pathcells_prefix C root rho1 rho2 (op, f) Hcc).
+      - rewrite lookup_insert_ne;
+          [| intros Heq; rewrite -Heq in Hp';
+             exact (Hnon rho1 rho2 Happ Hp')].
+        rewrite lookup_insert_ne;
+          [exact Hob' | intros Heq; rewrite -Heq in Hp';
+                        exact (Hnoo rho1 rho2 Happ Hp')].
+      - exact Hit'. }
+    apply EnvOK_step.
+    - apply EnvOK_cell; [exact HRC |].
+      apply EnvOK_obs; [exact HROn |]. by apply EnvOK_obs.
+    - intros y ty Hin.
+      destruct Hin as [Heq | [Heq | [Heq | []]]]; injection Heq as Hv1 Hv2;
+        rewrite -Hv1 -Hv2.
+      + exists op, sp. repeat apply conj.
+        * exact Hstkp.
+        * rewrite lookup_insert_ne; [| intros ->; by apply Hpn].
+          rewrite lookup_insert_ne; [exact Hobp | intros ->; by apply Hpo].
+        * exact Hitp.
+        * exact Hundp.
+        * apply (FieldOK_update _ _ _ _ _ _ _ x on {[Oiter lw]});
+            [intros h w _ Hc; discriminate Hc | exact Hstkx
+             | by rewrite lookup_insert_eq | by rewrite lookup_insert_eq
+             | by apply elem_of_singleton].
+        * exact HpathC'.
+        * exact Hprefix.
+      + apply (TyOK_promoted root lw U FType fs Sm _ _ Fl x on op f rho
+                 {[Oiter lw]} (fun _ => None)).
+        * exact Hstkx.
+        * exact Hundx.
+        * by rewrite lookup_insert_eq.
+        * by apply elem_of_singleton.
+        * intros h w Hc. discriminate Hc.
+        * exact HpathC'.
+        * by rewrite lookup_insert_eq.
+        * intros rho1 rho2 Happ.
+          destruct (app_snoc_split rho1 rho2 rho f Happ) as [[r2 Hp] | ->].
+          -- exact (Hprefix rho1 r2 Hp).
+          -- exists on, {[Oiter lw]}. repeat apply conj;
+               [exact Hnewpath | by rewrite lookup_insert_eq
+                | by apply elem_of_singleton].
+      + exists oo, {[Ounlk lw]}. repeat apply conj.
+        * exact Hstko.
+        * rewrite lookup_insert_ne; [| intros ->; by apply Hno].
+          by rewrite lookup_insert_eq.
+        * by apply elem_of_singleton.
+        * exact Hundo.
+  Qed.
+
+End typed_rest.
+
+Print Assumptions write_fresh_typed.
+Print Assumptions insert_typed.
+Print Assumptions replace_typed.
+
 (** * Where this stands
 
     All fifteen atomic actions are restated against the Iris invariant, and
@@ -4608,7 +5417,8 @@ Print Assumptions bind_atomic.
     fragment -- none of which existed before the field list made the heap
     finite.
 
-    *Path* premises come from [ppt], the fold of points-to along a named path.
+    *Path* premises come from [hstarC] on the thread's cell map: a fold of
+    lookups in what it owns.
     What that derivation does not use is the point: no invariant, no uniqueness,
     no shape condition.  Reachability by a *named* path is a local fact about
     the cells on it.

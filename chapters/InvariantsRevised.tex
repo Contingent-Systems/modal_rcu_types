@@ -1507,6 +1507,57 @@ development so the claim is checkable rather than asserted.  Only the promotion
 has any content, and the content is that the new path is the old one extended:
 the fold reaches the parent and then takes the cell the rule just wrote.
 
+Making the rules compose with that reading removed the last two ad-hoc
+resources.  The fresh nodes had been a separate assertion and the paths had been
+one assertion per iterator; both are now conditions on the single cell map the
+writer owns.  The path case is the instructive one: one assertion per iterator
+cannot be right, because two iterators' paths overlap in their prefix and a
+points-to is exclusive.  All five mutation rules are now stated with their paths
+and their fresh nodes as pure facts about that map, which is exactly the form
+the environment reading uses --- so the two sides of a rule are written in the
+same language.
+
+With that, a mutation goes end to end.  \texttt{link\_null\_typed} is
+\textsc{T-LinkF-Null} with a type environment on both sides: the variables the
+step does not touch are framed across it by the two lemmas, applied in the order
+the step changes things so that both hypotheses are about the cell map the
+caller started with; and the one it does touch gets its new type, which is
+\texttt{TyOK\_promoted}.  The only work in the touched case is that the fresh
+node's new path is the parent's extended by the field just written --- and that
+its chain of iterator observations is the parent's chain plus one step, for
+which a prefix of $\rho.f$ is either a prefix of $\rho$ or the whole of it.
+
+None of that is about RCU.  It is the bookkeeping that connects a rule's
+resources to a rule's types, it is the same bookkeeping for all five mutations,
+and having done it once the remaining four are a transcription.
+
+\textsc{T-UnlinkH} follows, and it is the transcription the first one was
+supposed to make possible.  It touches three variables rather than one --- the
+parent's field map is retargeted, the victim is demoted to \unlk{}, and the node
+below is promoted to the parent's field --- and each is one of the three
+toolkit lemmas, with the rest of the environment framed by the same two in the
+same order.  It took no new ideas, which is what the toolkit was for.  Two
+restrictions are worth naming: the parent and the promoted node are taken with
+empty field maps, which is the case both worked examples use, and the victim is
+assumed off the parent's path, which is uniqueness of paths and which the rule's
+premises supply.
+
+\textsc{T-WriteFH}, \textsc{T-Insert} and \textsc{T-Replace} follow without
+incident, and with them every heap mutation and the allocation are stated with a
+type environment on both sides.  The pattern is uniform: the untouched variables
+are framed by the two lemmas, and the touched ones are supplied, each being one
+of three forms.  \textsc{T-WriteFH} is the smallest, changing no observation at
+all, so only the cell framing applies and its one variable stays \frsh{} with a
+field added.  \textsc{T-Insert} touches three --- the parent retargeted, the
+fresh node promoted, the displaced node moved one step further down, which is
+the promotion lemma applied to a cell the fresh node already held.
+\textsc{T-Replace} is the two other rules at once: a promotion and a demotion,
+with two observation entries changing, so the observation framing applies twice.
+
+That the last three needed no new machinery is the substance of the claim.  What
+varies between the rules is which of the three touched-variable forms occur and
+how many times; what does not vary is anything about RCU.
+
 Two things this reading turned up.  The denotation of \texttt{freeable} was
 stated as $F(o) = \lambda t. \bot$ --- an equality of \emph{functions} --- and
 in the ghost encoding the entry is $\lambda t.\, t \in S$ for a finite set $S$;

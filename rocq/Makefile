@@ -49,7 +49,10 @@
 #                 from the invariant it opens -- and then the type environment
 #                 as a resource: own the thread's maps once and read each
 #                 variable's type as a condition on them, which needs no
-#                 fractional permissions on the write side.
+#                 fractional permissions on the write side -- and then every
+#                 heap mutation and the allocation stated with a type
+#                 environment on both sides, the untouched variables framed
+#                 and the touched ones supplied.
 #   Actions.v     joins the ghost updates to the pure state: to_LState
 #                 commutes with a field write and with an observation update;
 #                 then the per-invariant obligations for each atomic action,
@@ -77,7 +80,7 @@ Triples.vo: WellFormed.vo HeapPaths.vo IrisGhost.vo Denotations.vo Actions.vo
 
 # A successful build proves less here than it looks.  `Admitted.` compiles and
 # writes a .vo like any other proof, and `Print Assumptions` reports an axiom on
-# stdout without failing anything.  So the development's actual claim -- 183
+# stdout without failing anything.  So the development's actual claim -- 190
 # results, every one closed under the global context, no axioms -- is precisely
 # the thing that building it does not check.  This target checks it.
 #
