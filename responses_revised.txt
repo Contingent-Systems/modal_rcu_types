@@ -106,7 +106,7 @@ rules that *unlink* a node need, for the same invariant; and the missing
 statement about iterators is what SyncStart needs, without which a grace period
 can complete too early.
 
-Two more invariants are missing, and both were found by attempting the last of
+Two further invariants are missing, and both were found by attempting the last of
 the linking rules against the Iris invariant described below.  T-LinkF-Null
 publishes a fresh node, and to do so it must know that no thread other than the
 writer observes that node.  Two invariants ought to supply that between them and
@@ -144,8 +144,10 @@ Both rules now carry a premise excluding it. Both worked examples still type
 check unchanged, since the fresh node each builds points at the children of the
 node being replaced rather than at that node.
 
-Ten of the fourteen were found by attempting the proofs rather than by reading,
-and seven of the ten are cases whose proof the technical report calls trivial.  We think
+That is fifteen in all: twelve invariants, one rule, and two defects in the
+model.  Eleven of the fifteen were found by attempting the proofs rather than by
+reading, and seven of the eleven are cases whose proof the technical report
+calls trivial.  We think
 that is the most useful thing the exercise produced: the defects that mattered
 were not the ones that looked doubtful. Every defect has
 a machine-checked proof or counterexample, the corrected set is machine-checked
@@ -226,7 +228,8 @@ what found this one was restating the two actions against the Iris invariant
 described next.
 
 We also checked the framing property the Views Framework requires, and it does
-not hold as published.  Soundness there is stated modulo composition with an
+not hold as published.  This is a defect in the model rather than in an
+invariant.  Soundness there is stated modulo composition with an
 arbitrary frame, so the invariants must be closed under the composition of
 logical states; they are not.  We give two well-formed states whose composition
 violates No-Sharing, and the reason is structural rather than incidental: every
@@ -263,7 +266,8 @@ mentions the heap cannot be stated outside the invariant at all, because the
 heap is bound inside it.  We give the proof, stated about the published
 definition.
 
-This is a twelfth defect, and the repair is a class declaration: allocation
+This is the second defect in the model rather than in an invariant, and the
+repair is a class declaration: allocation
 takes the node's field list and initialises exactly those fields.  The heap is
 then finite if it starts finite, which we prove for all three heap-changing
 operations.  The cost is local -- allocation gains an argument, heap-domain
@@ -402,8 +406,16 @@ lemmas, with the rest of the environment framed by the same two lemmas in the
 same order.  It took no new ideas, which is what the toolkit was for.
 
 T-WriteFH, T-Insert and T-Replace follow without incident, and with them every
-heap mutation and the allocation are stated with a type environment on both
-sides.  The pattern is uniform: the untouched variables are framed by the two
+heap mutation and the allocation are stated with the environment denotation as
+their conclusion.  We should be exact about the other side, since the six are
+not uniform there: T-Alloc and T-LinkF-Null take the whole of the environment as
+a hypothesis, while the other four take its untouched part together with the
+components -- stack entry, observation, path -- that it supplies for each
+touched variable.  Those components are exactly what the touched variable's type
+unfolds to, so nothing is assumed that the environment does not give, but the
+hypothesis is the environment unpacked rather than the environment itself.
+
+The pattern is otherwise uniform: the untouched variables are framed by the two
 lemmas, and the touched ones are supplied, each being one of three forms.
 T-WriteFH is the smallest, changing no observation at all; T-Insert touches
 three variables, the last of which moves one step further down the structure;

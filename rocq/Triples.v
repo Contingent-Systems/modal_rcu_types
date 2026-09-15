@@ -4801,14 +4801,14 @@ Section typed_unlink.
       This is the second of five and it took no new ideas, which is what the
       toolkit was for. *)
   Lemma unlink_typed N γm γh γl γs γo γf γr E lw xx xz xw ox f1 oz f2 ow rho
-        U Sm Ob C Fl Fr val sx sw sxo rest :
+        U Sm Ob C Fl Fr val sx sw rest :
     ↑N ⊆ E ->
     (forall g, FType g = RCUField) ->
     ox <> oz -> ox <> ow -> oz <> ow ->
     (* what the environment says about the three *)
     Sm !! (xx, lw) = Some ox -> Ob !! ox = Some sx -> Oiter lw ∈ sx ->
     Sm !! (xz, lw) = Some oz -> Ob !! oz = Some {[Oiter lw]} -> ~ U xz lw ->
-    Sm !! (xw, lw) = Some sxo -> sxo = ow ->
+    Sm !! (xw, lw) = Some ow ->
     Ob !! ow = Some sw -> Oiter lw ∈ sw -> ~ U xw lw -> ~ U xx lw ->
     (* the heap the step reads and writes *)
     C !! (ox, f1) = Some (VLoc oz) ->
@@ -4842,9 +4842,8 @@ Section typed_unlink.
                   (xw, TItr (rho ++ [f1]) (fun _ => None))] ++ rest)⌝.
   Proof.
     iIntros (HN Hall Hxz Hxw Hzw Hstkx Hobx Hitx Hstkz Hobz Hundz
-             Hstkw Hsxo Hobw Hitw Hundw Hundx Hc1 Hc2 HpathC Hoff
+             Hstkw Hobw Hitw Hundw Hundx Hc1 Hc2 HpathC Hoff
              Hpre Hnoz HFrC Hnf HRO HRC Hrest) "#Hinv Hw Hfrg".
-    subst sxo.
     iDestruct "Hw" as "(Hlk & Hsm & Hob & Hcells & Hflo)".
     (* the three observation entries *)
     rewrite /obs_own (big_sepM_delete _ Ob ox sx); [| exact Hobx].

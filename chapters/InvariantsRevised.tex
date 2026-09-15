@@ -559,19 +559,24 @@ unlinked by a thread that is not the one holding the lock, so that the
 satisfying the other eighteen in which a node is observed as an iterator by a
 thread that is neither the writer nor a reader, against which
 \textsc{SyncStart} would open a grace period that does not wait for it.  A
-tenth,
+further one,
 \texttt{FPI\_not\_preserved\_by\_replace}, is a defect in
 \textsc{T-Replace} and \textsc{T-UnlinkH} rather than in an invariant
-statement; both rules now carry the repairing premise.  An eleventh is
-\S\ref{sec:defect-fld} below; a twelfth --- that allocation makes the heap
-infinite, so that no points-to assertion exists over it --- is
-\S\ref{sec:inv-mech}, where attempting the last step found it; and a
-thirteenth and fourteenth are \S\ref{sec:defect-obs}, found the same way one
-step further on.  The remaining
+statement; both rules now carry the repairing premise.  Five more are described where
+they were found, and it is worth grouping them rather than numbering them in
+sequence, because they are not all of a kind.  Three are further invariant
+defects: the free list's unconstrained domain (\S\ref{sec:defect-fld}) and two
+observations that constrain nobody (\S\ref{sec:defect-obs}).  Two are defects in
+the model rather than in an invariant: \textsf{WellFormed} is not closed under
+the published composition, so the framing the soundness argument needs does not
+hold; and allocation makes the heap infinite, so no points-to assertion exists
+over it.  Both are in \S\ref{sec:inv-mech}.
+
+That is fifteen: twelve invariants, one rule, two model defects.  The remaining
 \textsc{major} and \textsc{minor} items are restatements whose defects are
 syntactic (capture, scope, unused binders) and are visible without proof.
 
-\paragraph{Defect 11: the free list's domain is unconstrained.}
+\paragraph{An invariant defect: the free list's domain is unconstrained.}
 \label{sec:defect-fld}
 Three invariants mention the free list --- \textbf{IFL}, \textbf{FLR} and
 \textbf{RINFL} --- and all three are conditional on an entry existing.  None of
@@ -601,7 +606,7 @@ as an explicit hypothesis where it is needed, rather than folded into \textsf{We
 adding a conjunct means reproving fifteen actions, and that is a change to make
 deliberately rather than in passing.
 
-\paragraph{Defects 13 and 14: two observations that constrain nobody.}
+\paragraph{Two invariant defects: observations that constrain nobody.}
 \label{sec:defect-obs}
 Found the same way as \textbf{FLD}, one rule further along.
 \textsc{T-LinkF-Null} publishes a fresh node, and to do so it must know that no
@@ -634,15 +639,16 @@ are the two obvious conjuncts.  Only the second is needed by any proof here, so
 only it is carried; the first is reported, because a reader of
 \textbf{UNQRT-b} will assume it.
 
-Ten of the fourteen were found by attempting a proof rather than by reading ---
+Eleven of the fifteen were found by attempting a proof rather than by reading ---
 \textbf{ULKR}'s failure to chain, \textbf{FPI}'s failure to survive unlinking,
 \textbf{HD}'s failure to survive \texttt{Free}, \textbf{FNR}'s failure to
 support \textbf{ULKR} under linking, \textbf{WUNLK}'s absence, which is the same case
 one step further along, and \textbf{WITR}'s, which is \textsc{SyncStart}'s, \textbf{FLD}'s, which is
-\textsc{SyncStart}'s other one, the infinite heap, which is what choosing a
-physical-state predicate ran into, and the two unconstrained observations, which
-are what the last linking rule ran into --- and seven of the ten are cases the
-report calls trivial.  That is now a pattern rather than a coincidence, and it is the
+\textsc{SyncStart}'s other one, the failure of closure under composition, which
+is what attempting the framing property ran into, the infinite heap, which is
+what choosing a physical-state predicate ran into, and the two unconstrained
+observations, which are what the last linking rule ran into --- and seven of the
+eleven are cases the report calls trivial.  That is now a pattern rather than a coincidence, and it is the
 strongest thing the mechanization has to say about the original argument.
 
 The corrected invariants are also satisfiable
@@ -1157,7 +1163,7 @@ all, so the reader's instances of \textsc{T-ReadS} and \textsc{T-ReadH} have
 their invariant half and not their type half.  Writing it down is a small piece
 of work that has to precede the proof rather than being part of it.
 
-\paragraph{Framing, and an eleventh defect.}  The Views framework requires the
+\paragraph{Framing, and a defect in the framework's requirement.}  The Views framework requires the
 views to form a partial commutative monoid and the validity predicate to be
 closed under the operation; framing is unsound without it.  Section
 \ref{sec:soundness} gives the operation --- Figure \ref{fig:comp} --- and asserts
@@ -1352,7 +1358,7 @@ reported here for that reason.  A vacuous theorem is the one failure mode a
 proof assistant does not catch: it type-checks, it closes under the global
 context, and it reports no axioms.  Only using the theorem finds it.
 
-\paragraph{Choosing \texttt{phys}, and the twelfth defect.}
+\paragraph{Choosing \texttt{phys}, and a defect in the state model.}
 That leaves the physical state, which was a parameter and the physical step a
 hypothesis.  Choosing \texttt{phys} is what turns a step on the invariant's
 contents into a Hoare triple, and attempting it is what found the last defect.
@@ -1392,8 +1398,8 @@ exclusive control of its entry at a node, and the agreement lemma turns that
 into ``the node is observed \frbl{}''.  The typing side condition becomes a
 resource.  \emph{Physical} ones come from points-to, the lock token and the
 stack fragment, none of which existed before the field list made the heap
-finite.  \emph{Path} premises come from \texttt{ppt}, the fold of points-to
-along a named path; what that derivation does \emph{not} use is the point ---
+finite.  \emph{Path} premises come from a fold of lookups in the cell map the
+thread owns; what that derivation does \emph{not} use is the point ---
 no invariant, no uniqueness, no shape condition, because reachability by a
 \emph{named} path is a local fact about the cells on it.
 
@@ -1543,10 +1549,19 @@ assumed off the parent's path, which is uniqueness of paths and which the rule's
 premises supply.
 
 \textsc{T-WriteFH}, \textsc{T-Insert} and \textsc{T-Replace} follow without
-incident, and with them every heap mutation and the allocation are stated with a
-type environment on both sides.  The pattern is uniform: the untouched variables
-are framed by the two lemmas, and the touched ones are supplied, each being one
-of three forms.  \textsc{T-WriteFH} is the smallest, changing no observation at
+incident, and with them every heap mutation and the allocation are stated with
+the environment denotation as their conclusion.  We should be exact about the
+other side, because the six are not uniform there.  \textsc{T-Alloc} and
+\textsc{T-LinkF-Null} take the whole of $\Gamma$ as a hypothesis; the other four
+take the untouched part of it together with the components --- the stack entry,
+the observation, the path --- that $\Gamma$ supplies for each touched variable.
+Those components are exactly what the denotation of the touched variable's type
+unfolds to, so nothing is assumed that $\Gamma$ does not give; but the
+hypothesis is $\Gamma$ unpacked rather than $\Gamma$, and packing it is work we
+have not done.
+
+The pattern is otherwise uniform: the untouched variables are framed by the two
+lemmas, and the touched ones are supplied, each being one of three forms.  \textsc{T-WriteFH} is the smallest, changing no observation at
 all, so only the cell framing applies and its one variable stays \frsh{} with a
 field added.  \textsc{T-Insert} touches three --- the parent retargeted, the
 fresh node promoted, the displaced node moved one step further down, which is
