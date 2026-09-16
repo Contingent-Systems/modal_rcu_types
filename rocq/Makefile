@@ -53,6 +53,10 @@
 #                 heap mutation and the allocation stated with a type
 #                 environment on both sides, the untouched variables framed
 #                 and the touched ones supplied.
+#   BST.v         the write side of the paper's binary search tree delete, run
+#                 through those rules as a chain over a concrete tree.  The
+#                 point is not the example: it is that chaining is what finds
+#                 interface defects, and it found one in the allocation rule.
 #   Actions.v     joins the ghost updates to the pure state: to_LState
 #                 commutes with a field write and with an observation update;
 #                 then the per-invariant obligations for each atomic action,
@@ -63,7 +67,7 @@ ROCQ      ?= rocq
 ROCQFLAGS := -R . RCU
 
 VFILES  := WellFormed.v HeapPaths.v IrisGhost.v Denotations.v Actions.v \
-           Compose.v Triples.v
+           Compose.v Triples.v BST.v
 VOFILES := $(VFILES:.v=.vo)
 
 all: $(VOFILES)
@@ -74,13 +78,15 @@ Denotations.vo: WellFormed.vo HeapPaths.vo
 Actions.vo: WellFormed.vo HeapPaths.vo IrisGhost.vo Denotations.vo
 Compose.vo: WellFormed.vo
 Triples.vo: WellFormed.vo HeapPaths.vo IrisGhost.vo Denotations.vo Actions.vo
+BST.vo: WellFormed.vo HeapPaths.vo IrisGhost.vo Denotations.vo Actions.vo \
+        Triples.vo
 
 %.vo: %.v
 	$(ROCQ) compile $(ROCQFLAGS) $<
 
 # A successful build proves less here than it looks.  `Admitted.` compiles and
 # writes a .vo like any other proof, and `Print Assumptions` reports an axiom on
-# stdout without failing anything.  So the development's actual claim -- 190
+# stdout without failing anything.  So the development's actual claim -- 197
 # results, every one closed under the global context, no axioms -- is precisely
 # the thing that building it does not check.  This target checks it.
 #

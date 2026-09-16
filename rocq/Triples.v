@@ -4351,6 +4351,17 @@ Proof.
     exact (Hold g w Hne Hw).
 Qed.
 
+(** An environment reading holds of any sub-environment.  Chaining rules needs
+    this constantly: a rule's framing hypothesis is about the variables it does
+    not touch, which is a sublist of what the previous rule handed back. *)
+Lemma EnvOK_incl root t U FType fs Sm Ob C Fl G G' :
+  (forall x ty, In (x, ty) G' -> In (x, ty) G) ->
+  EnvOK root t U FType fs Sm Ob C Fl G ->
+  EnvOK root t U FType fs Sm Ob C Fl G'.
+Proof. intros Hsub Hok x ty Hin. exact (Hok x ty (Hsub x ty Hin)). Qed.
+
+Print Assumptions EnvOK_incl.
+
 Print Assumptions EnvOK_step.
 Print Assumptions FieldOK_update.
 
@@ -4392,6 +4403,14 @@ Section atomic_alloc.
         (<[(x, lw) := n]> Sm) (<[n := {[Ofresh lw]}]> Ob)
         (newcells fs n ∪ C) Fl
       ∗ fr_frag γr (Fr ∪ {[n]})
+      (* what a later rule needs about the new location: it is not one the
+         caller's maps already mention, so their entries survive the extension.
+         Without these the environment comes back but nothing can be looked up
+         in the maps it is stated over. *)
+      ∗ ⌜n <> root⌝
+      ∗ ⌜forall k v, C !! k = Some v -> k.1 <> n⌝
+      ∗ ⌜forall o sg, Ob !! o = Some sg -> o <> n⌝
+      ∗ ⌜forall k o, Sm !! k = Some o -> o <> n⌝
       ∗ ⌜FrCells (Fr ∪ {[n]}) fs (newcells fs n ∪ C)
            (fun q g => if decide (q = n) then VNull else val q g)⌝
       ∗ ⌜EnvOK root lw (fun y t => U y t /\ (y, t) <> (x, lw)) FType fs
@@ -4507,7 +4526,10 @@ Section atomic_alloc.
       iSplitL "Hsv Hsmrest".
       - rewrite big_sepM_insert_delete. iFrame.
       - rewrite big_sepM_insert; [| exact HOn]. iFrame. }
-    iFrame. iPureIntro. split.
+    iFrame. iPureIntro.
+    split; [exact Hnr0 |]. split; [exact Hcn |].
+    split; [intros o sg Ho Hc; rewrite Hc in Ho; by rewrite HOn in Ho |].
+    split; [exact HSn |]. split.
     - intros q g Hq Hg. apply elem_of_union in Hq. destruct Hq as [Hq | Hq].
       + rewrite decide_False; [| intros ->; by apply HnF].
         rewrite lookup_union_r; [exact (HFrC q g Hq Hg) |].

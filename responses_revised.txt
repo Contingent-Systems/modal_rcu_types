@@ -9,9 +9,9 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
-16,300 lines and 905 results, axiom-free).  The build refuses to succeed if
+16,900 lines and 919 results, axiom-free).  The build refuses to succeed if
 the development contains an admitted proof, or if any of its hundred and
-ninety assumption checks reports an axiom rather than closed under the
+ninety-seven assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
 it looks.  This turned up more than we expected, and we think it materially
@@ -423,6 +423,41 @@ T-Replace is a promotion and a demotion at once.  That the last three needed no
 new machinery is the substance of the claim: what varies between the rules is
 which of the three touched-variable forms occur and how many times, and what
 does not vary is anything about RCU.
+
+Each typed rule was proved in isolation, and nothing had forced one rule's
+postcondition to *be* the next one's precondition -- which is the class of
+defect that only appears under composition.  So we ran the write side of the
+binary search tree delete, the allocation and the splice, through the rules as a
+chain over a concrete four-node tree.
+
+It found one immediately.  T-Alloc derives four facts about the location it
+invents -- that it is not the root, and that none of the caller's three maps
+already mentions it -- and exported none of them.  In isolation that is
+invisible, because the lemma's own conclusion does not need them; under
+composition it is fatal, because the environment comes back stated over the
+extended maps and without those facts no lookup in them can be discharged, so
+the next rule cannot start.  Exporting them is the repair, and it is why a rule
+that invents a name differs in kind from one that does not.  The other five
+invent nothing -- their output maps are the caller's own, extended at keys the
+caller supplied -- so allocation was the only rule that could have this defect.
+
+The chain then found something sharper, and it is not about the mechanization.
+Three of the four steps compose: the allocation and the two writes that build
+the replacement.  The fourth, T-Replace, cannot join them, and not because of
+any interface mismatch -- its hypotheses are *inconsistent* with the
+allocation's.  T-Replace is stated with "every field is an RCU field", the
+simplification the mutation rules inherit from the report; T-Alloc needs the
+class declaration the finite heap forced, that every RCU field is one of the
+node's declared fields.  Together those say every field name is declared, and
+there are infinitely many field names and two declared ones.  We give the
+two-line proof.
+
+So the two rules cannot both apply in one program, and the delete is exactly a
+program that needs both.  We had reported this incompatibility as a caveat
+alongside the field-list repair; it is better as an obstruction, because it says
+the paper's own worked example cannot be typed until No-Sharing's field
+conditions are restricted to declared fields.  That converts a deferred tidy-up
+into the next thing that has to be done.
 
 Two smaller things this turned up.  The denotation of freeable was stated as an
 equality of *functions*, and in the ghost encoding the free-list entry is a

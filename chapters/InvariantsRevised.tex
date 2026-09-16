@@ -1573,6 +1573,48 @@ That the last three needed no new machinery is the substance of the claim.  What
 varies between the rules is which of the three touched-variable forms occur and
 how many times; what does not vary is anything about RCU.
 
+\paragraph{Chaining the rules, and what that found.}
+Each typed rule was proved in isolation, and nothing had yet forced one rule's
+postcondition to \emph{be} the next one's precondition.  Interface mismatches
+are the class of defect that only appears under composition, so
+\texttt{rocq/BST.v} runs the write side of the paper's binary search tree delete
+--- the allocation and the splice --- through the rules as a chain, over a
+concrete four-node tree.
+
+It found one immediately.  \textsc{T-Alloc} derives four facts about the
+location it invents --- that it is not the root, and that none of the caller's
+three maps already mentions it --- and exported none of them.  In isolation that
+is invisible, because the lemma's own conclusion does not need them.  Under
+composition it is fatal: the environment comes back stated over the extended
+maps, and without those facts \emph{no lookup in them can be discharged}, so the
+next rule cannot start.  Exporting them is the repair, and it is the reason a
+rule that invents a name is different in kind from one that does not.
+
+Nothing similar is expected of the other five, and for a reason worth stating:
+they invent nothing.  Their output maps are the caller's own, extended at keys
+the caller supplied, so the caller already knows everything needed to look
+things up in them.  Allocation was the only rule that could have this defect.
+
+The chain then found something sharper, and it is not about the mechanization.
+Three of the four steps compose --- the allocation and the two writes that build
+the replacement, in \texttt{bst\_build\_replacement}.  The fourth,
+\textsc{T-Replace}, cannot join them, and not because of any interface
+mismatch: its hypotheses are \emph{inconsistent} with the allocation's.
+\textsc{T-Replace} is stated with ``every field is an RCU field'', the
+simplification the mutation rules inherit from the report;
+\textsc{T-Alloc} needs the class declaration the finite heap forced, that every
+RCU field is one of the node's declared fields.  Together those say every field
+name is declared, and there are infinitely many field names and two declared
+ones.  \texttt{class\_excludes\_all\_rcu} is the two-line proof.
+
+So the two rules cannot both apply in one program, and the delete is exactly a
+program that needs both: it allocates a replacement and then splices it in.  We
+had reported this incompatibility as a caveat alongside the field-list repair.
+It is better as an obstruction: \emph{the paper's own worked example cannot be
+typed} until No-Sharing's field conditions are restricted to declared fields.
+That converts a deferred tidy-up into the next thing that has to be done, and it
+is the clearest argument we have for doing it.
+
 Two things this reading turned up.  The denotation of \texttt{freeable} was
 stated as $F(o) = \lambda t. \bot$ --- an equality of \emph{functions} --- and
 in the ghost encoding the entry is $\lambda t.\, t \in S$ for a finite set $S$;
