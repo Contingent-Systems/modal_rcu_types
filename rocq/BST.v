@@ -168,6 +168,11 @@ Section bst.
             !invGS_gen hlc Σ}.
   Context (FType : FName -> FieldKind).
   Hypothesis HFs : forall g, FType g = RCUField -> In g Fs.
+  (** The two declared fields are the RCU ones.  With the mutation rules no
+      longer assuming that *every* field is an RCU field, this is consistent
+      with the class declaration above -- which is the whole point of the
+      repair, and what lets the chain continue past the allocation. *)
+  Hypothesis HFrcu : forall g, In g Fs -> FType g = RCUField.
 
   Definition U1 : Var -> TID -> Prop :=
     fun y t => U0 y t /\ (y, t) <> (vCurrentF, W).
@@ -274,7 +279,7 @@ Section bst.
             vCurrentF vLmParent n Rgt LmP Lft U1
             (<[(vCurrentF, W) := n]> Sm0) (<[n := {[Ofresh W]}]> Ob0)
             (newcells Fs n ∪ C0) ∅ {[Ofresh W]} {[Oiter W]} VNull VNull
-            (fun _ => None) G0 HN Hnr
+            (fun _ => None) G0 HN (HFrcu Rgt (or_intror (or_introl eq_refl))) Hnr
             with "Hinv Hw") as "(Hw & %Hok')".
     { discriminate. }
     { exact HnL. }
@@ -375,7 +380,7 @@ Section bst.
             (<[(n, Rgt) := VLoc LmP]> (newcells Fs n ∪ C0)) ∅
             {[Ofresh W]} {[Oiter W]} VNull VNull
             (fun h => if decide (h = Rgt) then Some (FVar vLmParent) else None)
-            G0 HN Hnr
+            G0 HN (HFrcu Lft (or_introl eq_refl)) Hnr
             with "Hinv Hw") as "(Hw & %Hok')".
     { discriminate. }
     { exact HnCL. }
@@ -491,26 +496,34 @@ Section bst.
 
 End bst.
 
-(** ** Why the fourth step cannot join them
+(** ** What blocked the fourth step, and the repair
 
-    The splice is \textsc{T-Replace}, and it cannot be chained onto the three
-    above -- not because of any interface mismatch, but because its hypotheses
-    are inconsistent with the allocation's.
+    The splice is \textsc{T-Replace}, and for a while it could not be chained
+    onto the three above -- not because of any interface mismatch, but because
+    its hypotheses were inconsistent with the allocation's.
 
-    \textsc{T-Replace} is stated with "every field is an RCU field", the
-    simplification the mutation rules inherit from the report.  \textsc{T-Alloc}
-    needs the class declaration the finite heap forced: every RCU field is one
-    of the node's declared fields.  Together those say every field name is
-    declared, and there are infinitely many field names and two declared ones.
+    \textsc{T-Replace} was stated with "every field is an RCU field", the
+    simplification the mutation rules inherit from the report.
+    \textsc{T-Alloc} needs the class declaration the finite heap forced: every
+    RCU field is one of the node's declared fields.  Together those say every
+    field name is declared, and there are infinitely many field names and two
+    declared ones.  [class_excludes_all_rcu] is the two-line proof, and it is
+    kept because the incompatibility is a fact about the published rules.
 
-    So the two rules cannot both apply in one program, and the binary search
-    tree delete -- which allocates a replacement and then splices it in -- is
-    exactly a program that needs both.  This is the incompatibility reported
-    with the field-list repair, and it is worth having it as a concrete
-    obstruction rather than a caveat: the paper's own worked example cannot be
-    typed until No-Sharing's field conditions are restricted to declared
-    fields.  The chain stops here, and it stops for a reason that is about the
-    invariant rather than about the mechanization. *)
+    Tracing where the assumption was actually used said what the repair is.  The
+    mutation proofs reach for it in six places, and every one of them applies it
+    to an edge already in hand -- they are proving something about a node that
+    some field points at.  So what they need is not that every field is an RCU
+    field but that every field *holding a reference* is: the heap's reference
+    structure lives in RCU fields, and a scalar field holds a scalar.  That is
+    [RefsRCU], it is carried where the other physical-state conditions are, and
+    it is consistent with a class declaration -- which is what unblocks this
+    chain.
+
+    The weakening costs nothing: all-RCU implies it, so every proof that used
+    the old hypothesis still goes through, and the two rules that write a field
+    which did not previously hold a reference -- \textsc{T-WriteFH} and
+    \textsc{T-LinkF-Null} -- now say so, which they should have all along. *)
 
 Lemma class_excludes_all_rcu (FType : FName -> FieldKind) :
   (forall g, FType g = RCUField) ->
@@ -527,3 +540,69 @@ Print Assumptions bst_alloc.
 Print Assumptions bst_write_right.
 Print Assumptions bst_write_left.
 Print Assumptions bst_build_replacement.
+
+(** ** The fourth step, and the second thing chaining found
+
+    With the repair in place \textsc{T-Replace} and \textsc{T-Alloc} can appear
+    in one program, so the splice is no longer blocked by their premises.  It is
+    blocked by something else, and the something else is in this development
+    rather than in the rules.
+
+    Replacing [current] by the fresh node re-routes every path that ran through
+    [current]: [currentL] is still at $l.l$ afterwards, because the fresh node
+    mirrors what it replaces, but the *intermediate* node on that path is now
+    the fresh one.  The chain-of-iterators condition in [rcuItr] is about those
+    intermediate nodes, so it has to be re-derived rather than framed.
+
+    The framing lemmas do not do that.  [EnvOK_obs] frames a variable across a
+    change to one location's observations provided no path in the environment
+    passes through that location -- and here two of them do.  The condition is
+    not merely unproved, it is false, which is what the lemma below says.
+
+    So the splice needs a framing lemma that knows about mirroring: the paths
+    are unchanged as paths, and the nodes they pass through are swapped one for
+    one.  That is what [Mirrors] is for in the pure layer, and it has no
+    counterpart in the environment reading yet.  It is the next thing to
+    build. *)
+
+Section bst4.
+  Context `{!rcuG Σ, !physG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ}.
+  Context (FType : FName -> FieldKind).
+
+  Definition Sm1 (n : Loc) : gmap (Var * TID) Loc :=
+    <[(vCurrentF, W) := n]> Sm0.
+
+  Definition C3 (n : Loc) : gmap (Loc * FName) Val :=
+    <[(n, Lft) := VLoc CurL]>
+      (<[(n, Rgt) := VLoc LmP]> (newcells Fs n ∪ C0)).
+
+  (** What is left of the environment once the three variables the splice
+      touches -- the parent, the fresh node and the node it replaces -- are
+      taken out. *)
+  Definition Grest : Env :=
+    [(vCurrentL, TItr [Lft; Lft] (fun _ => None));
+     (vLmParent, TItr [Lft; Rgt] (fun _ => None))].
+
+  Lemma C3_RtL n : n <> Rt -> C3 n !! (Rt, Lft) = Some (VLoc Cur).
+  Proof.
+    intros Hn. rewrite /C3.
+    rewrite lookup_insert_ne; [| intros Hc; injection Hc as Hc; by apply Hn].
+    rewrite lookup_insert_ne; [| intros Hc; injection Hc as Hc; by apply Hn].
+    rewrite (C1_old n (Rt, Lft)); [exact C0_RtL |].
+    exact (fun Hc => Hn (eq_sym Hc)).
+  Qed.
+
+  (** The framing condition the splice would need is false: both surviving
+      variables reach the replaced node on the way to their own. *)
+  Lemma replace_cannot_frame n :
+    n <> Rt -> ~ ReadsObs Rt (C3 n) (Sm1 n) W Grest Cur.
+  Proof.
+    intros Hn (_ & Hpaths & _ & _).
+    apply (Hpaths vCurrentL [Lft; Lft] (fun _ => None) [Lft] [Lft]);
+      [by left | reflexivity |].
+    cbn [hstarC]. rewrite (C3_RtL n Hn). reflexivity.
+  Qed.
+
+End bst4.
+
+Print Assumptions replace_cannot_frame.

@@ -572,7 +572,10 @@ the published composition, so the framing the soundness argument needs does not
 hold; and allocation makes the heap infinite, so no points-to assertion exists
 over it.  Both are in \S\ref{sec:inv-mech}.
 
-That is fifteen: twelve invariants, one rule, two model defects.  The remaining
+That is sixteen: twelve invariants, two rule defects, two model defects.  The
+second rule defect is the one \S\ref{sec:inv-mech} reaches by chaining the rules
+into a program: the mutation rules assume every field is an RCU field, which no
+system with scalar fields satisfies and which a class declaration forbids.  The remaining
 \textsc{major} and \textsc{minor} items are restatements whose defects are
 syntactic (capture, scope, unused binders) and are visible without proof.
 
@@ -639,7 +642,7 @@ are the two obvious conjuncts.  Only the second is needed by any proof here, so
 only it is carried; the first is reported, because a reader of
 \textbf{UNQRT-b} will assume it.
 
-Eleven of the fifteen were found by attempting a proof rather than by reading ---
+Twelve of the sixteen were found by attempting a proof rather than by reading ---
 \textbf{ULKR}'s failure to chain, \textbf{FPI}'s failure to survive unlinking,
 \textbf{HD}'s failure to survive \texttt{Free}, \textbf{FNR}'s failure to
 support \textbf{ULKR} under linking, \textbf{WUNLK}'s absence, which is the same case
@@ -647,8 +650,10 @@ one step further along, and \textbf{WITR}'s, which is \textsc{SyncStart}'s, \tex
 \textsc{SyncStart}'s other one, the failure of closure under composition, which
 is what attempting the framing property ran into, the infinite heap, which is
 what choosing a physical-state predicate ran into, and the two unconstrained
-observations, which are what the last linking rule ran into --- and seven of the
-eleven are cases the report calls trivial.  That is now a pattern rather than a coincidence, and it is the
+observations, which are what the last linking rule ran into, and the
+\textbf{ULKR}/\textbf{OW} disagreement, which is what chaining the rules into a
+program ran into --- and seven of the twelve are cases the report calls
+trivial.  That is now a pattern rather than a coincidence, and it is the
 strongest thing the mechanization has to say about the original argument.
 
 The corrected invariants are also satisfiable
@@ -1611,9 +1616,54 @@ So the two rules cannot both apply in one program, and the delete is exactly a
 program that needs both: it allocates a replacement and then splices it in.  We
 had reported this incompatibility as a caveat alongside the field-list repair.
 It is better as an obstruction: \emph{the paper's own worked example cannot be
-typed} until No-Sharing's field conditions are restricted to declared fields.
-That converts a deferred tidy-up into the next thing that has to be done, and it
-is the clearest argument we have for doing it.
+typed} as things stand.
+
+Tracing where the all-RCU assumption is actually used then said what the repair
+is, and it is not the one we first guessed.  The mutation proofs reach for it in
+six places, and \emph{every one of them applies it to an edge already in hand}
+--- they are proving something about a node that some field points at.  So what
+they need is not that every field is an RCU field, but that every field
+\emph{holding a reference} is: the heap's reference structure lives in RCU
+fields, and a scalar field holds a scalar.
+
+That is a weakening, so every proof that used the old assumption still goes
+through, and it is consistent with a class declaration --- which is what the
+worked example needs.  We have made it.  Two rules now say something they should
+have said all along: \textsc{T-WriteFH} and \textsc{T-LinkF-Null} write a field
+that did not previously hold a reference, so they must state that the field they
+write is an RCU field; the other three inherit it from the edge they are
+replacing.
+
+With the repair in place the splice is no longer blocked by the rules'
+premises --- and it is blocked by something else, which the chain found in turn
+and which is in this development rather than in the rules.  Replacing
+\texttt{current} by the fresh node re-routes every path that ran through
+\texttt{current}: \texttt{currentL} is still at $l.l$ afterwards, because the
+fresh node mirrors what it replaces, but the \emph{intermediate} node on that
+path is now the fresh one.  \texttt{rcuItr}'s chain-of-iterators condition is
+about those intermediate nodes, so it has to be re-derived rather than framed.
+
+The framing lemmas do not do that.  \texttt{EnvOK\_obs} frames a variable across
+a change to one location's observations provided no path in the environment
+passes through that location, and here two of them do.  The condition is not
+merely unproved: \texttt{replace\_cannot\_frame} shows it is false.  So the
+splice needs a framing lemma that knows about mirroring --- the paths are
+unchanged as paths, and the nodes they pass through are swapped one for one,
+which is what \textbf{Mirrors} is for in the pure layer and which has no
+counterpart in the environment reading yet.  That is the next thing to build,
+and it is a gap in the reading rather than a defect in the system.
+
+We tried two larger repairs first and record why they were wrong, because the
+wrong ones are instructive.  Guarding \textbf{ULKR} by RCU-ness, so that it
+matches \textbf{OW}, makes the invariants agree --- but \textbf{HD} needs the
+same treatment for the same reason, and the reachability form of \textbf{ULKR}
+chains along a path, so the guard becomes ``every field on the path is an RCU
+field'' and propagates into every use.  Both of those are repairs to what the
+invariants \emph{say}.  The defect is not there.  It is in the assumption the
+proofs make to connect them, and weakening that assumption leaves every
+invariant as published.  That is the sixteenth defect: not that \textbf{ULKR}
+and \textbf{OW} disagree, but that the published proofs reconcile them by
+assuming a system with no scalar fields at all.
 
 Two things this reading turned up.  The denotation of \texttt{freeable} was
 stated as $F(o) = \lambda t. \bot$ --- an equality of \emph{functions} --- and

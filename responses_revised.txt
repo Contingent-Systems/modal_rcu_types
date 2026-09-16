@@ -9,9 +9,9 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
-16,900 lines and 919 results, axiom-free).  The build refuses to succeed if
+17,000 lines and 924 results, axiom-free).  The build refuses to succeed if
 the development contains an admitted proof, or if any of its hundred and
-ninety-seven assumption checks reports an axiom rather than closed under the
+ninety-eight assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
 it looks.  This turned up more than we expected, and we think it materially
@@ -144,9 +144,9 @@ Both rules now carry a premise excluding it. Both worked examples still type
 check unchanged, since the fresh node each builds points at the children of the
 node being replaced rather than at that node.
 
-That is fifteen in all: twelve invariants, one rule, and two defects in the
-model.  Eleven of the fifteen were found by attempting the proofs rather than by
-reading, and seven of the eleven are cases whose proof the technical report
+That is sixteen in all: twelve invariants, two rule defects, and two defects in
+the model.  Twelve of the sixteen were found by attempting the proofs rather than by
+reading, and seven of the twelve are cases whose proof the technical report
 calls trivial.  We think
 that is the most useful thing the exercise produced: the defects that mattered
 were not the ones that looked doubtful. Every defect has
@@ -455,9 +455,46 @@ two-line proof.
 So the two rules cannot both apply in one program, and the delete is exactly a
 program that needs both.  We had reported this incompatibility as a caveat
 alongside the field-list repair; it is better as an obstruction, because it says
-the paper's own worked example cannot be typed until No-Sharing's field
-conditions are restricted to declared fields.  That converts a deferred tidy-up
-into the next thing that has to be done.
+the paper's own worked example cannot be typed as things stand.
+
+Tracing where the all-RCU assumption is actually used then said what the repair
+is, and it is not what we first guessed.  The mutation proofs reach for it in
+six places, and every one of them applies it to an edge already in hand -- they
+are proving something about a node that some field points at.  So what they need
+is not that every field is an RCU field, but that every field *holding a
+reference* is: the heap's reference structure lives in RCU fields, and a scalar
+field holds a scalar.
+
+That is a weakening, so every proof that used the old assumption still goes
+through, and it is consistent with a class declaration, which is what the worked
+example needs.  We have made it.  Two rules now say something they should have
+said all along: T-WriteFH and T-LinkF-Null write a field that did not previously
+hold a reference, so they must state that the field they write is an RCU field;
+the other three inherit it from the edge they are replacing.
+
+With the repair in place the splice is no longer blocked by the rules' premises,
+and it is blocked by something else which the chain found in turn -- this time
+in our development rather than in the rules.  Replacing the deleted node by the
+fresh one re-routes every path that ran through it: the node's left child is
+still at the same path afterwards, because the fresh node mirrors what it
+replaces, but the *intermediate* node on that path is now the fresh one.  The
+iterator type's chain-of-iterators condition is about those intermediate nodes,
+so it has to be re-derived rather than framed, and our framing lemma cannot do
+that -- we show the condition it needs is not merely unproved but false.  The
+splice therefore needs a framing lemma that knows about mirroring, which is what
+Mirrors does in the pure layer and which has no counterpart in the environment
+reading yet.  That is a gap in the reading rather than a defect in the system.
+
+We tried two larger repairs first, and the wrong ones are instructive.  Guarding
+Unlinked-Reachability by RCU-ness so it matches No-Sharing does make the
+invariants agree -- but Heap-Domain-Closure needs the same treatment for the
+same reason, and the reachability form chains along a path, so the guard becomes
+"every field on the path is an RCU field" and propagates into every use.  Both
+are repairs to what the invariants *say*.  The defect is not there: it is in the
+assumption the proofs make to connect them, and weakening that assumption leaves
+every invariant as published.  So this is a second defect in the rules rather
+than in an invariant -- the published proofs reconcile two invariants by
+assuming a system with no scalar fields at all.
 
 Two smaller things this turned up.  The denotation of freeable was stated as an
 equality of *functions*, and in the ghost encoding the free-list entry is a

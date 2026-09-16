@@ -2021,7 +2021,20 @@ Section insertion.
     obsv s o ob -> (o, ob) <> (on, Ofresh lw) -> obsv s' o ob.
 
   (** The rule's premises, and what the denotations make of them. *)
-  Hypothesis Hallrcu  : forall g, FType g = RCUField.
+  (** References live in RCU fields.
+
+      This replaces "every field is an RCU field", which is what the published
+      proofs assume and which a class declaration forbids -- there are
+      infinitely many field names and finitely many declared ones, so the two
+      cannot both hold, and [rocq/BST.v] shows that stops the paper's own
+      worked example from being typed.
+
+      What the proofs actually need is weaker and is the natural reading of the
+      model: the heap's reference structure lives entirely in RCU fields, so a
+      scalar field holds a scalar.  Every use below applies it to an edge
+      already in hand, which is why the weakening costs nothing. *)
+  Hypothesis Hrefs : forall o g o',
+    hp m o g = Some (VLoc o') -> FType g = RCUField.
   Hypothesis Hedge    : hp m op f = Some (VLoc oo).
   Hypothesis Hfresh   : obsv s on (Ofresh lw).
   Hypothesis Hitr_op  : obsv s op (Oiter lw).
@@ -2133,7 +2146,7 @@ Section insertion.
     Edge s w h oo -> (w, h) <> (op, f) -> Detached s w.
   Proof.
     intros HF HW H He Hne.
-    destruct (H op w f h oo Hedge He (Hallrcu f) (Hallrcu h))
+    destruct (H op w f h oo Hedge He (Hrefs _ _ _ Hedge) (Hrefs _ _ _ He))
       as [Hsame | [Hd | Hd]].
     - exfalso. apply Hne. destruct Hsame as [H1 H2]. by subst.
     - exfalso. exact (ins_op_live HF HW Hd).
@@ -2630,7 +2643,9 @@ Section unlinking.
     obsv s o ob -> (o, ob) <> (oz, Oiter lw) -> obsv s' o ob.
 
   (** The rule's premises. *)
-  Hypothesis Hallrcu : forall g, FType g = RCUField.
+  (** References live in RCU fields; see the note in the T-Insert section. *)
+  Hypothesis Hrefs : forall o g o',
+    hp m o g = Some (VLoc o') -> FType g = RCUField.
   Hypothesis Hedge1  : hp m ox f1 = Some (VLoc oz).
   Hypothesis Hedge2  : hp m oz f2 = Some (VLoc ow).
   Hypothesis Hitr_ox : obsv s ox (Oiter lw).
@@ -2724,7 +2739,7 @@ Section unlinking.
     obsv s q (Ounlk lw) \/ obsv s q (Ofree lw).
   Proof.
     intros HF HW H HWU He Hne.
-    destruct (H ox q f1 g oz Hedge1 He (Hallrcu f1) (Hallrcu g))
+    destruct (H ox q f1 g oz Hedge1 He (Hrefs _ _ _ Hedge1) (Hrefs _ _ _ He))
       as [Hsame | [Hd | Hd]].
     - exfalso. apply Hne. destruct Hsame as [H1 H2]. by subst.
     - exfalso. exact (unl_live ox HF HW Hitr_ox Hd).
@@ -2848,7 +2863,7 @@ Section unlinking.
       destruct (decide (o' = oz)) as [-> | Hne'].
       + exists lw. by left.
       + apply unl_detached_keep.
-        destruct (H oz o' f2 g' ow Hedge2 Hold' (Hallrcu f2) Hg')
+        destruct (H oz o' f2 g' ow Hedge2 Hold' (Hrefs _ _ _ Hedge2) Hg')
           as [Hsame | [Hd | Hd]].
         * exfalso. destruct Hsame as [H1 _]. exact (Hne' (eq_sym H1)).
         * exfalso. exact (unl_live oz HF HW Hitr_oz Hd).
@@ -2857,7 +2872,7 @@ Section unlinking.
       destruct (decide (o = oz)) as [-> | Hne].
       + exists lw. by left.
       + apply unl_detached_keep.
-        destruct (H oz o f2 g ow Hedge2 Hold (Hallrcu f2) Hg)
+        destruct (H oz o f2 g ow Hedge2 Hold (Hrefs _ _ _ Hedge2) Hg)
           as [Hsame | [Hd | Hd]].
         * exfalso. destruct Hsame as [H1 _]. exact (Hne (eq_sym H1)).
         * exfalso. exact (unl_live oz HF HW Hitr_oz Hd).
@@ -3026,7 +3041,7 @@ Section unlinking.
     FNR s -> WULK s -> OW FType s -> g <> f1 -> hp m ox g <> Some (VLoc oz).
   Proof.
     intros HF HW H Hne He.
-    destruct (H ox ox f1 g oz Hedge1 He (Hallrcu f1) (Hallrcu g))
+    destruct (H ox ox f1 g oz Hedge1 He (Hrefs _ _ _ Hedge1) (Hrefs _ _ _ He))
       as [[_ Hfg] | [Hd | Hd]].
     - exact (Hne (eq_sym Hfg)).
     - exact (unl_live ox HF HW Hitr_ox Hd).
@@ -3223,7 +3238,9 @@ Section replacement.
     obsv s' o ob.
 
   (** The rule's premises. *)
-  Hypothesis Hallrcu : forall g, FType g = RCUField.
+  (** References live in RCU fields; see the note in the T-Insert section. *)
+  Hypothesis Hrefs : forall o g o',
+    hp m o g = Some (VLoc o') -> FType g = RCUField.
   Hypothesis Hedge   : hp m op f = Some (VLoc oo).
   Hypothesis Hmir    : Mirrors (hp m) on oo.
   Hypothesis Hfresh  : obsv s on (Ofresh lw).
@@ -3333,7 +3350,7 @@ Section replacement.
     obsv s q (Ounlk lw) \/ obsv s q (Ofree lw).
   Proof.
     intros HF HW H HWU He Hne.
-    destruct (H op q f g oo Hedge He (Hallrcu f) (Hallrcu g))
+    destruct (H op q f g oo Hedge He (Hrefs _ _ _ Hedge) (Hrefs _ _ _ He))
       as [Hsame | [Hd | Hd]].
     - exfalso. apply Hne. destruct Hsame as [H1 H2]. by subst.
     - exfalso. exact (rep_live op HF HW Hitr_op Hd).
@@ -3719,7 +3736,7 @@ Section replacement.
     FNR s -> WULK s -> OW FType s -> g <> f -> hp m op g <> Some (VLoc oo).
   Proof.
     intros HF HW H Hne He.
-    destruct (H op op f g oo Hedge He (Hallrcu f) (Hallrcu g))
+    destruct (H op op f g oo Hedge He (Hrefs _ _ _ Hedge) (Hrefs _ _ _ He))
       as [[_ Hfg] | [Hd | Hd]].
     - exact (Hne (eq_sym Hfg)).
     - exact (rep_live op HF HW Hitr_op Hd).

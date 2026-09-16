@@ -139,6 +139,76 @@ End freshghost.
 
 Print Assumptions fr_agree.
 
+(** References live in RCU fields.  This is what the mutation rules actually
+    need, and it replaces the published proofs' assumption that *every* field is
+    an RCU field -- which a class declaration forbids, and which [BST.v] shows
+    stops the worked example from being typed.  It is a property of the physical
+    state, like the shape condition, so it is carried where that is. *)
+Definition RefsRCU (FType : FName -> FieldKind) (h : Heap) : Prop :=
+  forall o g o', h o g = Some (VLoc o') -> FType g = RCUField.
+
+Lemma RefsRCU_upd FType h o f o' :
+  RefsRCU FType h -> FType f = RCUField -> RefsRCU FType (upd h o f (VLoc o')).
+Proof.
+  intros HR Hf q g y Hq. destruct (decide ((q, g) = (o, f))) as [Heq | Hne].
+  - injection Heq as -> ->. exact Hf.
+  - rewrite (upd_other h o f (VLoc o') q g Hne) in Hq. exact (HR q g y Hq).
+Qed.
+
+Lemma RefsRCU_free FType h d :
+  RefsRCU FType h -> RefsRCU FType (free h d).
+Proof.
+  intros HR o g y Ho. destruct (Nat.eq_dec o d) as [->|Hne].
+  - by rewrite free_same in Ho.
+  - rewrite (free_other h d o g Hne) in Ho. exact (HR o g y Ho).
+Qed.
+
+Lemma RefsRCU_alloc FType h n fs :
+  RefsRCU FType h -> RefsRCU FType (alloc h n fs).
+Proof.
+  intros HR o g y Ho. destruct (Nat.eq_dec o n) as [->|Hne].
+  - destruct (in_dec Nat.eq_dec g fs) as [Hin | Hni].
+    + by rewrite (alloc_same h n fs g Hin) in Ho.
+    + rewrite (alloc_miss h n fs g Hni) in Ho. exact (HR n g y Ho).
+  - rewrite (alloc_other h n fs o g Hne) in Ho. exact (HR o g y Ho).
+Qed.
+
+(** ** The shape of the heap
+
+    What the class declaration buys, stated as a property of the physical
+    state: every allocated cell is at a declared field.  It is what lets a
+    thread holding all of a node's declared cells conclude that it holds all of
+    the node's cells, which is what reclamation needs. *)
+
+Definition HeapShape (fs : list FName) (h : Heap) : Prop :=
+  forall o f v, h o f = Some v -> In f fs.
+
+Lemma HeapShape_upd fs h o f v :
+  HeapShape fs h -> In f fs -> HeapShape fs (upd h o f v).
+Proof.
+  intros HS Hin q g w Hlk.
+  destruct (decide ((q, g) = (o, f))) as [Heq | Hne].
+  - injection Heq as -> ->. exact Hin.
+  - rewrite (upd_other h o f v q g Hne) in Hlk. exact (HS q g w Hlk).
+Qed.
+
+Lemma HeapShape_free fs h d :
+  HeapShape fs h -> HeapShape fs (free h d).
+Proof.
+  intros HS o f v Hlk. destruct (Nat.eq_dec o d) as [->|Hne].
+  - by rewrite free_same in Hlk.
+  - rewrite (free_other h d o f Hne) in Hlk. exact (HS o f v Hlk).
+Qed.
+
+Lemma HeapShape_alloc fs h n :
+  HeapShape fs h -> HeapShape fs (alloc h n fs).
+Proof.
+  intros HS o f v Hlk. destruct (Nat.eq_dec o n) as [->|Hne].
+  - destruct (in_dec Nat.eq_dec f fs) as [Hin | Hni]; [exact Hin |].
+    rewrite (alloc_miss h n fs f Hni) in Hlk. exact (HS n f v Hlk).
+  - rewrite (alloc_other h n fs o f Hne) in Hlk. exact (HS o f v Hlk).
+Qed.
+
 Section invariantT.
   Context `{!rcuG Σ, !freshG Σ, !invGS_gen hlc Σ}.
   Context (FType : FName -> FieldKind).
@@ -154,6 +224,7 @@ Section invariantT.
       ∗ ⌜ObsWF Og⌝
       ∗ ⌜FLD (to_LState_t m Og U T F)⌝
       ∗ ⌜WFreshW (to_LState_t m Og U T F)⌝
+      ∗ ⌜RefsRCU FType (hp m)⌝
       ∗ ⌜forall q t, obsv (to_LState_t m Og U T F) q (Ofresh t) -> q ∈ Fr⌝
       ∗ ⌜WellFormed FType (to_LState_t m Og U T F)⌝.
 
@@ -306,7 +377,7 @@ Section unlink_step.
     ObsWF Og ->
     WellFormed FType (to_LState_t m Og U T F) ->
     Og !! (oz, lw) = Some {[Oiter lw]} ->
-    (forall g, FType g = RCUField) ->
+    (forall o g o', hp m o g = Some (VLoc o') -> FType g = RCUField) ->
     lk m = Some lw ->
     hp m ox f1 = Some (VLoc oz) ->
     hp m oz f2 = Some (VLoc ow) ->
@@ -339,7 +410,7 @@ Section unlink_step.
     ObsWF Og ->
     WellFormed FType (to_LState_t m Og U T F) ->
     (* the rule's premises *)
-    (forall g, FType g = RCUField) ->
+    (forall o g o', hp m o g = Some (VLoc o') -> FType g = RCUField) ->
     lk m = Some lw ->
     hp m ox f1 = Some (VLoc oz) ->
     hp m oz f2 = Some (VLoc ow) ->
@@ -746,7 +817,7 @@ Section promote_steps.
     (forall t t' sg, Og !! (on, t') = Some sg -> Ofresh t ∈ sg -> t' = lw) ->
     Og !! (on, lw) = Some {[Ofresh lw]} ->
     lk m = Some lw ->
-    (forall g, FType g = RCUField) ->
+    (forall o g o', hp m o g = Some (VLoc o') -> FType g = RCUField) ->
     hp m op f = Some (VLoc oo) ->
     obsv (to_LState_t m Og U T F) op (Oiter lw) ->
     PointsOnlyAt (hp m) on f4 oo ->
@@ -786,7 +857,7 @@ Section promote_steps.
     WellFormed FType (to_LState_t m Og U T F) ->
     (forall t t' sg, Og !! (on, t') = Some sg -> Ofresh t ∈ sg -> t' = lw) ->
     lk m = Some lw ->
-    (forall g, FType g = RCUField) ->
+    (forall o g o', hp m o g = Some (VLoc o') -> FType g = RCUField) ->
     hp m op f = Some (VLoc oo) ->
     obsv (to_LState_t m Og U T F) op (Oiter lw) ->
     PointsOnlyAt (hp m) on f4 oo ->
@@ -1040,7 +1111,7 @@ Section replace_step.
     Og !! (on, lw) = Some {[Ofresh lw]} ->
     Og !! (oo, lw) = Some {[Oiter lw]} ->
     lk m = Some lw ->
-    (forall g, FType g = RCUField) ->
+    (forall o g o', hp m o g = Some (VLoc o') -> FType g = RCUField) ->
     hp m op f = Some (VLoc oo) ->
     Mirrors (hp m) on oo ->
     obsv (to_LState_t m Og U T F) op (Oiter lw) ->
@@ -1084,7 +1155,7 @@ Section replace_step.
     Og !! (on, lw) = Some {[Ofresh lw]} ->
     Og !! (oo, lw) = Some {[Oiter lw]} ->
     lk m = Some lw ->
-    (forall g, FType g = RCUField) ->
+    (forall o g o', hp m o g = Some (VLoc o') -> FType g = RCUField) ->
     hp m op f = Some (VLoc oo) ->
     Mirrors (hp m) on oo ->
     obsv (to_LState_t m Og U T F) op (Oiter lw) ->
@@ -2423,42 +2494,6 @@ End stackghost.
 
 Print Assumptions sv_agree.
 
-(** ** The shape of the heap
-
-    What the class declaration buys, stated as a property of the physical
-    state: every allocated cell is at a declared field.  It is what lets a
-    thread holding all of a node's declared cells conclude that it holds all of
-    the node's cells, which is what reclamation needs. *)
-
-Definition HeapShape (fs : list FName) (h : Heap) : Prop :=
-  forall o f v, h o f = Some v -> In f fs.
-
-Lemma HeapShape_upd fs h o f v :
-  HeapShape fs h -> In f fs -> HeapShape fs (upd h o f v).
-Proof.
-  intros HS Hin q g w Hlk.
-  destruct (decide ((q, g) = (o, f))) as [Heq | Hne].
-  - injection Heq as -> ->. exact Hin.
-  - rewrite (upd_other h o f v q g Hne) in Hlk. exact (HS q g w Hlk).
-Qed.
-
-Lemma HeapShape_free fs h d :
-  HeapShape fs h -> HeapShape fs (free h d).
-Proof.
-  intros HS o f v Hlk. destruct (Nat.eq_dec o d) as [->|Hne].
-  - by rewrite free_same in Hlk.
-  - rewrite (free_other h d o f Hne) in Hlk. exact (HS o f v Hlk).
-Qed.
-
-Lemma HeapShape_alloc fs h n :
-  HeapShape fs h -> HeapShape fs (alloc h n fs).
-Proof.
-  intros HS o f v Hlk. destruct (Nat.eq_dec o n) as [->|Hne].
-  - destruct (in_dec Nat.eq_dec f fs) as [Hin | Hni]; [exact Hin |].
-    rewrite (alloc_miss h n fs f Hni) in Hlk. exact (HS n f v Hlk).
-  - rewrite (alloc_other h n fs o f Hne) in Hlk. exact (HS o f v Hlk).
-Qed.
-
 Section physical.
   Context `{!physG Σ, !heapG Σ, !lockG Σ, !stackG Σ}.
 
@@ -2663,7 +2698,7 @@ Section atomic.
   Proof.
     iIntros (HN Hd Hfs) "#Hinv Hobs Hfl Hpts".
     iInv "Hinv" as (m Og U T F Fr)
-      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HFrc & %Hwf)" "Hclose".
+      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf)" "Hclose".
     iDestruct (tobs_ctl_agree with "Ho Hobs") as %Hlk.
     assert (Hfree : obsv (to_LState_t m Og U T F) d (Ofree t)).
     { exists t, {[Ofree t]}. split; [exact Hlk | by apply elem_of_singleton]. }
@@ -2672,9 +2707,10 @@ Section atomic.
     { iIntros "Hp". by iMod (phys_free_step with "Hpts Hp") as "$". }
     iMod ("Hclose" with "[Hp Ho Hf Hfr]") as "_".
     { iNext. iExists (free_ms m d), Og, U, T, (delete d F), Fr. iFrame.
-      iPureIntro. split; [exact HWF | split; [| split; [| split]]].
+      iPureIntro. split; [exact HWF | split; [| split; [| split; [| split]]]].
       - by apply FLD_free.
       - intros o0 t0 Hf0. exact (HWFW o0 t0 Hf0).
+      - apply RefsRCU_free. exact HRefs.
       - intros q t0 Hq. exact (HFrc q t0 Hq).
       - exact Hwf'. }
     by iModIntro.
@@ -2686,6 +2722,9 @@ Section atomic.
   Lemma write_fresh_atomic N γm γh γl γs γo γf γr E lw on f oy x g
         sn sy v vy C :
     ↑N ⊆ E ->
+    (* the field written is an RCU field: the rules write the structure, and
+       the invariant that references live in RCU fields has to survive *)
+    FType f = RCUField ->
     on <> root -> oy <> root ->
     Ofresh lw ∈ sn -> Oiter lw ∈ sy ->
     (* the witness that the target is in the heap is a condition on the cell
@@ -2701,9 +2740,10 @@ Section atomic.
     ={E}=∗ lk_tok γl lw ∗ tobs_ctl γo on lw sn ∗ tobs_ctl γo oy lw sy
            ∗ sv γs x lw on ∗ cells γh C ∗ pt γh on f (VLoc oy).
   Proof.
-    iIntros (HN Hnr Hyr Hin Hiy Hcy) "#Hinv Hlk Hon Hoy Hsv Hcells Hptn".
+    iIntros (HN Hfrcu Hnr Hyr Hin Hiy Hcy)
+            "#Hinv Hlk Hon Hoy Hsv Hcells Hptn".
     iInv "Hinv" as (m Og U T F Fr)
-      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HFrc & %Hwf)" "Hclose".
+      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf)" "Hclose".
     (* the premises, one resource at a time *)
     iDestruct (tobs_ctl_agree with "Ho Hon") as %Hlon.
     iDestruct (tobs_ctl_agree with "Ho Hoy") as %Hloy.
@@ -2745,9 +2785,10 @@ Section atomic.
                   Hlkm Hfr Hit Hunr Hheap Hfl Hne Hwf).
     iMod ("Hclose" with "[Hp Ho Hf Hfr]") as "_".
     { iNext. iExists (write_ms m on f (VLoc oy)), Og, U, T, F, Fr. iFrame.
-      iPureIntro. split; [exact HWF | split; [| split; [| split]]].
+      iPureIntro. split; [exact HWF | split; [| split; [| split; [| split]]]].
       - by apply (FLD_same m).
       - intros o0 t0 Hf0. exact (HWFW o0 t0 Hf0).
+      - apply RefsRCU_upd; [exact HRefs | exact Hfrcu].
       - intros q t0 Hq. exact (HFrc q t0 Hq).
       - exact Hwf'. }
     iModIntro. iFrame.
@@ -2767,6 +2808,7 @@ Section atomic_link.
   Lemma link_null_atomic N γm γh γl γs γo γf γr E lw op f on rho x f0 sp v
         C :
     ↑N ⊆ E ->
+    FType f = RCUField ->
     on <> root -> In f0 fs ->
     Oiter lw ∈ sp ->
     (* the path and the fresh node's fields, as facts about the writer's own
@@ -2784,9 +2826,10 @@ Section atomic_link.
            ∗ tobs_ctl γo on lw {[Oiter lw]} ∗ sv γs x lw on
            ∗ cells γh C ∗ pt γh op f (VLoc on).
   Proof.
-    iIntros (HN Hnr Hf0 Hip HpathC Hnull) "#Hinv Hlk Hop Hon Hsv Hcells Hptf".
+    iIntros (HN Hfrcu Hnr Hf0 Hip HpathC Hnull)
+            "#Hinv Hlk Hop Hon Hsv Hcells Hptf".
     iInv "Hinv" as (m Og U T F Fr)
-      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HFrc & %Hwf)" "Hclose".
+      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf)" "Hclose".
     iDestruct (tobs_ctl_agree with "Ho Hop") as %Hlop.
     iDestruct (tobs_ctl_agree with "Ho Hon") as %Hlon.
     assert (Hitr : obsv (to_LState_t m Og U T F) op (Oiter lw))
@@ -2856,7 +2899,7 @@ Section atomic_link.
     { iNext.
       iExists (write_ms m op f (VLoc on)),
               (<[(on, lw) := {[Oiter lw]}]> Og), U, T, F, Fr.
-      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split]]].
+      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split]]]].
       - intros o Tr Hfl'. destruct (HFLD o Tr Hfl') as [t0 Hdet].
         exists t0. destruct Hdet as [Hd | Hd];
           [left | right];
@@ -2870,6 +2913,7 @@ Section atomic_link.
           as [[-> Hin'] | Hy].
         + apply elem_of_singleton in Hin'. discriminate.
         + exact (HWFW o t0 Hy).
+      - apply RefsRCU_upd; [exact HRefs | exact Hfrcu].
       - intros q t0 Hq.
         destruct (tobs_ins_new m Og U T F on lw _ q (Ofresh t0) Hq)
           as [[-> Hin'] | Hy].
@@ -2890,7 +2934,6 @@ Section atomic_link.
   Lemma insert_atomic N γm γh γl γs γo γf γr E lw op f on oo f4 rho x sp C :
     ↑N ⊆ E ->
     on <> root -> In f4 fs ->
-    (forall g, FType g = RCUField) ->
     Oiter lw ∈ sp ->
     hstarC C root rho = Some op ->
     (forall g, In g fs ->
@@ -2906,10 +2949,10 @@ Section atomic_link.
            ∗ tobs_ctl γo on lw {[Oiter lw]} ∗ sv γs x lw on
            ∗ cells γh C ∗ pt γh op f (VLoc on).
   Proof.
-    iIntros (HN Hnr Hf4 Hall Hip HpathC Hcell0)
+    iIntros (HN Hnr Hf4 Hip HpathC Hcell0)
             "#Hinv Hlk Hop Hon Hsv Hcells Hptf".
     iInv "Hinv" as (m Og U T F Fr)
-      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HFrc & %Hwf)" "Hclose".
+      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf)" "Hclose".
     iDestruct (tobs_ctl_agree with "Ho Hop") as %Hlop.
     iDestruct (tobs_ctl_agree with "Ho Hon") as %Hlon.
     assert (Hitr : obsv (to_LState_t m Og U T F) op (Oiter lw))
@@ -2973,7 +3016,7 @@ Section atomic_link.
     { rewrite /phys. iFrame "Hm Hlka". iSplitR; [by iPureIntro |].
       iSplitL "Ha"; [iExists H; by iFrame | iExists S; by iFrame]. }
     destruct (insert_pure FType m Og U T F lw op f on oo f4 rho
-                HWF Hwf Hsole Hlon Hlkm Hall Hedge Hitr Hpo Hni Hin Hrt' Hfl
+                HWF Hwf Hsole Hlon Hlkm HRefs Hedge Hitr Hpo Hni Hin Hrt' Hfl
                 Hrho' HU) as [HWF' Hwf'].
     iMod (phys_write with "Hp Hptf") as "(Hp & Hptf & _)".
     iMod (tobs_set with "Ho Hon") as "[Ho Hon]".
@@ -2981,7 +3024,7 @@ Section atomic_link.
     { iNext.
       iExists (write_ms m op f (VLoc on)),
               (<[(on, lw) := {[Oiter lw]}]> Og), U, T, F, Fr.
-      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split]]].
+      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split]]]].
       - intros o Tr Hfl'. destruct (HFLD o Tr Hfl') as [t0 Hdet].
         exists t0. destruct Hdet as [Hd | Hd];
           [left | right];
@@ -2995,6 +3038,7 @@ Section atomic_link.
           as [[-> Hin'] | Hy].
         + apply elem_of_singleton in Hin'. discriminate.
         + exact (HWFW o t0 Hy).
+      - apply RefsRCU_upd; [exact HRefs | exact (HRefs op f oo Hedge)].
       - intros q t0 Hq.
         destruct (tobs_ins_new m Og U T F on lw _ q (Ofresh t0) Hq)
           as [[-> Hin'] | Hy].
@@ -3120,7 +3164,6 @@ Section atomic_unlink.
   Lemma unlink_atomic N γm γh γl γs γo γf γr E lw ox f1 oz f2 ow rho
         sx sw Fr val C :
     ↑N ⊆ E ->
-    (forall g, FType g = RCUField) ->
     Oiter lw ∈ sx -> Oiter lw ∈ sw ->
     (* the aliasing premise, now about the thread's own resources *)
     FrCells Fr fs C val ->
@@ -3142,10 +3185,10 @@ Section atomic_unlink.
            ∗ cells γh C ∗ pt γh ox f1 (VLoc ow)
            ∗ fr_frag γr Fr.
   Proof.
-    iIntros (HN Hall Hix Hiw HFrC HpathC Hcell2 Hnf)
+    iIntros (HN Hix Hiw HFrC HpathC Hcell2 Hnf)
             "#Hinv Hlk Hox Hoz How Hcells Hpt1 Hfrg".
     iInv "Hinv" as (m Og U T F Fr0)
-      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HFrc & %Hwf)" "Hclose".
+      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf)" "Hclose".
     iDestruct (fr_agree with "Hfr Hfrg") as %->.
     iDestruct (tobs_ctl_agree with "Ho Hox") as %Hlox.
     iDestruct (tobs_ctl_agree with "Ho Hoz") as %Hloz.
@@ -3195,7 +3238,7 @@ Section atomic_unlink.
     { rewrite /phys. iFrame "Hm Hlka Hst". iSplitR; [by iPureIntro |].
       iExists H. by iFrame. }
     destruct (unlink_pure FType m Og U T F lw ox f1 oz f2 ow rho
-                HWF Hwf Hloz Hall Hlkm He1 He2 Hitx Hitz Hitw Hfl Hrho' HU
+                HWF Hwf Hloz HRefs Hlkm He1 He2 Hitx Hitz Hitw Hfl Hrho' HU
                 Hnofresh) as [HWF' Hwf'].
     iMod (phys_write with "Hp Hpt1") as "(Hp & Hpt1 & _)".
     iMod (tobs_set with "Ho Hoz") as "[Ho Hoz]".
@@ -3203,7 +3246,7 @@ Section atomic_unlink.
     { iNext.
       iExists (write_ms m ox f1 (VLoc ow)),
               (<[(oz, lw) := {[Ounlk lw]}]> Og), U, T, F, Fr.
-      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split]]].
+      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split]]]].
       - intros o Tr Hfl'. destruct (HFLD o Tr Hfl') as [t0 Hdet].
         exists t0. destruct Hdet as [Hd | Hd];
           [left | right];
@@ -3217,6 +3260,7 @@ Section atomic_unlink.
           as [[-> Hin'] | Hy].
         + apply elem_of_singleton in Hin'. discriminate.
         + exact (HWFW o t0 Hy).
+      - apply RefsRCU_upd; [exact HRefs | exact (HRefs ox f1 oz He1)].
       - intros q t0 Hq.
         destruct (tobs_ins_new m Og U T F oz lw _ q (Ofresh t0) Hq)
           as [[-> Hin'] | Hy].
@@ -3242,7 +3286,6 @@ Section atomic_unlink.
         val valo C :
     ↑N ⊆ E ->
     on <> oo -> on <> root -> In f0 fs ->
-    (forall g, FType g = RCUField) ->
     Oiter lw ∈ sp ->
     FrCells Fr fs C val ->
     hstarC C root rho = Some op ->
@@ -3263,10 +3306,10 @@ Section atomic_unlink.
            ∗ sv γs x lw on ∗ cells γh C ∗ pt γh op f (VLoc on)
            ∗ fr_frag γr Fr.
   Proof.
-    iIntros (HN Hno Hnr Hf0 Hall Hip HFrC HpathC Hcn0 Hco0 Hnf)
+    iIntros (HN Hno Hnr Hf0 Hip HFrC HpathC Hcn0 Hco0 Hnf)
             "#Hinv Hlk Hop Hon Hoo Hsv Hcells Hptf Hfrg".
     iInv "Hinv" as (m Og U T F Fr0)
-      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HFrc & %Hwf)" "Hclose".
+      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf)" "Hclose".
     iDestruct (fr_agree with "Hfr Hfrg") as %->.
     iDestruct (tobs_ctl_agree with "Ho Hop") as %Hlop.
     iDestruct (tobs_ctl_agree with "Ho Hon") as %Hlon.
@@ -3353,7 +3396,7 @@ Section atomic_unlink.
     { rewrite /phys. iFrame "Hm Hlka". iSplitR; [by iPureIntro |].
       iSplitL "Ha"; [iExists H; by iFrame | iExists S; by iFrame]. }
     destruct (replace_pure FType m Og U T F lw op f oo on rho
-                HWF Hwf Hno Hsole Hlon Hloo Hlkm Hall Hedge Hmir Hitr Hni Hin
+                HWF Hwf Hno Hsole Hlon Hloo Hlkm HRefs Hedge Hmir Hitr Hni Hin
                 Hrt' Hfl Hrho' HU Hnofresh Huw) as [HWF' Hwf'].
     iMod (phys_write with "Hp Hptf") as "(Hp & Hptf & _)".
     iMod (tobs_set with "Ho Hoo") as "[Ho Hoo]".
@@ -3363,7 +3406,7 @@ Section atomic_unlink.
       iExists (write_ms m op f (VLoc on)),
               (<[(on, lw) := {[Oiter lw]}]> (<[(oo, lw) := {[Ounlk lw]}]> Og)),
               U, T, F, Fr.
-      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split]]].
+      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split]]]].
       - intros o Tr Hfl'. destruct (HFLD o Tr Hfl') as [t0 Hdet].
         exists t0. destruct Hdet as [Hd | Hd];
           [left | right];
@@ -3389,6 +3432,7 @@ Section atomic_unlink.
             injection Hl as <-. apply elem_of_singleton in Hin'. discriminate.
           * rewrite lookup_insert_ne in Hl; [| done].
             apply (HWFW o t0). by exists t', sg.
+      - apply RefsRCU_upd; [exact HRefs | exact (HRefs op f oo Hedge)].
       - intros q t0 Hq.
         destruct Hq as [t' [sg [Hl Hin']]].
         destruct (decide ((q, t') = (on, lw))) as [Heq1 | Hne1].
@@ -4422,7 +4466,7 @@ Section atomic_alloc.
     iIntros (HN Hnd Hrcu HFrC Hstkx HNx Hok) "#Hinv Hw Hfrg".
     iDestruct "Hw" as "(Hlk & Hsm & Hob & Hcells & Hflo)".
     iInv "Hinv" as (m Og U0 T F Fr0)
-      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HFrc & %Hwf)" "Hclose".
+      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf)" "Hclose".
     iDestruct (fr_agree with "Hfr Hfrg") as %->.
     iDestruct "Hp" as "(Hm & Hlka & %Hrt & Hhp & Hst)".
     iDestruct (lk_agree with "Hlka Hlk") as %Hlkm.
@@ -4488,7 +4532,7 @@ Section atomic_alloc.
     { iNext.
       iExists (alloc_ms m n fs x lw), (<[(n, lw) := {[Ofresh lw]}]> Og),
               U', T, F, (Fr ∪ {[n]}).
-      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split]]].
+      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split]]]].
       - intros o Tr Hfl'. destruct (HFLD o Tr Hfl') as [t0 Hdet].
         exists t0. destruct Hdet as [Hd | Hd];
           [left | right];
@@ -4502,6 +4546,7 @@ Section atomic_alloc.
           as [[-> Hin'] | Hy].
         + apply elem_of_singleton in Hin'. injection Hin' as <-. exact Hlkm.
         + exact (HWFW o t0 Hy).
+      - apply RefsRCU_alloc. exact HRefs.
       - intros q t0 Hq.
         destruct (tobs_ins_new m Og U0 T F n lw _ q (Ofresh t0) Hq)
           as [[-> Hin'] | Hy].
@@ -4594,7 +4639,7 @@ Section atomic_bind.
   Proof.
     iIntros (HN Hip) "#Hinv Hlk Hctl Hsv".
     iInv "Hinv" as (m Og U0 T F Fr)
-      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HFrc & %Hwf)" "Hclose".
+      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf)" "Hclose".
     iDestruct (tobs_ctl_agree with "Ho Hctl") as %Hlook.
     assert (Hitr : obsv (to_LState_t m Og U0 T F) o (Oiter lw))
       by (by exists lw, sold).
@@ -4630,7 +4675,7 @@ Section atomic_bind.
     { iNext.
       iExists (bind_ms m y lw o),
               (<[(o, lw) := sold ∪ {[Oiter lw]}]> Og), U', T, F, Fr.
-      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split]]].
+      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split]]]].
       - intros q Tr Hfl'. destruct (HFLD q Tr Hfl') as [t0 Hdt].
         exists t0. destruct Hdt as [Hd | Hd]; [left | right];
           (destruct Hd as [t' [sg [Hl Hin']]];
@@ -4645,6 +4690,7 @@ Section atomic_bind.
         apply elem_of_union in Hin' as [Hin' | Hin'].
         + apply (HWFW o t0). by exists lw, sold.
         + apply elem_of_singleton in Hin'. discriminate.
+      - exact HRefs.
       - intros q t0 Hq.
         destruct (tobs_ins_new m Og U0 T F o lw _ q (Ofresh t0) Hq)
           as [[-> Hin'] | Hy]; [| exact (HFrc q t0 Hy)].
@@ -4686,6 +4732,7 @@ Section typed_link.
   Lemma link_null_typed N γm γh γl γs γo γf γr E lw x xp op f on rho f0
         U Sm Ob C Fl G sp v Np :
     ↑N ⊆ E ->
+    FType f = RCUField ->
     on <> root -> In f0 fs -> op <> on -> x <> xp ->
     (* what the environment already says about the parent and the fresh node *)
     In (xp, TItr rho Np) G ->
@@ -4712,7 +4759,7 @@ Section typed_link.
                 ((x, TItr (rho ++ [f]) (fun _ => None))
                    :: List.filter (fun p => negb (Nat.eqb (fst p) x)) G)⌝.
   Proof.
-    iIntros (HN Hnr Hf0 Hpn Hxp Hin Hstkp Hobp Hitp Hstkx Hobx Hundf
+    iIntros (HN Hfrcu Hnr Hf0 Hpn Hxp Hin Hstkp Hobp Hitp Hstkx Hobx Hundf
              Hnull Hcellf HpathC Hoff HRO HRC Hok) "#Hinv Hw Hsv".
     iDestruct "Hw" as "(Hlk & Hsm & Hob & Hcells & Hflo)".
     assert (Hinf : In (xp, TItr rho Np)
@@ -4734,7 +4781,7 @@ Section typed_link.
     { intros g Hg. rewrite lookup_delete_ne; [exact (Hnull g Hg) |].
       intros Hc. injection Hc as Ha Hb. exact (Hpn Ha). }
     iMod (link_null_atomic FType root fs N γm γh γl γs γo γf γr E lw op f on
-            rho x f0 sp v (delete (op, f) C) HN Hnr Hf0 Hitp
+            rho x f0 sp v (delete (op, f) C) HN Hfrcu Hnr Hf0 Hitp
             (hstarC_delete C (op, f) root rho op Hoff HpathC) Hnull'
             with "Hinv Hlk Hop Hon Hsv Hcells Hptf")
       as "(Hlk & Hop & Hon & Hsv & Hcells & Hptf)".
@@ -4825,7 +4872,6 @@ Section typed_unlink.
   Lemma unlink_typed N γm γh γl γs γo γf γr E lw xx xz xw ox f1 oz f2 ow rho
         U Sm Ob C Fl Fr val sx sw rest :
     ↑N ⊆ E ->
-    (forall g, FType g = RCUField) ->
     ox <> oz -> ox <> ow -> oz <> ow ->
     (* what the environment says about the three *)
     Sm !! (xx, lw) = Some ox -> Ob !! ox = Some sx -> Oiter lw ∈ sx ->
@@ -4863,7 +4909,7 @@ Section typed_unlink.
                   (xz, TUnlinked);
                   (xw, TItr (rho ++ [f1]) (fun _ => None))] ++ rest)⌝.
   Proof.
-    iIntros (HN Hall Hxz Hxw Hzw Hstkx Hobx Hitx Hstkz Hobz Hundz
+    iIntros (HN Hxz Hxw Hzw Hstkx Hobx Hitx Hstkz Hobz Hundz
              Hstkw Hobw Hitw Hundw Hundx Hc1 Hc2 HpathC Hoff
              Hpre Hnoz HFrC Hnf HRO HRC Hrest) "#Hinv Hw Hfrg".
     iDestruct "Hw" as "(Hlk & Hsm & Hob & Hcells & Hflo)".
@@ -4890,7 +4936,7 @@ Section typed_unlink.
       rewrite Ha Hb in Hc1. rewrite Hc1 in Hv.
       injection Hv as Hv. exact (Hnf q g (eq_sym Hv)). }
     iMod (unlink_atomic FType root fs N γm γh γl γs γo γf γr E lw ox f1 oz f2
-            ow rho sx sw Fr val (delete (ox, f1) C) HN Hall Hitx Hitw HFrC'
+            ow rho sx sw Fr val (delete (ox, f1) C) HN Hitx Hitw HFrC'
             (hstarC_delete C (ox, f1) root rho ox Hoff HpathC) Hc2' Hnf
             with "Hinv Hlk Hox Hoz How Hcells Hpt1 Hfrg")
       as "(Hlk & Hox & Hoz & How & Hcells & Hpt1 & Hfrg)".
@@ -4998,6 +5044,7 @@ Section typed_rest.
   Lemma write_fresh_typed N γm γh γl γs γo γf γr E lw x xy on f oy g
         U Sm Ob C Fl sn sy v vy N0 rest :
     ↑N ⊆ E ->
+    FType f = RCUField ->
     on <> root -> oy <> root -> on <> oy ->
     Sm !! (x, lw) = Some on -> Ob !! on = Some sn -> Ofresh lw ∈ sn ->
     ~ U x lw ->
@@ -5023,7 +5070,7 @@ Section typed_rest.
                                        then Some (FVar xy) else N0 h))]
                  ++ rest)⌝.
   Proof.
-    iIntros (HN Hnr Hyr Hny Hstk Hob Hfr Hundf Hstky Hoby Hity Hcf Hcg
+    iIntros (HN Hfrcu Hnr Hyr Hny Hstk Hob Hfr Hundf Hstky Hoby Hity Hcf Hcg
              Hold Hnull HRC Hrest) "#Hinv Hw".
     iDestruct "Hw" as "(Hlk & Hsm & Hob & Hcells & Hflo)".
     rewrite /obs_own (big_sepM_delete _ Ob on sn); [| exact Hob].
@@ -5039,7 +5086,7 @@ Section typed_rest.
     iDestruct (big_sepM_lookup_acc _ Sm (x, lw) on Hstk with "Hsm")
       as "[Hsv Hsmback]".
     iMod (write_fresh_atomic FType root fs N γm γh γl γs γo γf γr E lw on f oy
-            x g sn sy v vy (delete (on, f) C) HN Hnr Hyr Hfr Hity Hcg'
+            x g sn sy v vy (delete (on, f) C) HN Hfrcu Hnr Hyr Hfr Hity Hcg'
             with "Hinv Hlk Hon Hoy Hsv Hcells Hptn")
       as "(Hlk & Hon & Hoy & Hsv & Hcells & Hptn)".
     iModIntro.
@@ -5091,7 +5138,6 @@ Section typed_rest.
         U Sm Ob C Fl sp so rest :
     ↑N ⊆ E ->
     on <> root -> In f4 fs -> In f0 fs ->
-    (forall g, FType g = RCUField) ->
     op <> on -> on <> oo -> op <> oo ->
     Sm !! (xp, lw) = Some op -> Ob !! op = Some sp -> Oiter lw ∈ sp ->
     ~ U xp lw ->
@@ -5124,7 +5170,7 @@ Section typed_rest.
                   (xo, TItr ((rho ++ [f]) ++ [f4]) (fun _ => None))]
                  ++ rest)⌝.
   Proof.
-    iIntros (HN Hnr Hf4 Hf0 Hall Hpn Hno Hpo Hstkp Hobp Hitp Hundp
+    iIntros (HN Hnr Hf4 Hf0 Hpn Hno Hpo Hstkp Hobp Hitp Hundp
              Hstkx Hobx Hundx Hstko Hobo Hito Hundo Hcf Hcells0 HpathC Hoff
              Hpre Hnon HRO HRC Hrest) "#Hinv Hw".
     iDestruct "Hw" as "(Hlk & Hsm & Hob & Hcells & Hflo)".
@@ -5143,7 +5189,7 @@ Section typed_rest.
     { intros g Hg. rewrite lookup_delete_ne; [exact (Hcells0 g Hg) |].
       intros Hcc. injection Hcc as Ha Hb. by apply Hpn. }
     iMod (insert_atomic FType root fs N γm γh γl γs γo γf γr E lw op f on oo
-            f4 rho x sp (delete (op, f) C) HN Hnr Hf4 Hall Hitp
+            f4 rho x sp (delete (op, f) C) HN Hnr Hf4 Hitp
             (hstarC_delete C (op, f) root rho op Hoff HpathC) Hcells'
             with "Hinv Hlk Hop Hon Hsv Hcells Hptf")
       as "(Hlk & Hop & Hon & Hsv & Hcells & Hptf)".
@@ -5260,7 +5306,6 @@ Section typed_rest.
         U Sm Ob C Fl Fr val valo sp rest :
     ↑N ⊆ E ->
     on <> oo -> on <> root -> In f0 fs ->
-    (forall g, FType g = RCUField) ->
     op <> on -> op <> oo ->
     Sm !! (xp, lw) = Some op -> Ob !! op = Some sp -> Oiter lw ∈ sp ->
     ~ U xp lw ->
@@ -5296,7 +5341,7 @@ Section typed_rest.
                   (x, TItr (rho ++ [f]) (fun _ => None));
                   (xo, TUnlinked)] ++ rest)⌝.
   Proof.
-    iIntros (HN Hno Hnr Hf0 Hall Hpn Hpo Hstkp Hobp Hitp Hundp
+    iIntros (HN Hno Hnr Hf0 Hpn Hpo Hstkp Hobp Hitp Hundp
              Hstkx Hobx Hundx Hstko Hobo Hundo Hcf Hcn0 Hco0 HpathC Hoff
              Hpre Hnon Hnoo HFrC Hnf HROn HROo HRC Hrest) "#Hinv Hw Hfrg".
     iDestruct "Hw" as "(Hlk & Hsm & Hob & Hcells & Hflo)".
@@ -5327,7 +5372,7 @@ Section typed_rest.
       pose proof (HFrC q g Hq Hg) as Hv. rewrite Ha Hb in Hcf.
       rewrite Hcf in Hv. injection Hv as Hv. exact (Hnf q g (eq_sym Hv)). }
     iMod (replace_atomic FType root fs N γm γh γl γs γo γf γr E lw op f oo on
-            rho x f0 sp Fr val valo (delete (op, f) C) HN Hno Hnr Hf0 Hall Hitp
+            rho x f0 sp Fr val valo (delete (op, f) C) HN Hno Hnr Hf0 Hitp
             HFrC' (hstarC_delete C (op, f) root rho op Hoff HpathC) Hcn' Hco'
             Hnf with "Hinv Hlk Hop Hon Hoo Hsv Hcells Hptf Hfrg")
       as "(Hlk & Hop & Hon & Hoo & Hsv & Hcells & Hptf & Hfrg)".
