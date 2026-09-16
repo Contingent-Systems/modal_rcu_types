@@ -144,9 +144,24 @@ Both rules now carry a premise excluding it. Both worked examples still type
 check unchanged, since the fresh node each builds points at the children of the
 node being replaced rather than at that node.
 
-That is sixteen in all: twelve invariants, two rule defects, and two defects in
-the model.  Twelve of the sixteen were found by attempting the proofs rather than by
-reading, and seven of the twelve are cases whose proof the technical report
+A thirteenth invariant defect came out of the read side.  Exactly one of the
+nineteen mentions the bounding set B -- RINFL says every thread in a free-list
+entry is a bounding thread -- and nothing constrains B itself.  But SyncStop
+blocks until B is empty, and the only action that removes a thread from it is
+ReadEnd, which is a *reader's* action.  So a bounding thread that is not a
+reader can never be removed and the grace period never completes; we give a
+state satisfying all nineteen in which that happens.  The missing conjunct is
+the one SyncStart in fact establishes, since it sets B to the current readers:
+every bounding thread is a reader.  With it, the writer never bounds its own
+grace period, which is what lets the thread running the wait finish it.  We
+cannot prove liveness -- there is no operational semantics here -- but we can
+prove the obstruction survives every step that could clear it, and we do: for
+any sequence of ReadEnds by any readers in any order, the offending thread is
+still bounding afterwards.
+
+That is seventeen in all: thirteen invariants, two rule defects, and two defects in
+the model.  Thirteen of the seventeen were found by attempting the proofs rather than by
+reading, and seven of the thirteen are cases whose proof the technical report
 calls trivial.  We think
 that is the most useful thing the exercise produced: the defects that mattered
 were not the ones that looked doubtful. Every defect has

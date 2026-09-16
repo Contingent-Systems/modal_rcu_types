@@ -1615,3 +1615,78 @@ Qed.
 Print Assumptions obs_stray_WellFormed.
 Print Assumptions root_observation_is_unpinned.
 Print Assumptions fresh_observations_need_not_be_the_writers.
+
+(** ** Defect 17: the bounding set is unconstrained
+
+    Found the same way as FLD, and it is the same kind of gap at the other end
+    of the reclamation.  Exactly one of the nineteen mentions [B]: RINFL says
+    every thread in a free-list entry is a bounding thread.  That bounds the
+    entries above by [B] and says nothing whatever about [B] itself.
+
+    [B] is not decoration.  SyncStop blocks until it is empty, and the only
+    action that removes a thread from it is ReadEnd, which is a *reader's*
+    action.  So a bounding thread that is not a reader can never be removed, and
+    the grace period never completes.  Nothing in the nineteen rules that out.
+
+    The missing invariant is the one SyncStart in fact establishes -- it sets
+    [B] to the current readers -- and which every action preserves: ReadEnd
+    narrows [R] and [B] together, SyncStop empties [B], and no other action
+    touches either.  It is the exact counterpart of WITR: that one says who may
+    hold an observation, this one says who may hold up a reclamation. *)
+
+Definition BR (s : LState) : Prop :=
+  forall t, bnd (ms s) t -> rds (ms s) t.
+
+(** Why it matters beyond termination in general: with BR, the thread running
+    the grace period is never one of the threads it waits for.  WNR says the
+    writer is not a reader; without BR that leaves the writer free to sit in
+    [B], waiting on itself. *)
+Lemma writer_not_bounding s t :
+  WNR s -> BR s -> lk (ms s) = Some t -> ~ bnd (ms s) t.
+Proof. intros HW HB Hlk Hb. exact (HW t Hlk (HB t Hb)). Qed.
+
+(** The witness: the initial state with thread 9 in the bounding set.  Thread 9
+    is not a reader -- there are none -- and holds no observation, so the other
+    nineteen are exactly the initial state's. *)
+Definition bnd_ms : MState :=
+  {| stk := stk (ms initial); hp := hp (ms initial); lk := lk (ms initial);
+     rt  := rt (ms initial);  rds := rds (ms initial);
+     bnd := fun t => t = 9 |}.
+
+Definition bnd_stray : LState :=
+  {| ms    := bnd_ms;
+     obsv  := obsv initial;
+     undf  := undf initial;
+     thrd  := thrd initial;
+     flist := flist initial |}.
+
+Lemma bnd_stray_RINFL : RINFL bnd_stray.
+Proof. intros o Tr t H1 H2. simpl in H1. discriminate H1. Qed.
+
+Theorem bnd_stray_WellFormed : forall FType, WellFormed FType bnd_stray.
+Proof.
+  intros FType. unfold WellFormed.
+  repeat apply conj;
+    first [ apply initial_OW      | apply initial_RWOW   | apply initial_AWRT
+          | apply initial_IFL     | apply initial_ULKR   | apply initial_FLR
+          | apply initial_WULK    | apply initial_FR     | apply initial_WFresh
+          | apply initial_FNR     | apply initial_FPI    | apply initial_WNR
+          | apply initial_RITR    | apply bnd_stray_RINFL | apply initial_HD
+          | apply initial_UNQRT_a | apply initial_UNQRT_b
+          | apply initial_WUNLK   | apply initial_WITR
+          | apply initial_UNQR ].
+Qed.
+
+Theorem bounding_threads_need_not_be_readers :
+  (forall FType, WellFormed FType bnd_stray)
+  /\ bnd (ms bnd_stray) 9
+  /\ ~ rds (ms bnd_stray) 9
+  /\ ~ BR bnd_stray.
+Proof.
+  repeat apply conj;
+    [ exact bnd_stray_WellFormed | reflexivity | intros H; exact H |].
+  intros H. exact (H 9 eq_refl).
+Qed.
+
+Print Assumptions bnd_stray_WellFormed.
+Print Assumptions bounding_threads_need_not_be_readers.

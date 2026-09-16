@@ -450,6 +450,50 @@ Definition read_end_ms (m : MState) (t : TID) : MState :=
 Definition read_end_F (F : gmap Loc (gset TID)) (t : TID) : gmap Loc (gset TID) :=
   (fun s => s ∖ {[t]}) <$> F.
 
+(** ** Why BR is not decoration
+
+    SyncStop blocks until the bounding set is empty, and ReadEnd is the only
+    action that takes a thread out of it.  So if the bounding set contains a
+    thread that is not a reader, no sequence of ReadEnds can remove it.
+
+    [read_ends] is any number of them, in any order.  The statement below is
+    that the offending thread survives all of them, which is the formal content
+    of ``the grace period never completes'': not a liveness proof, which this
+    development has no semantics to state, but the safety-shaped half of one --
+    the obstruction is invariant under every step that could clear it. *)
+
+Fixpoint read_ends (m : MState) (ts : list TID) : MState :=
+  match ts with
+  | []       => m
+  | t :: ts' => read_ends (read_end_ms m t) ts'
+  end.
+
+Lemma read_ends_rds m ts t : rds (read_ends m ts) t -> rds m t.
+Proof.
+  revert m. induction ts as [|t' ts IH]; intros m H; [exact H |].
+  destruct (IH _ H) as [H' _]. exact H'.
+Qed.
+
+Lemma bnd_stuck m t ts :
+  bnd m t -> ~ In t ts -> bnd (read_ends m ts) t.
+Proof.
+  revert m. induction ts as [|t' ts IH]; intros m Hb Hni; [exact Hb |].
+  apply IH.
+  - split; [exact Hb | intros ->; apply Hni; by left].
+  - intros Hc. apply Hni. by right.
+Qed.
+
+(** A thread that is not a reader is not one of the threads that can step, so
+    the hypothesis of [bnd_stuck] is discharged by BR's failure alone. *)
+Theorem grace_period_stuck m t ts :
+  bnd m t -> ~ rds m t ->
+  (forall t', In t' ts -> rds m t') ->
+  bnd (read_ends m ts) t.
+Proof.
+  intros Hb Hr Hts. apply (bnd_stuck m t ts Hb).
+  intros Hin. exact (Hr (Hts t Hin)).
+Qed.
+
 Section readend.
 
   (** [Og'] is [Og] with thread [t]'s entries gone; stated by its two defining
@@ -503,6 +547,7 @@ Section readend.
 End readend.
 
 Print Assumptions read_end_preserves_IFL.
+Print Assumptions grace_period_stuck.
 Print Assumptions read_end_preserves_RINFL.
 
 (** ** Free

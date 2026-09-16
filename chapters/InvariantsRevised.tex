@@ -572,7 +572,10 @@ the published composition, so the framing the soundness argument needs does not
 hold; and allocation makes the heap infinite, so no points-to assertion exists
 over it.  Both are in \S\ref{sec:inv-mech}.
 
-That is sixteen: twelve invariants, two rule defects, two model defects.  The
+A further invariant defect is in \S\ref{sec:defect-br}: the bounding set is
+unconstrained, so nothing makes the grace period terminate.
+
+That is seventeen: thirteen invariants, two rule defects, two model defects.  The
 second rule defect is the one \S\ref{sec:inv-mech} reaches by chaining the rules
 into a program: the mutation rules assume every field is an RCU field, which no
 system with scalar fields satisfies and which a class declaration forbids.  The remaining
@@ -642,7 +645,7 @@ are the two obvious conjuncts.  Only the second is needed by any proof here, so
 only it is carried; the first is reported, because a reader of
 \textbf{UNQRT-b} will assume it.
 
-Twelve of the sixteen were found by attempting a proof rather than by reading ---
+Thirteen of the seventeen were found by attempting a proof rather than by reading ---
 \textbf{ULKR}'s failure to chain, \textbf{FPI}'s failure to survive unlinking,
 \textbf{HD}'s failure to survive \texttt{Free}, \textbf{FNR}'s failure to
 support \textbf{ULKR} under linking, \textbf{WUNLK}'s absence, which is the same case
@@ -652,8 +655,9 @@ is what attempting the framing property ran into, the infinite heap, which is
 what choosing a physical-state predicate ran into, and the two unconstrained
 observations, which are what the last linking rule ran into, and the
 \textbf{ULKR}/\textbf{OW} disagreement, which is what chaining the rules into a
-program ran into --- and seven of the twelve are cases the report calls
-trivial.  That is now a pattern rather than a coincidence, and it is the
+program ran into, and the unconstrained bounding set, which is what giving the
+read side a resource reading ran into --- and seven of the thirteen are cases
+the report calls trivial.  That is now a pattern rather than a coincidence, and it is the
 strongest thing the mechanization has to say about the original argument.
 
 The corrected invariants are also satisfiable
@@ -661,6 +665,47 @@ The corrected invariants are also satisfiable
 What the development establishes positively --- the reachability theory, the
 denotations, and the atomic-action lemmas --- is collected in
 \S\ref{sec:inv-mech}.
+
+\paragraph{An invariant defect: the bounding set is unconstrained.}
+\label{sec:defect-br}
+Exactly one of the nineteen mentions $B$: \textbf{RINFL} says every thread in a
+free-list entry is a bounding thread.  That bounds the entries above by $B$ and
+says nothing whatever about $B$ itself.
+
+$B$ is not decoration.  \textsc{SyncStop} blocks until it is empty, and
+\textsc{ReadEnd} is the only action that takes a thread out of it --- and
+\textsc{ReadEnd} is a \emph{reader's} action.  So a bounding thread that is not
+a reader can never be removed, and the grace period never completes.  Nothing in
+the nineteen rules that out.
+\texttt{bounding\_threads\_need\_not\_be\_readers} is the witness: a state
+satisfying all nineteen with a thread in $B$ that is not a reader and holds no
+observation at all.
+
+The repair is the conjunct \textsc{SyncStart} in fact establishes, since it sets
+$B$ to the current readers:
+\[
+  \textbf{BR} \quad\equiv\quad \forall t.\; t \in B \;\Rightarrow\; t \in R .
+\]
+Every action preserves it.  \textsc{ReadEnd} narrows $R$ and $B$ together,
+\textsc{SyncStop} empties $B$, and no other action touches either.  It is the
+exact counterpart of \textbf{WITR}: that one says who may hold an observation,
+this one says who may hold up a reclamation.
+
+Two things make this worth stating rather than waving at.  The first is that
+without it the writer may bound its own grace period: \textbf{WNR} says the
+writer is not a reader, and with \textbf{BR} that gives
+\texttt{writer\_not\_bounding} --- the thread running the wait is never one of
+the threads it waits for.  Without \textbf{BR} nothing rules that out, and
+\textsc{SyncStop} deadlocks against itself.
+
+The second is that the obstruction is provable, not merely arguable.  This
+development has no operational semantics and so cannot state liveness; what it
+can state is that the obstruction survives every step that could clear it.
+\texttt{grace\_period\_stuck} is that statement: for any sequence of
+\textsc{ReadEnd}s, taken in any order by any threads that are readers, a
+bounding thread that is not a reader is still in $B$ afterwards.  That is the
+safety-shaped half of ``the grace period never completes'', and it is the half a
+development without a semantics is entitled to.
 
 \subsection{Open questions}
 \label{sec:inv-open}
@@ -1727,15 +1772,22 @@ thread is still bounding.  Those are the two points where the protocol
 \emph{tests} or \emph{waits on} shared state rather than acting on state it
 owns, and neither is a fact any thread can hold.  They are what an operational
 semantics is for --- a compare-and-set and a wait loop --- and they are the only
-two places in the system that need one.  \textsc{ReadBegin}, \textsc{ReadEnd},
-\textsc{SyncStart} and \textsc{WriteEnd} need reader-set and bounding-set
-tokens, which is the lock's construction done twice more.
+two places in the system that need one.
 
-One last thing the field-list repair exposed, which we record rather than fix.
-The mutation rules are stated with ``every field is an RCU field'', which with a
-finite field list contradicts the class declaration the allocation rule needs,
-so the two cannot appear in one lemma.  The honest repair is to restrict
-No-Sharing's field conditions to declared fields.
+The tokens the other four rules need are now built, and building them is what
+found \textbf{BR} (\S\ref{sec:defect-br}).  The reader set is a disjoint-union
+camera: entering a critical section mints a thread's token, leaving it returns
+one, and the token is what \textsc{ReadEnd} consumes --- so a thread cannot take
+another thread out of $R$, which is what the published model's unowned $R$ left
+open.  $R$ becomes finite in the process, for the same reason the heap and the
+stack did; the thread set was already finite, so this is the model catching up
+with itself.  The bounding set needs no camera of its own: it is pinned by
+\textbf{BR}, carried in the physical-state predicate alongside the reader
+authority, and \textsc{SyncStart} is the step that establishes it.  Four
+machine-state steps result --- \texttt{phys\_read\_begin},
+\texttt{phys\_read\_end}, \texttt{phys\_sync\_start} and
+\texttt{phys\_sync\_stop} --- and they are the only ones in the development that
+move $R$ or $B$, which before the token was true of no step at all.
 
 So the remainder is a fractional heap for the read side, and a compare-and-set
 and a wait loop for the two points where the protocol tests shared state.  The
