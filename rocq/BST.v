@@ -465,7 +465,9 @@ Section bst.
     writer γo γs γh γl γf W Sm0 Ob0 C0 ∅ -∗
     fr_frag γr ∅
     ={E}=∗ ∃ n,
-      writer γo γs γh γl γf W
+      ⌜n <> Rt⌝
+      ∗ ⌜forall k v, C0 !! k = Some v -> k.1 <> n⌝
+      ∗ writer γo γs γh γl γf W
         (<[(vCurrentF, W) := n]> Sm0) (<[n := {[Ofresh W]}]> Ob0)
         (<[(n, Lft) := VLoc CurL]>
            (<[(n, Rgt) := VLoc LmP]> (newcells Fs n ∪ C0))) ∅
@@ -491,7 +493,7 @@ Section bst.
     iMod (bst_write_left N γm γh γl γs γo γf γr E n HN Hnr Hcn Hon
             with "Hinv Hw []") as "(Hw & %Hok3)".
     { by iPureIntro. }
-    iModIntro. iExists n. by iFrame.
+    iModIntro. iExists n. iFrame. by iPureIntro.
   Qed.
 
 End bst.
@@ -568,7 +570,8 @@ Print Assumptions bst_build_replacement.
     here. *)
 
 Section bst4.
-  Context `{!rcuG Σ, !physG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ}.
+  Context `{!rcuG Σ, !physG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ,
+            !invGS_gen hlc Σ}.
   Context (FType : FName -> FieldKind).
 
   Definition Sm1 (n : Loc) : gmap (Var * TID) Loc :=
@@ -592,6 +595,48 @@ Section bst4.
     rewrite lookup_insert_ne; [| intros Hc; injection Hc as Hc; by apply Hn].
     rewrite (C1_old n (Rt, Lft)); [exact C0_RtL |].
     exact (fun Hc => Hn (eq_sym Hc)).
+  Qed.
+
+  Definition Ob1 (n : Loc) : gmap Loc (gset obs) :=
+    <[n := {[Ofresh W]}]> Ob0.
+
+  (** The value the two writes left in the replacement's fields, which is also
+      what the node it replaces holds -- that is the mirroring. *)
+  Definition Valo : FName -> Val :=
+    fun g => if decide (g = Lft) then VLoc CurL else VLoc LmP.
+
+  Lemma C3_CurL n : n <> Cur -> C3 n !! (Cur, Lft) = Some (VLoc CurL).
+  Proof.
+    intros Hn. rewrite /C3.
+    rewrite lookup_insert_ne; [| intros Hc; injection Hc as Hc; by apply Hn].
+    rewrite lookup_insert_ne; [| intros Hc; injection Hc as Hc; by apply Hn].
+    rewrite (C1_old n (Cur, Lft)); [exact C0_CurL |].
+    exact (fun Hc => Hn (eq_sym Hc)).
+  Qed.
+
+  Lemma C3_CurR n : n <> Cur -> C3 n !! (Cur, Rgt) = Some (VLoc LmP).
+  Proof.
+    intros Hn. rewrite /C3.
+    rewrite lookup_insert_ne; [| intros Hc; injection Hc as Hc; by apply Hn].
+    rewrite lookup_insert_ne; [| intros Hc; injection Hc as Hc; by apply Hn].
+    rewrite (C1_old n (Cur, Rgt)); [exact C0_CurR |].
+    exact (fun Hc => Hn (eq_sym Hc)).
+  Qed.
+
+  Lemma C3_new n g : In g Fs -> C3 n !! (n, g) = Some (Valo g).
+  Proof.
+    intros Hg. rewrite /C3 /Valo.
+    destruct Hg as [Hc | [Hc | []]]; rewrite -Hc.
+    - rewrite lookup_insert_eq. by case_decide.
+    - rewrite lookup_insert_ne; [| intros Hc'; by injection Hc' as Hc'].
+      rewrite lookup_insert_eq. case_decide as Hd; [discriminate Hd | reflexivity].
+  Qed.
+
+  Lemma C3_old n g : n <> Cur -> In g Fs -> C3 n !! (Cur, g) = Some (Valo g).
+  Proof.
+    intros Hn Hg. rewrite /Valo. destruct Hg as [Hc | [Hc | []]]; rewrite -Hc.
+    - case_decide as Hd; [exact (C3_CurL n Hn) | by destruct Hd].
+    - case_decide as Hd; [discriminate Hd | exact (C3_CurR n Hn)].
   Qed.
 
   (** The deleted node has one predecessor.  In the concrete tree this is a
@@ -647,6 +692,210 @@ Section bst4.
       [by left | reflexivity |].
     cbn [hstarC]. rewrite (C3_RtL n Hn). reflexivity.
   Qed.
+
+  (** The fields the two writes left behind, as the value function the
+      free-list side of \textsc{T-Replace} asks for: every cell of the fresh
+      node holds what the node it replaces holds. *)
+  Definition Val3 (n : Loc) : Loc -> FName -> Val :=
+    fun q g => if decide (q = n) then Valo g else VNull.
+
+  Lemma C0_CurLL : C0 !! (CurL, Lft) = Some VNull.
+  Proof. reflexivity. Qed.
+  Lemma C0_LmPL : C0 !! (LmP, Lft) = Some VNull.
+  Proof. reflexivity. Qed.
+
+  (** The four distinctness facts the splice needs, all of them consequences of
+      the single freshness fact the allocation exports. *)
+  Lemma n_fresh n :
+    (forall k v, C0 !! k = Some v -> k.1 <> n) ->
+    n <> Cur /\ n <> CurL /\ n <> LmP.
+  Proof.
+    intros Hcn. repeat apply conj; intros ->.
+    - exact (Hcn (Cur, Lft) _ C0_CurL eq_refl).
+    - exact (Hcn (CurL, Lft) _ C0_CurLL eq_refl).
+    - exact (Hcn (LmP, Lft) _ C0_LmPL eq_refl).
+  Qed.
+
+  Lemma C3_star1 n : n <> Rt -> hstarC (C3 n) Rt [Lft] = Some Cur.
+  Proof. intros Hn. cbn [hstarC]. rewrite (C3_RtL n Hn). reflexivity. Qed.
+
+  Lemma C3_star2L n : n <> Rt -> n <> Cur ->
+    hstarC (C3 n) Rt [Lft; Lft] = Some CurL.
+  Proof.
+    intros Hr Hc. cbn [hstarC]. rewrite (C3_RtL n Hr).
+    rewrite (C3_CurL n Hc). reflexivity.
+  Qed.
+
+  Lemma C3_star2R n : n <> Rt -> n <> Cur ->
+    hstarC (C3 n) Rt [Lft; Rgt] = Some LmP.
+  Proof.
+    intros Hr Hc. cbn [hstarC]. rewrite (C3_RtL n Hr).
+    rewrite (C3_CurR n Hc). reflexivity.
+  Qed.
+
+  (** What survives the splice, and why.  Neither surviving variable is the
+      parent, the replaced node or the replacement; neither names a field; both
+      run on declared fields; and no prefix of either path reaches the fresh
+      node.  That last clause is the one the framing lemma could not get from
+      the other two shapes -- the paths *do* pass through the replaced node, so
+      what frames them is that the replacement is indistinguishable from it. *)
+  Lemma Grest_mirror n :
+    n <> Rt -> n <> Cur -> n <> CurL -> n <> LmP ->
+    MirrorOK Rt (C3 n) (Sm1 n) W Grest Rt Lft Cur n Fs.
+  Proof.
+    intros Hr Hc Hcl Hlm.
+    assert (Hsm : forall x ty, In (x, ty) Grest ->
+                    Sm1 n !! (x, W) = Some CurL \/ Sm1 n !! (x, W) = Some LmP).
+    { intros x ty Hin. destruct Hin as [Heq | [Heq | []]];
+        injection Heq as Hv1 Hv2; rewrite -Hv1; [by left | by right]. }
+    repeat apply conj.
+    - intros x ty Hin. destruct (Hsm x ty Hin) as [H | H]; rewrite H;
+        intros Hc'; injection Hc' as Hc'; discriminate Hc'.
+    - intros x ty Hin. destruct (Hsm x ty Hin) as [H | H]; rewrite H;
+        intros Hc'; injection Hc' as Hc'; [by apply Hcl | by apply Hlm].
+    - intros x ty g z Hin Hty. exfalso.
+      destruct Hin as [Heq | [Heq | []]];
+        injection Heq as Hv1 Hv2; rewrite -Hv2 in Hty; discriminate Hty.
+    - intros x rho Nf Hin g Hg.
+      destruct Hin as [Heq | [Heq | []]]; injection Heq as Hv1 Hv2 Hv3;
+        rewrite -Hv2 in Hg;
+        destruct Hg as [<- | [<- | []]]; [by left | by left | by left | by right; left].
+    - intros x rho Nf rho1 rho2 Hin Happ.
+      destruct Hin as [Heq | [Heq | []]]; injection Heq as Hv1 Hv2 Hv3;
+        rewrite -Hv2 in Happ.
+      + destruct (prefix2 Lft Lft rho1 rho2 Happ) as [-> | [-> | ->]].
+        * intros Hc'; injection Hc' as Hc'; by apply Hr.
+        * rewrite (C3_star1 n Hr). intros Hc'; injection Hc' as Hc'; by apply Hc.
+        * rewrite (C3_star2L n Hr Hc).
+          intros Hc'; injection Hc' as Hc'; by apply Hcl.
+      + destruct (prefix2 Lft Rgt rho1 rho2 Happ) as [-> | [-> | ->]].
+        * intros Hc'; injection Hc' as Hc'; by apply Hr.
+        * rewrite (C3_star1 n Hr). intros Hc'; injection Hc' as Hc'; by apply Hc.
+        * rewrite (C3_star2R n Hr Hc).
+          intros Hc'; injection Hc' as Hc'; by apply Hlm.
+    - intros x ty Hin. destruct (Hsm x ty Hin) as [H | H]; rewrite H;
+        intros Hc'; injection Hc' as Hc'; discriminate Hc'.
+  Qed.
+
+  (** ** Step four: the splice
+
+      [parent.Left = currentF].  Every side condition is a lookup in a concrete
+      map or one of the three distinctness facts above. *)
+  Lemma bst_replace N γm γh γl γs γo γf γr E n :
+    ↑N ⊆ E ->
+    n <> Rt ->
+    (forall k v, C0 !! k = Some v -> k.1 <> n) ->
+    EnvOK Rt W U1 FType Fs (Sm1 n) (Ob1 n) (C3 n) ∅ Grest ->
+    rcu_invT FType (phys γm γh γl γs Rt Fs) N γo γf γr -∗
+    writer γo γs γh γl γf W (Sm1 n) (Ob1 n) (C3 n) ∅ -∗
+    fr_frag γr ({[n]} : gset Loc)
+    ={E}=∗ writer γo γs γh γl γf W (Sm1 n)
+             (<[n := {[Oiter W]}]> (<[Cur := {[Ounlk W]}]> (Ob1 n)))
+             (<[(Rt, Lft) := VLoc n]> (C3 n)) ∅
+           ∗ fr_frag γr ({[n]} : gset Loc)
+           ∗ ⌜EnvOK Rt W U1 FType Fs (Sm1 n)
+                (<[n := {[Oiter W]}]> (<[Cur := {[Ounlk W]}]> (Ob1 n)))
+                (<[(Rt, Lft) := VLoc n]> (C3 n)) ∅
+                ([(vParent, TItr [] (fun g => if decide (g = Lft)
+                                             then Some (FVar vCurrentF)
+                                             else None));
+                  (vCurrentF, TItr [Lft] (fun _ => None));
+                  (vCurrent, TUnlinked)] ++ Grest)⌝.
+  Proof.
+    iIntros (HN Hr Hcn Hrest) "#Hinv Hw Hfr".
+    destruct (n_fresh n Hcn) as (Hc & Hcl & Hlm).
+    iApply (replace_typed FType Rt Fs N γm γh γl γs γo γf γr E W
+              vParent vCurrentF vCurrent Rt Lft Cur n [] Lft
+              U1 (Sm1 n) (Ob1 n) (C3 n) ∅ {[n]} (Val3 n) Valo
+              {[Oiter W]} Grest
+              with "Hinv Hw Hfr").
+    - exact HN.
+    - exact Hc.
+    - exact Hr.
+    - by left.
+    - exact (fun Hc' => Hr (eq_sym Hc')).
+    - discriminate.
+    - rewrite /Sm1 lookup_insert_ne; [reflexivity | discriminate].
+    - rewrite /Ob1 lookup_insert_ne;
+        [reflexivity | intros Hc'; by apply Hr].
+    - by apply elem_of_singleton.
+    - intros [Hu _]; exact Hu.
+    - rewrite /Sm1. apply lookup_insert_eq.
+    - rewrite /Ob1. apply lookup_insert_eq.
+    - intros [Hu _]; exact Hu.
+    - rewrite /Sm1 lookup_insert_ne; [reflexivity | discriminate].
+    - rewrite /Ob1 lookup_insert_ne;
+        [reflexivity | intros Hc'; by apply Hc].
+    - intros [Hu _]; exact Hu.
+    - exact (C3_RtL n Hr).
+    - intros g Hg. exact (C3_new n g Hg).
+    - intros g Hg. exact (C3_old n g Hc Hg).
+    - reflexivity.
+    - intros [].
+    - intros rho1 rho2 Happ. apply app_eq_nil in Happ as [-> ->].
+      exists Rt, {[Oiter W]}. repeat apply conj;
+        [reflexivity | | by apply elem_of_singleton].
+      rewrite /Ob1 lookup_insert_ne; [reflexivity | intros Hc'; by apply Hr].
+    - intros rho1 rho2 Happ. apply app_eq_nil in Happ as [-> ->].
+      intros Hc'; injection Hc' as Hc'; by apply Hr.
+    - intros rho1 rho2 Happ. apply app_eq_nil in Happ as [-> ->].
+      discriminate.
+    - intros q g Hq Hg. apply elem_of_singleton in Hq as ->.
+      rewrite /Val3 decide_True; [| reflexivity]. exact (C3_new n g Hg).
+    - intros q g. rewrite /Val3. case_decide as Hd; [| discriminate].
+      rewrite /Valo. case_decide; intros Hc'; injection Hc' as Hc';
+        discriminate Hc'.
+    - exact (C3_sole_Cur n Hr Hc Hcl Hlm).
+    - discriminate.
+    - exact (Grest_mirror n Hr Hc Hcl Hlm).
+    - exact Hrest.
+  Qed.
+
+  Print Assumptions bst_replace.
+
+  (** ** The chain
+
+      The four steps composed: allocate the replacement, fill in its two
+      fields, splice it in.  This is the write half of the two-child delete the
+      paper uses as its worked example, and it is the shape the isolated
+      triples could not be read off from -- each step's output is the next
+      step's input, including the freshness facts the allocation has to export
+      and the mirror condition the splice has to be handed. *)
+  Lemma bst_delete_two_child N γm γh γl γs γo γf γr E :
+    (forall g, FType g = RCUField -> In g Fs) ->
+    (forall g, In g Fs -> FType g = RCUField) ->
+    ↑N ⊆ E ->
+    rcu_invT FType (phys γm γh γl γs Rt Fs) N γo γf γr -∗
+    writer γo γs γh γl γf W Sm0 Ob0 C0 ∅ -∗
+    fr_frag γr ∅
+    ={E}=∗ ∃ n,
+      writer γo γs γh γl γf W (Sm1 n)
+        (<[n := {[Oiter W]}]> (<[Cur := {[Ounlk W]}]> (Ob1 n)))
+        (<[(Rt, Lft) := VLoc n]> (C3 n)) ∅
+      ∗ fr_frag γr ({[n]} : gset Loc)
+      ∗ ⌜EnvOK Rt W U1 FType Fs (Sm1 n)
+           (<[n := {[Oiter W]}]> (<[Cur := {[Ounlk W]}]> (Ob1 n)))
+           (<[(Rt, Lft) := VLoc n]> (C3 n)) ∅
+           ([(vParent, TItr [] (fun g => if decide (g = Lft)
+                                        then Some (FVar vCurrentF)
+                                        else None));
+             (vCurrentF, TItr [Lft] (fun _ => None));
+             (vCurrent, TUnlinked)] ++ Grest)⌝.
+  Proof.
+    iIntros (HFs HFrcu HN) "#Hinv Hw Hfr".
+    iMod (bst_build_replacement FType HFs HFrcu N γm γh γl γs γo γf γr E HN
+            with "Hinv Hw Hfr") as (n) "(%Hr & %Hcn & Hw & Hfr & %Hok)".
+    assert (Hrest : EnvOK Rt W U1 FType Fs (Sm1 n) (Ob1 n) (C3 n) ∅ Grest).
+    { intros x ty Hin. apply Hok.
+      destruct Hin as [Heq | [Heq | []]]; rewrite -Heq;
+        [ by right; right; right; left
+        | by right; right; right; right; left ]. }
+    iMod (bst_replace N γm γh γl γs γo γf γr E n HN Hr Hcn Hrest
+            with "Hinv Hw Hfr") as "Hres".
+    iModIntro. by iExists n.
+  Qed.
+
+  Print Assumptions bst_delete_two_child.
 
 End bst4.
 

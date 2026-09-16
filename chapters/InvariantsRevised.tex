@@ -1672,10 +1672,21 @@ the framing lemma for it is the one that needs No-Sharing.
 \textsc{T-Replace} is stated against that lemma now rather than against the
 other two, so the splice is no longer blocked at either end: not by the rules'
 premises, which the reference repair fixed, and not by the framing, which the
-mirror lemma supplies.  What remains of the worked example is the concrete
-instantiation --- the four-step chain with the tree's own numbers --- and the
-one fact it asks of that tree, that the deleted node has a single predecessor,
-is proved.
+mirror lemma supplies.  With both repairs in place the four steps compose:
+\texttt{bst\_delete\_two\_child} runs the allocation, the two writes that build
+the replacement, and the splice as a single chain over the concrete tree,
+starting from the entry environment and ending with \texttt{current} typed
+\texttt{unlinked} and the fresh node in its place.  The write half of the
+paper's worked example is mechanized.
+
+Two things about that instantiation are worth reporting, because they are what
+the general lemmas could not say.  The mirror condition is not an abstract
+hypothesis there: it is discharged by enumeration, and the clause that does the
+work is the one saying no \emph{prefix} of a surviving variable's path reaches
+the fresh node --- three folds per variable in a four-node tree.  And the
+single-predecessor fact, which is \textbf{OW} in general, is a finite check on
+the tree's own cells, which is the sense in which the worked example pays for
+the invariant rather than assuming it.
 
 We tried two larger repairs first and record why they were wrong, because the
 wrong ones are instructive.  Guarding \textbf{ULKR} by RCU-ness, so that it

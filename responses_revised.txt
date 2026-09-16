@@ -498,7 +498,11 @@ second shape is what makes read-copy-update work at all, so it is fitting that
 the framing lemma for it is the one that needs No-Sharing.  T-Replace is stated
 against that lemma now, so the splice is blocked at neither end: not by the
 rules' premises, which the reference repair fixed, and not by the framing, which
-the mirror lemma supplies.
+the mirror lemma supplies.  With both repairs in place the four steps compose:
+the allocation, the two writes that build the replacement, and the splice run as
+a single chain over the concrete tree, from the entry environment to one in
+which the deleted node is typed unlinked and the fresh node stands in its place.
+The write half of the paper's worked example is mechanized.
 
 We tried two larger repairs first, and the wrong ones are instructive.  Guarding
 Unlinked-Reachability by RCU-ness so it matches No-Sharing does make the
