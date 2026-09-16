@@ -4414,6 +4414,210 @@ Print Assumptions app_snoc_split.
 Print Assumptions TyOK_demoted.
 Print Assumptions TyOK_promoted.
 
+(** ** Framing across a replacement
+
+    The three framing lemmas above cover a step whose footprint the environment
+    does not read.  A replacement is not such a step, and [BST.v] shows the
+    difference is real rather than an artefact: swapping a node for a mirror of
+    itself re-routes every path that ran through it, so a variable below the
+    replacement has the same path and a different intermediate node.
+
+    What is true is that the paths are unchanged *as paths* and the nodes they
+    pass through are swapped one for one.  [swapn] is that swap, and
+    [hstarC_mirror] is the induction: a fold that reached [q] before reaches
+    [swapn q] after, because at the one cell the rule rewrote the target moves
+    from the old node to the new, and everywhere else the mirror makes the two
+    indistinguishable. *)
+
+Definition swapn (oo on q : Loc) : Loc := if decide (q = oo) then on else q.
+
+Lemma swapn_ne oo on q : q <> oo -> swapn oo on q = q.
+Proof. intros H. rewrite /swapn. by rewrite decide_False. Qed.
+
+Lemma swapn_eq oo on : swapn oo on oo = on.
+Proof. rewrite /swapn. by rewrite decide_True. Qed.
+
+Lemma hstarC_mirror (C : gmap (Loc * FName) Val) op f oo on (fs' : list FName)
+    a p q :
+  C !! (op, f) = Some (VLoc oo) ->
+  (forall g, In g fs' -> C !! (on, g) = C !! (oo, g)) ->
+  (forall g, In g p -> In g fs') ->
+  (* the replaced node has one predecessor, which is No-Sharing *)
+  (forall b h, C !! (b, h) = Some (VLoc oo) -> (b, h) = (op, f)) ->
+  on <> op -> op <> oo ->
+  hstarC C a p = Some q ->
+  hstarC (<[(op, f) := VLoc on]> C) (swapn oo on a) p = Some (swapn oo on q).
+Proof.
+  intros Hcell Hmir Hpfs Hsole Hop Hpo. revert a. revert Hpfs.
+  induction p as [|g p IH]; intros Hp a Hstar; simpl in Hstar |- *.
+  - injection Hstar as <-. reflexivity.
+  - assert (Hgfs : In g fs') by (apply Hp; by left).
+    assert (Hp' : forall h, In h p -> In h fs')
+      by (intros h Hh; apply Hp; by right).
+    destruct (decide (a = oo)) as [-> | Hane].
+    + (* at the replaced node: the mirror makes the step the same one *)
+      rewrite swapn_eq.
+      assert (Hne : (op, f) <> (on, g))
+        by (intros Hc; injection Hc as Hc1 _; by apply Hop).
+      rewrite lookup_insert_ne; [| exact Hne].
+      rewrite (Hmir g Hgfs).
+      destruct (C !! (oo, g)) as [[o1|]|] eqn:E; try discriminate.
+      assert (Ho1 : o1 <> oo).
+      { intros ->. pose proof (Hsole oo g E) as Hc.
+        injection Hc as Hc1 _. by apply Hpo. }
+      pose proof (IH Hp' o1 Hstar) as Hres.
+      rewrite (swapn_ne oo on o1 Ho1) in Hres. exact Hres.
+    + rewrite (swapn_ne oo on a Hane).
+      destruct (decide ((a, g) = (op, f))) as [Heq | Hne].
+      * (* the cell the rule rewrote: the target moves to the new node *)
+        injection Heq as -> ->. rewrite lookup_insert_eq.
+        rewrite Hcell in Hstar.
+        pose proof (IH Hp' oo Hstar) as Hres.
+        rewrite swapn_eq in Hres. exact Hres.
+      * rewrite lookup_insert_ne; [| intros Hc; by apply Hne].
+        destruct (C !! (a, g)) as [[o1|]|] eqn:E; try discriminate.
+        assert (Ho1 : o1 <> oo)
+          by (intros ->; exact (Hne (Hsole a g E))).
+        pose proof (IH Hp' o1 Hstar) as Hres.
+        rewrite (swapn_ne oo on o1 Ho1) in Hres. exact Hres.
+Qed.
+
+Print Assumptions hstarC_mirror.
+
+(** What framing across a replacement asks of the rest of the environment.  It
+    is longer than the other two because a replacement does more: it rewrites a
+    cell *and* changes two locations' observations, and the paths that ran
+    through the old node now run through the new one. *)
+Definition MirrorOK (root : Loc) (C : gmap (Loc * FName) Val)
+    (Sm : gmap (Var * TID) Loc) (t : TID) (G : Env)
+    (op : Loc) (f : FName) (oo on : Loc) (fs : list FName) : Prop :=
+  (* no surviving variable is either of the two nodes, or names one *)
+  (forall x ty, In (x, ty) G -> Sm !! (x, t) <> Some oo)
+  /\ (forall x ty, In (x, ty) G -> Sm !! (x, t) <> Some on)
+  /\ (forall x ty g z, In (x, ty) G -> tyN ty g = Some (FVar z) ->
+        Sm !! (z, t) <> Some oo /\ Sm !! (z, t) <> Some on)
+  (* the paths run on declared fields, and none of them reaches the new node,
+     which is fresh *)
+  /\ (forall x rho N, In (x, TItr rho N) G -> forall g, In g rho -> In g fs)
+  /\ (forall x rho N rho1 rho2, In (x, TItr rho N) G -> rho1 ++ rho2 = rho ->
+        hstarC C root rho1 <> Some on)
+  (* nor is any of them the node whose field the rule rewrites *)
+  /\ (forall x ty, In (x, ty) G -> Sm !! (x, t) <> Some op).
+
+Lemma EnvOK_mirror root t U FType fs Sm Ob C Fl G op f oo on :
+  C !! (op, f) = Some (VLoc oo) ->
+  (forall g, In g fs -> C !! (on, g) = C !! (oo, g)) ->
+  (forall b h, C !! (b, h) = Some (VLoc oo) -> (b, h) = (op, f)) ->
+  on <> op -> op <> oo -> on <> oo ->
+  (* neither node is the root: the replaced one has a predecessor, and the new
+     one is fresh *)
+  oo <> root -> on <> root ->
+  MirrorOK root C Sm t G op f oo on fs ->
+  EnvOK root t U FType fs Sm Ob C Fl G ->
+  EnvOK root t U FType fs Sm
+    (<[on := {[Oiter t]}]> (<[oo := {[Ounlk t]}]> Ob))
+    (<[(op, f) := VLoc on]> C) Fl G.
+Proof.
+  intros Hcell Hmir Hsole Hop Hpo Hno Hor Hnr
+         (HV & HW & HT & HP & HN & HF) Hok y ty Hin.
+  assert (Hroo : root <> oo) by (intros Hc; apply Hor; by rewrite Hc).
+  pose proof (Hok y ty Hin) as Hty.
+  (* the observation of anything that is neither node is untouched *)
+  assert (Hob : forall o sg, o <> oo -> o <> on -> Ob !! o = Some sg ->
+            <[on := {[Oiter t]}]> (<[oo := {[Ounlk t]}]> Ob) !! o = Some sg).
+  { intros o sg H1 H2 H3. rewrite lookup_insert_ne; [| intros ->; by apply H2].
+    rewrite lookup_insert_ne; [exact H3 | intros ->; by apply H1]. }
+  assert (Hfield : forall o g v, o <> op \/ g <> f ->
+            C !! (o, g) = Some v -> <[(op, f) := VLoc on]> C !! (o, g) = Some v).
+  { intros o g v Hne Hc. rewrite lookup_insert_ne; [exact Hc |].
+    intros Heq. injection Heq as H1 H2.
+    destruct Hne as [Hd | Hd]; [by apply Hd | by apply Hd]. }
+  (* the field-map entries, which every case but [undef] carries *)
+  assert (Hflds : forall o, Sm !! (y, t) = Some o ->
+            FieldOK t Sm Ob C o (tyN ty) ->
+            FieldOK t Sm
+              (<[on := {[Oiter t]}]> (<[oo := {[Ounlk t]}]> Ob))
+              (<[(op, f) := VLoc on]> C) o (tyN ty)).
+  { intros o Hstk Hfld g w Hw. specialize (Hfld g w Hw).
+    assert (Hcellne : o <> op \/ g <> f)
+      by (left; intros ->; by apply (HF y ty Hin)).
+    destruct w as [z | ].
+    - destruct Hfld as (oy & sgy & Hsy & Hcy & Hoy & Hity).
+      destruct (HT y ty g z Hin Hw) as [Hz1 Hz2].
+      exists oy, sgy. repeat apply conj.
+      + exact Hsy.
+      + exact (Hfield o g (VLoc oy) Hcellne Hcy).
+      + apply Hob; [intros ->; by apply Hz1 | intros ->; by apply Hz2
+                    | exact Hoy].
+      + exact Hity.
+    - exact (Hfield o g VNull Hcellne Hfld). }
+  destruct ty; simpl in Hty |- *.
+  - destruct Hty as (o & sg & Hstk & Hobo & Hit & Hundf & Hfld & Hpath & Hpre).
+    assert (Ho1 : o <> oo) by (intros ->; by apply (HV y _ Hin)).
+    assert (Ho2 : o <> on) by (intros ->; by apply (HW y _ Hin)).
+    exists o, sg. repeat apply conj.
+    + exact Hstk.
+    + exact (Hob o sg Ho1 Ho2 Hobo).
+    + exact Hit.
+    + exact Hundf.
+    + exact (Hflds o Hstk Hfld).
+    + pose proof (hstarC_mirror C op f oo on fs root rho o Hcell Hmir
+                    (HP y rho N Hin) Hsole Hop Hpo Hpath) as Hm.
+      rewrite (swapn_ne oo on root Hroo) in Hm.
+      rewrite (swapn_ne oo on o Ho1) in Hm. exact Hm.
+    + intros rho1 rho2 Happ. destruct (Hpre rho1 rho2 Happ)
+        as (o' & sg' & Hp' & Hob' & Hit').
+      assert (Hrcu1 : forall g, In g rho1 -> In g fs).
+      { intros g Hg. apply (HP y rho N Hin). rewrite -Happ.
+        apply in_or_app. by left. }
+      pose proof (hstarC_mirror C op f oo on fs root rho1 o' Hcell Hmir
+                    Hrcu1 Hsole Hop Hpo Hp') as Hm.
+      rewrite (swapn_ne oo on root Hroo) in Hm.
+      destruct (decide (o' = oo)) as [-> | Hne].
+      * (* the path passed through the replaced node: it now passes through
+           the new one, which is an iterator *)
+        rewrite swapn_eq in Hm.
+        exists on, {[Oiter t]}. repeat apply conj;
+          [exact Hm | by rewrite lookup_insert_eq | by apply elem_of_singleton].
+      * rewrite (swapn_ne oo on o' Hne) in Hm.
+        exists o', sg'. repeat apply conj.
+        -- exact Hm.
+        -- apply Hob; [exact Hne | | exact Hob'].
+           intros ->. exact (HN y rho N rho1 rho2 Hin Happ Hp').
+        -- exact Hit'.
+  - destruct Hty as (o & sg & Hstk & Hobo & Hfr & Hundf & Hfld & Hnull).
+    assert (Ho1 : o <> oo) by (intros ->; by apply (HV y _ Hin)).
+    assert (Ho2 : o <> on) by (intros ->; by apply (HW y _ Hin)).
+    exists o, sg. repeat apply conj.
+    + exact Hstk.
+    + exact (Hob o sg Ho1 Ho2 Hobo).
+    + exact Hfr.
+    + exact Hundf.
+    + exact (Hflds o Hstk Hfld).
+    + intros g Hg HNg. apply Hfield; [| exact (Hnull g Hg HNg)].
+      left. intros ->. by apply (HF y (TFresh N) Hin).
+  - destruct Hty as (o & sg & Hstk & Hobo & Hin' & Hundf).
+    assert (Ho1 : o <> oo) by (intros ->; by apply (HV y _ Hin)).
+    assert (Ho2 : o <> on) by (intros ->; by apply (HW y _ Hin)).
+    exists o, sg. repeat apply conj;
+      [exact Hstk | exact (Hob o sg Ho1 Ho2 Hobo) | exact Hin' | exact Hundf].
+  - destruct Hty as [(o & sg & Hstk & Hobo & Hin' & Hundf) Hfle].
+    assert (Ho1 : o <> oo) by (intros ->; by apply (HV y _ Hin)).
+    assert (Ho2 : o <> on) by (intros ->; by apply (HW y _ Hin)).
+    split; [| exact Hfle].
+    exists o, sg. repeat apply conj;
+      [exact Hstk | exact (Hob o sg Ho1 Ho2 Hobo) | exact Hin' | exact Hundf].
+  - exact Hty.
+  - destruct Hty as (sg & Hstk & Hobo & Hin').
+    exists sg. repeat apply conj;
+      [exact Hstk
+       | apply Hob; [exact Hroo | intros Hc; apply Hnr; by rewrite Hc
+                     | exact Hobo]
+       | exact Hin'].
+Qed.
+
+Print Assumptions EnvOK_mirror.
+
 Print Assumptions EnvOK_cell.
 Print Assumptions EnvOK_obs.
 Print Assumptions EnvOK_stack.
@@ -5323,8 +5527,14 @@ Section typed_rest.
     (forall rho1 rho2, rho1 ++ rho2 = rho -> hstarC C root rho1 <> Some oo) ->
     FrCells Fr fs C val ->
     (forall q g, val q g <> VLoc oo) ->
-    ReadsObs root C Sm lw rest on -> ReadsObs root C Sm lw rest oo ->
-    ReadsCell root C Sm lw rest (op, f) ->
+    (* the replaced node has one predecessor, which is No-Sharing, and neither
+       node is the root.  The rest of the environment is framed by the mirror
+       lemma rather than the other two: a replacement moves what the paths pass
+       through, so what survives is that the fresh node is indistinguishable
+       from the one it replaces. *)
+    (forall b h, C !! (b, h) = Some (VLoc oo) -> (b, h) = (op, f)) ->
+    oo <> root ->
+    MirrorOK root C Sm lw rest op f oo on fs ->
     EnvOK root lw U FType fs Sm Ob C Fl rest ->
     rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr -∗
     writer γo γs γh γl γf lw Sm Ob C Fl -∗
@@ -5343,7 +5553,7 @@ Section typed_rest.
   Proof.
     iIntros (HN Hno Hnr Hf0 Hpn Hpo Hstkp Hobp Hitp Hundp
              Hstkx Hobx Hundx Hstko Hobo Hundo Hcf Hcn0 Hco0 HpathC Hoff
-             Hpre Hnon Hnoo HFrC Hnf HROn HROo HRC Hrest) "#Hinv Hw Hfrg".
+             Hpre Hnon Hnoo HFrC Hnf Hsole Hoor HMir Hrest) "#Hinv Hw Hfrg".
     iDestruct "Hw" as "(Hlk & Hsm & Hob & Hcells & Hflo)".
     rewrite /obs_own (big_sepM_delete _ Ob on {[Ofresh lw]}); [| exact Hobx].
     iDestruct "Hob" as "[Hon Hobr]".
@@ -5418,8 +5628,11 @@ Section typed_rest.
                         exact (Hnoo rho1 rho2 Happ Hp')].
       - exact Hit'. }
     apply EnvOK_step.
-    - apply EnvOK_cell; [exact HRC |].
-      apply EnvOK_obs; [exact HROn |]. by apply EnvOK_obs.
+    - apply (EnvOK_mirror root lw U FType fs Sm Ob C Fl rest op f oo on);
+        [exact Hcf | | exact Hsole | intros ->; by apply Hpn
+         | exact Hpo | intros ->; by apply Hno
+         | exact Hoor | exact Hnr | exact HMir | exact Hrest].
+      intros g Hg. by rewrite (Hcn0 g Hg) (Hco0 g Hg).
     - intros y ty Hin.
       destruct Hin as [Heq | [Heq | [Heq | []]]]; injection Heq as Hv1 Hv2;
         rewrite -Hv1 -Hv2.

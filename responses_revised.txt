@@ -9,9 +9,9 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
-17,000 lines and 924 results, axiom-free).  The build refuses to succeed if
+17,200 lines and 928 results, axiom-free).  The build refuses to succeed if
 the development contains an admitted proof, or if any of its hundred and
-ninety-eight assumption checks reports an axiom rather than closed under the
+two hundred assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
 it looks.  This turned up more than we expected, and we think it materially
@@ -482,8 +482,20 @@ iterator type's chain-of-iterators condition is about those intermediate nodes,
 so it has to be re-derived rather than framed, and our framing lemma cannot do
 that -- we show the condition it needs is not merely unproved but false.  The
 splice therefore needs a framing lemma that knows about mirroring, which is what
-Mirrors does in the pure layer and which has no counterpart in the environment
-reading yet.  That is a gap in the reading rather than a defect in the system.
+Mirrors does in the pure layer.  We have now built its counterpart in the
+environment reading: a fold that reached a node before reaches its swap
+afterwards, because at the one cell the rule rewrote the target moves from the
+old node to the new and everywhere else the mirror makes the two
+indistinguishable.  It needs one thing the other framing lemmas do not -- that
+the replaced node has a single predecessor, which is No-Sharing -- and that is
+the first place No-Sharing is used to frame rather than to establish an
+invariant.
+
+So the framing story has three shapes rather than two.  A step may leave what
+the environment reads alone, which two lemmas cover; or it may move what the
+environment reads to somewhere indistinguishable, which is the third.  The
+second shape is what makes read-copy-update work at all, so it is fitting that
+the framing lemma for it is the one that needs No-Sharing.
 
 We tried two larger repairs first, and the wrong ones are instructive.  Guarding
 Unlinked-Reachability by RCU-ness so it matches No-Sharing does make the

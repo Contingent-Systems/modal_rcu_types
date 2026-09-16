@@ -1649,9 +1649,25 @@ passes through that location, and here two of them do.  The condition is not
 merely unproved: \texttt{replace\_cannot\_frame} shows it is false.  So the
 splice needs a framing lemma that knows about mirroring --- the paths are
 unchanged as paths, and the nodes they pass through are swapped one for one,
-which is what \textbf{Mirrors} is for in the pure layer and which has no
-counterpart in the environment reading yet.  That is the next thing to build,
-and it is a gap in the reading rather than a defect in the system.
+which is what \textbf{Mirrors} is for in the pure layer.  We have now built its
+counterpart in the environment reading.
+
+\texttt{hstarC\_mirror} is the content: a fold that reached a node before
+reaches its swap afterwards, because at the one cell the rule rewrote the target
+moves from the old node to the new, and everywhere else the mirror makes the two
+indistinguishable.  It needs one thing the other framing lemmas do not --- that
+the replaced node has a single predecessor, which is \textbf{OW} --- and that is
+the first place \textbf{OW} is used to frame rather than to establish an
+invariant.  \texttt{EnvOK\_mirror} lifts it to the environment: a variable below
+the replacement keeps its type, its path is the same path, and the intermediate
+node it passes through is the new one, which the promotion has just made an
+iterator.
+
+So the framing story has three shapes, not two.  A step may leave what the
+environment reads alone, which the first two lemmas cover; or it may move what
+the environment reads to somewhere indistinguishable, which is this one.  The
+second shape is what makes read-copy-update work at all, so it is fitting that
+the framing lemma for it is the one that needs No-Sharing.
 
 We tried two larger repairs first and record why they were wrong, because the
 wrong ones are instructive.  Guarding \textbf{ULKR} by RCU-ness, so that it
