@@ -561,9 +561,11 @@ Print Assumptions bst_build_replacement.
 
     So the splice needs a framing lemma that knows about mirroring: the paths
     are unchanged as paths, and the nodes they pass through are swapped one for
-    one.  That is what [Mirrors] is for in the pure layer, and it has no
-    counterpart in the environment reading yet.  It is the next thing to
-    build. *)
+    one.  That is [EnvOK_mirror], built for this, and \textsc{T-Replace} is
+    stated against it rather than against the other two.  [C3_sole_Cur] below
+    is the one thing it asks of the concrete tree -- that the deleted node has a
+    single predecessor, which is No-Sharing in general and a finite check
+    here. *)
 
 Section bst4.
   Context `{!rcuG Σ, !physG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ}.
@@ -590,6 +592,49 @@ Section bst4.
     rewrite lookup_insert_ne; [| intros Hc; injection Hc as Hc; by apply Hn].
     rewrite (C1_old n (Rt, Lft)); [exact C0_RtL |].
     exact (fun Hc => Hn (eq_sym Hc)).
+  Qed.
+
+  (** The deleted node has one predecessor.  In the concrete tree this is a
+      finite check, and it is what the mirror framing lemma asks for -- the
+      general fact behind it is No-Sharing. *)
+  Lemma C0_sole_Cur b h : C0 !! (b, h) = Some (VLoc Cur) -> (b, h) = (Rt, Lft).
+  Proof.
+    rewrite /C0. intros H.
+    do 8 (apply lookup_insert_Some in H;
+          destruct H as [[Heq Hv] | [_ H]];
+          [ first [exact (eq_sym Heq) | discriminate Hv
+                   | (injection Hv as Hv; discriminate Hv)] | ]).
+    rewrite lookup_empty in H. discriminate H.
+  Qed.
+
+  Lemma C1_miss n h :
+    ~ In h Fs -> (newcells Fs n ∪ C0) !! (n, h) = C0 !! (n, h).
+  Proof.
+    intros Hh. apply lookup_union_r. rewrite /newcells.
+    apply not_elem_of_list_to_map_1. intros Hc.
+    apply list_elem_of_fmap_1 in Hc. destruct Hc as [p [Hp1 Hpin]].
+    apply list_elem_of_fmap_1 in Hpin. destruct Hpin as [g [-> Hg]].
+    simpl in Hp1. injection Hp1 as Hb. apply Hh.
+    apply list_elem_of_In. by rewrite Hb.
+  Qed.
+
+  Lemma C3_sole_Cur n :
+    n <> Rt -> n <> Cur -> n <> CurL -> n <> LmP ->
+    forall b h, C3 n !! (b, h) = Some (VLoc Cur) -> (b, h) = (Rt, Lft).
+  Proof.
+    intros Hr Hc Hcl Hlm b h H. rewrite /C3 in H.
+    apply lookup_insert_Some in H. destruct H as [[Heq Hv] | [Hne1 H]];
+      [by injection Hv |].
+    apply lookup_insert_Some in H. destruct H as [[Heq Hv] | [Hne2 H]];
+      [by injection Hv |].
+    destruct (decide (b = n)) as [-> | Hbn].
+    - destruct (in_dec Nat.eq_dec h Fs) as [Hin | Hni].
+      + rewrite (C1_new n h Hin) in H. discriminate.
+      + rewrite (C1_miss n h Hni) in H.
+        exfalso. pose proof (C0_sole_Cur n h H) as Hc'.
+        injection Hc' as Hc'. by apply Hr.
+    - rewrite (C1_old n (b, h)) in H; [| by simpl].
+      exact (C0_sole_Cur b h H).
   Qed.
 
   (** The framing condition the splice would need is false: both surviving

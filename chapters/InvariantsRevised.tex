@@ -1669,6 +1669,14 @@ the environment reads to somewhere indistinguishable, which is this one.  The
 second shape is what makes read-copy-update work at all, so it is fitting that
 the framing lemma for it is the one that needs No-Sharing.
 
+\textsc{T-Replace} is stated against that lemma now rather than against the
+other two, so the splice is no longer blocked at either end: not by the rules'
+premises, which the reference repair fixed, and not by the framing, which the
+mirror lemma supplies.  What remains of the worked example is the concrete
+instantiation --- the four-step chain with the tree's own numbers --- and the
+one fact it asks of that tree, that the deleted node has a single predecessor,
+is proved.
+
 We tried two larger repairs first and record why they were wrong, because the
 wrong ones are instructive.  Guarding \textbf{ULKR} by RCU-ness, so that it
 matches \textbf{OW}, makes the invariants agree --- but \textbf{HD} needs the

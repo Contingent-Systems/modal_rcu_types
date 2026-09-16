@@ -9,7 +9,7 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
-17,200 lines and 928 results, axiom-free).  The build refuses to succeed if
+17,300 lines and 931 results, axiom-free).  The build refuses to succeed if
 the development contains an admitted proof, or if any of its hundred and
 two hundred assumption checks reports an axiom rather than closed under the
 global context;
@@ -495,7 +495,10 @@ So the framing story has three shapes rather than two.  A step may leave what
 the environment reads alone, which two lemmas cover; or it may move what the
 environment reads to somewhere indistinguishable, which is the third.  The
 second shape is what makes read-copy-update work at all, so it is fitting that
-the framing lemma for it is the one that needs No-Sharing.
+the framing lemma for it is the one that needs No-Sharing.  T-Replace is stated
+against that lemma now, so the splice is blocked at neither end: not by the
+rules' premises, which the reference repair fixed, and not by the framing, which
+the mirror lemma supplies.
 
 We tried two larger repairs first, and the wrong ones are instructive.  Guarding
 Unlinked-Reachability by RCU-ness so it matches No-Sharing does make the
