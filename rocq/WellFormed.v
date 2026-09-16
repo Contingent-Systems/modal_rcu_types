@@ -1482,6 +1482,108 @@ Definition RTO (s : LState) : Prop :=
 Definition WFreshW (s : LState) : Prop :=
   forall o t, obsv s o (Ofresh t) -> lk (ms s) = Some t.
 
+(** Defect 18: WUNLK is guarded just tightly enough not to be usable.
+
+    Found the same way WFreshW was, and it is the same defect one invariant
+    along.  WUNLK says detaching observations are the writer's, but only *while
+    a writer holds the lock*: in an unlocked state it says nothing, so nothing
+    rules out a stray [unlinked] or [freeable] observation belonging to an
+    arbitrary thread.
+
+    That is exactly what 	extsc{ReadBegin} needs ruled out.  A thread entering a
+    read-side critical section must hold no detaching observation -- otherwise
+    RITR fails the moment it becomes a reader -- and the action lemma
+    [read_begin_preserves_WellFormed] has carried this as the hypothesis
+    [Hclean] for want of an invariant that supplies it.  With the lock held it
+    does follow, from WUNLK and the entering thread not being the writer.  With
+    the lock free nothing supplies it, and the unlocked state is precisely when
+    a thread starts reading.
+
+    The repair is WFreshW's, transposed: state it unguarded.  It is true of
+    every reachable state for the reason WriteEnd already records -- the
+    critical section leaves nothing detached, which is the hypothesis [Hclean]
+    of [write_end_preserves_WellFormed]. *)
+Definition WUNLKW (s : LState) : Prop :=
+  forall o t,
+    obsv s o (Ounlk t) \/ obsv s o (Ofree t) -> lk (ms s) = Some t.
+
+(** Guarded, it does not survive an unlocked state: the witness is the same
+    kind of thing as [obs_stray], and the point is that WUNLK holds of it. *)
+Definition unlk_stray : LState :=
+  {| ms    := {| stk := stk (ms initial); hp := hp (ms initial);
+                 lk  := None;             rt := rt (ms initial);
+                 rds := rds (ms initial); bnd := bnd (ms initial) |};
+     obsv  := fun o ob => (o = 0 /\ ob = Oroot) \/ (o = 1 /\ ob = Ounlk 9);
+     undf  := undf initial;
+     thrd  := thrd initial;
+     flist := flist initial |}.
+
+Lemma unlk_stray_WUNLK : WUNLK unlk_stray.
+Proof. intros o t lw Hc. discriminate Hc. Qed.
+
+Lemma unlk_stray_no_edges : forall o f o', ~ Edge unlk_stray o f o'.
+Proof.
+  intros o f o'. unfold Edge, unlk_stray. simpl.
+  destruct (Nat.eqb o 0); discriminate.
+Qed.
+
+Lemma unlk_stray_reaches : forall p o, Reaches unlk_stray p o -> p = [] /\ o = 0.
+Proof.
+  intros [|f p] o H; unfold Reaches in H; simpl in H.
+  - injection H as <-. split; reflexivity.
+  - discriminate.
+Qed.
+
+(** All nineteen hold.  Almost every case is vacuous -- no edges, no stack, no
+    free list, no readers -- which is the point: the state is unremarkable, and
+    the stray observation is what the invariants do not see. *)
+Lemma unlk_stray_WellFormed : forall FType, WellFormed FType unlk_stray.
+Proof.
+  intros FType. unfold WellFormed. repeat apply conj.
+  - intros o o' f f' x H1. exfalso. exact (unlk_stray_no_edges _ _ _ H1).
+  - intros x t o H. simpl in H. discriminate H.
+  - intros y t H. simpl in H. discriminate H.
+  - intros t o Tr H1 H2. simpl in H2. discriminate H2.
+  - intros o o' f' t _ H. exfalso. exact (unlk_stray_no_edges _ _ _ H).
+  - intros o o' f' Tr H1 H2. simpl in H1. discriminate H1.
+  - intros lw o t H1. discriminate H1.
+  - intros t x o H1 H2. simpl in H1. discriminate H1.
+  - intros t x o H1 H2. simpl in H1. discriminate H1.
+  - intros o t t' H. simpl in H.
+    destruct H as [[_ H] | [_ H]]; discriminate H.
+  - intros o f o' t lw _ H. exfalso. exact (unlk_stray_no_edges _ _ _ H).
+  - intros t H1. discriminate H1.
+  - intros o t H. destruct H.
+  - intros o Tr t H1 H2. simpl in H1. discriminate H1.
+  - intros o f o' H _. exfalso. exact (unlk_stray_no_edges _ _ _ H).
+  - intros o f. apply unlk_stray_no_edges.
+  - intros p o lw H1. discriminate H1.
+  - intros o t lw H1. discriminate H1.
+  - intros o t H. simpl in H.
+    destruct H as [[_ H] | [_ H]]; discriminate H.
+  - intros p p' o H1 H2.
+    destruct (unlk_stray_reaches _ _ H1) as [-> _].
+    destruct (unlk_stray_reaches _ _ H2) as [-> _]. reflexivity.
+Qed.
+
+Theorem detaching_observations_survive_the_lock :
+  (forall FType, WellFormed FType unlk_stray)
+  /\ WUNLK unlk_stray
+  /\ obsv unlk_stray 1 (Ounlk 9)
+  /\ lk (ms unlk_stray) = None
+  /\ ~ WUNLKW unlk_stray.
+Proof.
+  repeat apply conj;
+    [ exact unlk_stray_WellFormed | exact unlk_stray_WUNLK
+    | right; split; reflexivity | reflexivity |].
+  intros H. assert (Hc : @None TID = Some 9).
+  { apply (H 1 9). left. right. split; reflexivity. }
+  discriminate Hc.
+Qed.
+
+Print Assumptions unlk_stray_WellFormed.
+Print Assumptions detaching_observations_survive_the_lock.
+
 Definition obs_stray : LState :=
   {| ms    := ms initial;
      obsv  := fun o ob => (ob = Oroot /\ (o = 0 \/ o = 1))

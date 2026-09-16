@@ -159,9 +159,31 @@ prove the obstruction survives every step that could clear it, and we do: for
 any sequence of ReadEnds by any readers in any order, the offending thread is
 still bounding afterwards.
 
-That is seventeen in all: thirteen invariants, two rule defects, and two defects in
-the model.  Thirteen of the seventeen were found by attempting the proofs rather than by
-reading, and seven of the thirteen are cases whose proof the technical report
+A fourteenth came out of the other end of the same exercise, and it is the
+thirteenth's twin.  WUNLK says detaching observations are the writer's, but only
+while a writer holds the lock; in an unlocked state it says nothing, so nothing
+rules out a stray unlinked or freeable observation belonging to an arbitrary
+thread.  We give a state satisfying all nineteen in which there is one.  That is
+exactly what ReadBegin needs ruled out -- a thread entering a read critical
+section while holding a detaching observation breaks RITR at once -- and the
+unlocked state is precisely when a thread starts reading.  The repair is the one
+the revision had already made to WFresh one invariant earlier: state it
+unguarded.  It is true of every reachable state for the reason the rules already
+record, since WriteEnd's own premise is that the critical section leaves nothing
+detached.  That the same defect appears twice, one invariant apart, and that we
+repaired the first without noticing the second, is the part worth reporting: the
+guard is what makes each of them provable locally, and it is also what makes
+them useless to every rule on the read side.
+
+With both in place, ReadBegin is a closed triple -- the first on the read side.
+Its two premises, that the entering thread is not the writer and that it holds
+no detaching observation, were hypotheses of the action lemma; they are now
+proved, the first from the thread's own reader cell and the second from the two
+unguarded invariants.
+
+That is eighteen in all: fourteen invariants, two rule defects, and two defects in
+the model.  Fourteen of the eighteen were found by attempting the proofs rather than by
+reading, and seven of the fourteen are cases whose proof the technical report
 calls trivial.  We think
 that is the most useful thing the exercise produced: the defects that mattered
 were not the ones that looked doubtful. Every defect has

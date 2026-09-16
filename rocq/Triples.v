@@ -144,83 +144,92 @@ Print Assumptions fr_agree.
     The first ghost state on the read side, and the reason the reclamation half
     needs any: [R] and [B] are the only parts of the machine state that no
     thread owns a fragment of, so nothing in the resource reading says who may
-    change them.  A reader token fixes that.  It is per-thread and exclusive --
-    the disjoint-union camera -- so entering a critical section mints one,
-    leaving it returns one, and the token is what [ReadEnd] consumes.
+    change them.
 
-    [R] becomes a finite set here, for the same reason the heap and the stack
-    did: a token is an element of a camera, and the camera is over [gset TID].
-    The published model has [R : TID -> Prop].  Every implementation has
-    finitely many threads, and the development already makes the thread set [T]
-    finite, so this is the model catching up with itself rather than a new
-    assumption. *)
+    The first attempt made a reader token a *set* token -- the disjoint-union
+    camera, one element per active reader.  That certifies membership and
+    nothing else, and it is not enough: \textsc{ReadBegin}'s premise is that the
+    thread is *not* already a reader, and a membership token cannot say that.
+    So the reader state is a per-thread two-valued cell instead, owned by the
+    thread whether it is inside a critical section or outside one.  Entering
+    trades [false] for [true] and leaving trades back, and both directions are
+    now derivable from what the thread holds.
 
-Definition rdUR : ucmra := authUR (gset_disjUR TID).
+    [R] becomes a finite map here, for the same reason the heap and the stack
+    became finite: a fragment is an element of a camera.  The published model
+    has [R : TID -> Prop].  The development already makes the thread set [T]
+    finite, so this is the model catching up with itself.  A thread with no cell
+    is not a reader, which is the right reading of a thread that has never
+    entered one. *)
+
+Definition rdUR : ucmra := authUR (gmapUR TID (exclR (leibnizO bool))).
 
 Class readerG (Σ : gFunctors) := ReaderG { reader_inG :: inG Σ rdUR }.
 Definition readerΣ : gFunctors := #[ GFunctor rdUR ].
 Global Instance subG_readerΣ {Σ} : subG readerΣ Σ -> readerG Σ.
 Proof. solve_inG. Qed.
 
-Definition RepresentsR (r : TID -> Prop) (Rs : gset TID) : Prop :=
-  forall t, r t <-> t ∈ Rs.
+Definition RepresentsR (r : TID -> Prop) (M : gmap TID bool) : Prop :=
+  forall t, r t <-> M !! t = Some true.
 
 Section readerghost.
   Context `{!readerG Σ}.
 
-  Definition rd_auth (γ : gname) (Rs : gset TID) : iProp Σ :=
-    own γ (● GSet Rs).
-  Definition rd_tok (γ : gname) (t : TID) : iProp Σ :=
-    own γ (◯ GSet {[t]}).
+  Definition rd_auth (γ : gname) (M : gmap TID bool) : iProp Σ :=
+    own γ (● (Excl <$> M : gmap TID (excl (leibnizO bool)))).
+  (** [rd_st γ t b]: thread [t]'s own cell.  [b] is whether it is inside a
+      read-side critical section. *)
+  Definition rd_st (γ : gname) (t : TID) (b : bool) : iProp Σ :=
+    own γ (◯ {[ t := Excl (b : leibnizO bool) ]}).
 
-  Global Instance rd_auth_timeless γ Rs : Timeless (rd_auth γ Rs).
+  Global Instance rd_auth_timeless γ M : Timeless (rd_auth γ M).
   Proof. apply _. Qed.
-  Global Instance rd_tok_timeless γ t : Timeless (rd_tok γ t).
+  Global Instance rd_st_timeless γ t b : Timeless (rd_st γ t b).
   Proof. apply _. Qed.
 
-  (** Holding a token is being a reader.  This is what carries [R]'s content
-      out of the invariant, and so what lets a reader rule have a premise about
-      [R] at all. *)
-  Lemma rd_tok_mem γ Rs t : rd_auth γ Rs -∗ rd_tok γ t -∗ ⌜t ∈ Rs⌝.
+  (** Both directions, which is the point of the cell: the thread's own state
+      tells it whether it is a reader, not merely that it is one. *)
+  Lemma rd_st_agree γ M t b :
+    rd_auth γ M -∗ rd_st γ t b -∗ ⌜M !! t = Some b⌝.
   Proof.
     iIntros "Ha Hf".
     iDestruct (own_valid_2 with "Ha Hf") as %Hv.
+    iPureIntro.
     apply auth_both_valid_discrete in Hv as [Hincl _].
-    iPureIntro. apply gset_disj_included in Hincl. set_solver.
+    apply singleton_included_l in Hincl as [y [Hlk Hle]].
+    rewrite lookup_fmap in Hlk.
+    apply fmap_Some_equiv in Hlk as [b0 [Hb0 Hy]].
+    rewrite Hb0. f_equal.
+    rewrite Hy Excl_included in Hle. exact (eq_sym Hle).
   Qed.
 
-  (** Two threads cannot both be the same reader: the token is exclusive, which
-      is what makes returning it in [ReadEnd] mean something. *)
-  Lemma rd_tok_excl γ t : rd_tok γ t -∗ rd_tok γ t -∗ False.
+  Lemma rd_st_excl γ t b b' : rd_st γ t b -∗ rd_st γ t b' -∗ False.
   Proof.
     iIntros "H1 H2".
     iDestruct (own_valid_2 with "H1 H2") as %Hv.
-    rewrite -auth_frag_op auth_frag_valid gset_disj_valid_op in Hv.
-    iPureIntro. set_solver.
+    rewrite -auth_frag_op auth_frag_valid singleton_op singleton_valid in Hv.
+    iPureIntro. exact (exclusive_l (Excl (b : leibnizO bool))
+                        (Excl (b' : leibnizO bool)) Hv).
   Qed.
 
-  Lemma rd_enter γ Rs t :
-    t ∉ Rs -> rd_auth γ Rs ==∗ rd_auth γ ({[t]} ∪ Rs) ∗ rd_tok γ t.
+  Lemma rd_st_update γ M t b b' :
+    rd_auth γ M -∗ rd_st γ t b ==∗ rd_auth γ (<[t := b']> M) ∗ rd_st γ t b'.
   Proof.
-    iIntros (Hni) "Ha". rewrite /rd_auth /rd_tok -own_op.
-    iApply (own_update with "Ha"). apply auth_update_alloc.
-    apply gset_disj_alloc_empty_local_update. set_solver.
-  Qed.
-
-  Lemma rd_exit γ Rs t :
-    rd_auth γ Rs -∗ rd_tok γ t ==∗ rd_auth γ (Rs ∖ {[t]}).
-  Proof.
-    iIntros "Ha Hf". rewrite /rd_auth /rd_tok.
-    iMod (own_update_2 with "Ha Hf") as "H".
-    { apply auth_update_dealloc, (gset_disj_dealloc_local_update Rs {[t]}). }
-    iModIntro. by iFrame "H".
+    iIntros "Ha Hf". rewrite /rd_auth /rd_st.
+    iMod (own_update_2 _ _ _ (● (Excl <$> (<[t := b']> M)
+                                 : gmap TID (excl (leibnizO bool)))
+                              ⋅ ◯ {[t := Excl (b' : leibnizO bool)]})
+           with "Ha Hf") as "[Ha Hf]".
+    { rewrite fmap_insert. apply auth_update.
+      apply singleton_local_update_any.
+      intros y _. by apply exclusive_local_update. }
+    iModIntro. iFrame.
   Qed.
 
 End readerghost.
 
-Print Assumptions rd_tok_mem.
-Print Assumptions rd_enter.
-Print Assumptions rd_exit.
+Print Assumptions rd_st_agree.
+Print Assumptions rd_st_update.
 
 (** References live in RCU fields.  This is what the mutation rules actually
     need, and it replaces the published proofs' assumption that *every* field is
@@ -309,7 +318,8 @@ Section invariantT.
       ∗ ⌜WFreshW (to_LState_t m Og U T F)⌝
       ∗ ⌜RefsRCU FType (hp m)⌝
       ∗ ⌜forall q t, obsv (to_LState_t m Og U T F) q (Ofresh t) -> q ∈ Fr⌝
-      ∗ ⌜WellFormed FType (to_LState_t m Og U T F)⌝.
+      ∗ ⌜WellFormed FType (to_LState_t m Og U T F)⌝
+      ∗ ⌜WUNLKW (to_LState_t m Og U T F)⌝.
 
   Definition rcu_invT (N : namespace) (γo γf γr : gname) : iProp Σ :=
     inv N (rcu_invT_inner γo γf γr).
@@ -555,6 +565,28 @@ Proof.
   - injection Heq as -> ->. rewrite lookup_insert_eq in Hl.
     injection Hl as <-. left. by split.
   - rewrite lookup_insert_ne // in Hl. right. by exists t', sg.
+Qed.
+
+(** Carrying WUNLKW across an observation insert.  Every rule that inserts is
+    the writer's, so the only way the inserted set may carry a detaching
+    observation is for it to be the lock holder's -- which is what the unlinking
+    rules supply and the others discharge vacuously. *)
+Lemma WUNLKW_ins m m' Og U T F o t s' lw :
+  WUNLKW (to_LState_t m Og U T F) ->
+  lk m' = lk m -> lk m = Some lw ->
+  (forall t0, Ounlk t0 ∈ s' \/ Ofree t0 ∈ s' -> t0 = lw) ->
+  WUNLKW (to_LState_t m' (<[(o, t) := s']> Og) U T F).
+Proof.
+  intros HW Hlk' Hlk Hs q t0 Hq. simpl. rewrite Hlk'.
+  destruct Hq as [Hq | Hq];
+    [ destruct (tobs_ins_new m Og U T F o t s' q (Ounlk t0) Hq)
+        as [[-> Hin] | Hy];
+      [ rewrite (Hs t0 (or_introl Hin)); exact Hlk
+      | exact (HW q t0 (or_introl Hy)) ]
+    | destruct (tobs_ins_new m Og U T F o t s' q (Ofree t0) Hq)
+        as [[-> Hin] | Hy];
+      [ rewrite (Hs t0 (or_intror Hin)); exact Hlk
+      | exact (HW q t0 (or_intror Hy)) ] ].
 Qed.
 
 Lemma tobs_ins_keep m Og U T F o t sold s' q ob :
@@ -2583,13 +2615,22 @@ Section physical.
   (** The readers, as the physical state's own component: a finite set with
       the authority over the tokens.  Every action that does not touch [R]
       carries it across unchanged, which is what [rdown_same] says. *)
+  (** The second clause is the resource-level form of ``a thread is in the
+      write protocol or in the read protocol, never both'': the lock holder has
+      no reader cell at all.  WNR says only that the writer is not an *active*
+      reader, which is not enough for ReadBegin -- at the moment a thread
+      enters, WNR is satisfied by its being outside, and says nothing about
+      whether it is the writer.  Holding a cell is what says it is not. *)
   Definition rdown (γd : gname) (m : MState) : iProp Σ :=
-    ∃ Rs, ⌜RepresentsR (rds m) Rs⌝ ∗ rd_auth γd Rs.
+    ∃ M, ⌜RepresentsR (rds m) M⌝
+         ∗ ⌜forall t, lk m = Some t -> M !! t = None⌝
+         ∗ rd_auth γd M.
 
-  Lemma rdown_same γd m m' : rds m' = rds m -> rdown γd m -∗ rdown γd m'.
+  Lemma rdown_same γd m m' :
+    rds m' = rds m -> lk m' = lk m -> rdown γd m -∗ rdown γd m'.
   Proof.
-    iIntros (He) "H". iDestruct "H" as (Rs) "[%HR Ha]".
-    iExists Rs. iFrame. iPureIntro. rewrite He. exact HR.
+    iIntros (He Hl) "H". iDestruct "H" as (M) "(%HR & %HL & Ha)".
+    iExists M. iFrame. iPureIntro. rewrite He Hl. by split.
   Qed.
 
   Definition phys (γm γh γl γs γd : gname) (root : Loc) (fs : list FName)
@@ -2625,7 +2666,7 @@ Section physical.
     iMod (phys_rest with "Hm") as "Hm".
     iDestruct "Hhp" as (H) "(%HR & %HS & Ha)".
     iDestruct "Hst" as (S) "[%HRS Hb]".
-    iDestruct (rdown_same _ m m' Hrd with "Hrn") as "Hrn".
+    iDestruct (rdown_same _ m m' Hrd Hl with "Hrn") as "Hrn".
     iModIntro. rewrite /phys Hl. iFrame "Hm Hlk Hrn".
     iSplitR; [iPureIntro; by rewrite Hr |].
     iSplitL "Ha".
@@ -2648,7 +2689,7 @@ Section physical.
     assert (Hcell : hp m o f = Some v) by (rewrite HR; exact Hag).
     iMod (phys_rest _ _ (write_ms m o f v') with "Hm") as "Hm".
     iMod (pt_update with "Ha Hpt") as "[Ha Hpt]".
-    iDestruct (rdown_same _ m (write_ms m o f v') eq_refl with "Hrn") as "Hrn".
+    iDestruct (rdown_same _ m (write_ms m o f v') eq_refl eq_refl with "Hrn") as "Hrn".
     iModIntro. iSplitL "Hm Hlk Ha Hst Hrn"; last first.
     { iFrame "Hpt". by iPureIntro. }
     rewrite /phys /=. iFrame "Hm Hlk Hst Hrn".
@@ -2687,7 +2728,7 @@ Section physical.
       by apply NoDup_fmap_2. }
     { intros p Hp. apply list_elem_of_fmap_1 in Hp.
       destruct Hp as [g [-> _]]. simpl. by rewrite -HR. }
-    iDestruct (rdown_same _ m (alloc_ms m n fs x t) eq_refl with "Hrn") as "Hrn".
+    iDestruct (rdown_same _ m (alloc_ms m n fs x t) eq_refl eq_refl with "Hrn") as "Hrn".
     iModIntro. rewrite /phys /=. iFrame "Hm Hlk Hsv Hl Hrn".
     iSplitR; [by iPureIntro |].
     iSplitL "Ha".
@@ -2709,7 +2750,7 @@ Section physical.
     iDestruct "Hhp" as (H) "(%HR & %HS & Ha)".
     iDestruct "Hst" as (S) "[%HRS Hb]".
     iMod (sv_update with "Hb Hsv") as "[Hb Hsv]".
-    iDestruct (rdown_same _ m (bind_ms m y t o) eq_refl with "Hrn") as "Hrn".
+    iDestruct (rdown_same _ m (bind_ms m y t o) eq_refl eq_refl with "Hrn") as "Hrn".
     iModIntro. rewrite /phys /=. iFrame "Hm Hlk Hsv Hrn".
     iSplitR; [by iPureIntro |].
     iSplitL "Ha".
@@ -2738,7 +2779,7 @@ Section physical.
       rewrite HR Hw' in Hlk. by injection Hlk as <-. }
     iMod (phys_rest _ _ (free_ms m d) with "Hm") as "Hm".
     iMod (pt_delete_list with "Hpts Ha") as "Ha".
-    iDestruct (rdown_same _ m (free_ms m d) eq_refl with "Hrn") as "Hrn".
+    iDestruct (rdown_same _ m (free_ms m d) eq_refl eq_refl with "Hrn") as "Hrn".
     iModIntro. rewrite /phys /=. iFrame "Hm Hlk Hst Hrn".
     iSplitR; [by iPureIntro |].
     iSplitL "Ha".
@@ -2755,49 +2796,68 @@ Section physical.
       and before the token existed none of them could be stated: [phys] said
       nothing about either set, so any step could have set them to anything. *)
 
-  (** ReadBegin mints the token.  The premise is that the thread is not already
-      a reader, which its not holding a token is exactly what supplies. *)
+  (** ReadBegin flips the thread's cell.  Its premise -- that the thread is not
+      already a reader -- is now read off the cell it holds, which is the thing
+      a membership token could not supply. *)
   Lemma phys_read_begin γm γh γl γs γd root fs m t :
-    ~ rds m t ->
-    phys γm γh γl γs γd root fs m
-    ==∗ phys γm γh γl γs γd root fs (read_begin_ms m t) ∗ rd_tok γd t.
+    phys γm γh γl γs γd root fs m -∗ rd_st γd t false
+    ==∗ phys γm γh γl γs γd root fs (read_begin_ms m t) ∗ rd_st γd t true
+        ∗ ⌜~ rds m t⌝ ∗ ⌜forall lw, lk m = Some lw -> lw <> t⌝.
   Proof.
-    iIntros (Hnr) "(Hm & Hlk & %Hrt & Hhp & Hst & Hrn & %Hbr)".
-    iDestruct "Hrn" as (Rs) "[%HRR Hra]".
-    assert (Hni : t ∉ Rs) by (intros Hin; exact (Hnr (proj2 (HRR t) Hin))).
-    iMod (rd_enter _ _ _ Hni with "Hra") as "[Hra Htok]".
+    iIntros "(Hm & Hlk & %Hrt & Hhp & Hst & Hrn & %Hbr) Hcell".
+    iDestruct "Hrn" as (M) "(%HRR & %HLK & Hra)".
+    iDestruct (rd_st_agree with "Hra Hcell") as %Hlkc.
+    assert (Hnr : ~ rds m t).
+    { intros Hrd. rewrite (proj1 (HRR t) Hrd) in Hlkc. by injection Hlkc. }
+    iMod (rd_st_update _ _ _ _ true with "Hra Hcell") as "[Hra Hcell]".
     iMod (phys_rest _ _ (read_begin_ms m t) with "Hm") as "Hm".
-    iModIntro. rewrite /phys /=. iFrame "Hm Hlk Hhp Hst Htok".
+    iModIntro. rewrite /phys /=.
+    iSplitR "Hcell"; last first.
+    { iFrame "Hcell". iPureIntro. split; [exact Hnr |].
+      intros lw Hlw ->. by rewrite (HLK t Hlw) in Hlkc. }
+    iFrame "Hm Hlk Hhp Hst".
     iSplitR; [by iPureIntro |].
     iSplitL "Hra".
-    { iExists ({[t]} ∪ Rs). iFrame. iPureIntro. intros t'.
-      split.
-      - intros [Hrd | ->]; [| set_solver].
-        apply elem_of_union_r. exact (proj1 (HRR t') Hrd).
-      - intros Hin. apply elem_of_union in Hin as [Hin | Hin];
-          [right; set_solver | left; exact (proj2 (HRR t') Hin)]. }
+    { iExists (<[t := true]> M). iFrame. iPureIntro. split.
+      - intros t'. destruct (decide (t' = t)) as [-> | Hne].
+        + rewrite lookup_insert_eq. split; [done | by right].
+        + rewrite lookup_insert_ne; [| exact (fun Hc => Hne (eq_sym Hc))].
+          split; [intros [Hrd | Hc]; [exact (proj1 (HRR t') Hrd) | done]
+                 | intros Hin; left; exact (proj2 (HRR t') Hin)].
+      - intros t0 Hlk0. rewrite lookup_insert_ne;
+          [exact (HLK t0 Hlk0) | intros ->; by rewrite (HLK t0 Hlk0) in Hlkc]. }
     iPureIntro. intros t' Hb. left. exact (Hbr t' Hb).
   Qed.
 
-  (** ReadEnd returns it, and the token is what licenses the step: a thread
-      cannot take another thread out of [R]. *)
+  (** ReadEnd flips it back, and the cell is what licenses the step: a thread
+      cannot take another thread out of [R].  It also hands back the fact that
+      the thread *was* a reader, which is what RITR is applied to. *)
   Lemma phys_read_end γm γh γl γs γd root fs m t :
-    phys γm γh γl γs γd root fs m -∗ rd_tok γd t
-    ==∗ phys γm γh γl γs γd root fs (read_end_ms m t).
+    phys γm γh γl γs γd root fs m -∗ rd_st γd t true
+    ==∗ phys γm γh γl γs γd root fs (read_end_ms m t) ∗ rd_st γd t false
+        ∗ ⌜rds m t⌝.
   Proof.
-    iIntros "(Hm & Hlk & %Hrt & Hhp & Hst & Hrn & %Hbr) Htok".
-    iDestruct "Hrn" as (Rs) "[%HRR Hra]".
-    iMod (rd_exit with "Hra Htok") as "Hra".
+    iIntros "(Hm & Hlk & %Hrt & Hhp & Hst & Hrn & %Hbr) Hcell".
+    iDestruct "Hrn" as (M) "(%HRR & %HLK & Hra)".
+    iDestruct (rd_st_agree with "Hra Hcell") as %Hlkc.
+    assert (Hr : rds m t) by exact (proj2 (HRR t) Hlkc).
+    iMod (rd_st_update _ _ _ _ false with "Hra Hcell") as "[Hra Hcell]".
     iMod (phys_rest _ _ (read_end_ms m t) with "Hm") as "Hm".
-    iModIntro. rewrite /phys /=. iFrame "Hm Hlk Hhp Hst".
+    iModIntro. rewrite /phys /=.
+    iSplitR "Hcell"; last first.
+    { iFrame "Hcell". iPureIntro. exact Hr. }
+    iFrame "Hm Hlk Hhp Hst".
     iSplitR; [by iPureIntro |].
     iSplitL "Hra".
-    { iExists (Rs ∖ {[t]}). iFrame. iPureIntro. intros t'.
-      split.
-      - intros [Hrd Hne]. apply elem_of_difference.
-        split; [exact (proj1 (HRR t') Hrd) | set_solver].
-      - intros Hin. apply elem_of_difference in Hin as [Hin Hni].
-        split; [exact (proj2 (HRR t') Hin) | set_solver]. }
+    { iExists (<[t := false]> M). iFrame. iPureIntro. split.
+      - intros t'. destruct (decide (t' = t)) as [-> | Hne].
+        + rewrite lookup_insert_eq.
+          split; [by intros [_ Hc] | discriminate].
+        + rewrite lookup_insert_ne; [| exact (fun Hc => Hne (eq_sym Hc))].
+          split; [intros [Hrd _]; exact (proj1 (HRR t') Hrd)
+                 | intros Hin; split; [exact (proj2 (HRR t') Hin) | exact Hne]].
+      - intros t0 Hlk0. rewrite lookup_insert_ne;
+          [exact (HLK t0 Hlk0) | intros ->; by rewrite (HLK t0 Hlk0) in Hlkc]. }
     iPureIntro. intros t' [Hb Hne]. split; [exact (Hbr t' Hb) | exact Hne].
   Qed.
 
@@ -2896,7 +2956,7 @@ Section atomic.
   Proof.
     iIntros (HN Hd Hfs) "#Hinv Hobs Hfl Hpts".
     iInv "Hinv" as (m Og U T F Fr)
-      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf)" "Hclose".
+      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf & %HWUW)" "Hclose".
     iDestruct (tobs_ctl_agree with "Ho Hobs") as %Hlk.
     assert (Hfree : obsv (to_LState_t m Og U T F) d (Ofree t)).
     { exists t, {[Ofree t]}. split; [exact Hlk | by apply elem_of_singleton]. }
@@ -2905,14 +2965,60 @@ Section atomic.
     { iIntros "Hp". by iMod (phys_free_step with "Hpts Hp") as "$". }
     iMod ("Hclose" with "[Hp Ho Hf Hfr]") as "_".
     { iNext. iExists (free_ms m d), Og, U, T, (delete d F), Fr. iFrame.
-      iPureIntro. split; [exact HWF | split; [| split; [| split; [| split]]]].
+      iPureIntro. split; [exact HWF | split; [| split; [| split; [| split; [| split]]]]].
       - by apply FLD_free.
       - intros o0 t0 Hf0. exact (HWFW o0 t0 Hf0).
       - apply RefsRCU_free. exact HRefs.
       - intros q t0 Hq. exact (HFrc q t0 Hq).
-      - exact Hwf'. }
+      - exact Hwf'.
+      - exact HWUW. }
     by iModIntro.
   Qed.
+
+  (** ** T-ReadBegin, and the first closed triple on the read side
+
+      A thread holding its own reader cell, outside a critical section, enters
+      one.  Nothing else is required of it: the two premises the action lemma
+      carries as hypotheses -- that the thread is not the writer, and that it
+      holds no detaching observation -- are both discharged here rather than
+      assumed.  The first comes from the cell (the lock holder has none), the
+      second from WFreshW and WUNLKW together with the first.  That is what the
+      unguarded form of WUNLK buys, and it is the reason for adding it. *)
+  Lemma read_begin_atomic N γm γh γl γs γd γo γf γr E t :
+    ↑N ⊆ E ->
+    rcu_invT FType (phys γm γh γl γs γd root fs) N γo γf γr -∗
+    rd_st γd t false
+    ={E}=∗ rd_st γd t true.
+  Proof.
+    iIntros (HN) "#Hinv Hcell".
+    iInv "Hinv" as (m Og U T F Fr)
+      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf
+         & %HWUW)" "Hclose".
+    iMod (phys_read_begin with "Hp Hcell") as "(Hp & Hcell & %Hnr & %Hnw)".
+    assert (Hclean : forall o,
+              ~ obsv (to_LState_t m Og U T F) o (Ounlk t)
+              /\ ~ obsv (to_LState_t m Og U T F) o (Ofree t)
+              /\ ~ obsv (to_LState_t m Og U T F) o (Ofresh t)).
+    { intros o. repeat apply conj; intros Hbad;
+        [ pose proof (HWUW o t (or_introl Hbad)) as Hlk
+        | pose proof (HWUW o t (or_intror Hbad)) as Hlk
+        | pose proof (HWFW o t Hbad) as Hlk ];
+        exact (Hnw t Hlk eq_refl). }
+    iMod ("Hclose" with "[Hp Ho Hf Hfr]") as "_".
+    { iNext. iExists (read_begin_ms m t), Og, U, T, F, Fr. iFrame.
+      iPureIntro.
+      split; [exact HWF | split; [| split; [| split; [| split; [| split]]]]].
+      - exact HFLD.
+      - exact HWFW.
+      - exact HRefs.
+      - exact HFrc.
+      - exact (read_begin_preserves_WellFormed FType m Og U T F t
+                 Hnw Hclean Hwf).
+      - exact HWUW. }
+    by iModIntro.
+  Qed.
+
+  Print Assumptions read_begin_atomic.
 
   (** ** T-WriteFH: a field of a fresh node.  A mutation, with the heap premise
       carried by the cell being written and the unreachability of the fresh
@@ -2941,7 +3047,7 @@ Section atomic.
     iIntros (HN Hfrcu Hnr Hyr Hin Hiy Hcy)
             "#Hinv Hlk Hon Hoy Hsv Hcells Hptn".
     iInv "Hinv" as (m Og U T F Fr)
-      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf)" "Hclose".
+      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf & %HWUW)" "Hclose".
     (* the premises, one resource at a time *)
     iDestruct (tobs_ctl_agree with "Ho Hon") as %Hlon.
     iDestruct (tobs_ctl_agree with "Ho Hoy") as %Hloy.
@@ -2984,12 +3090,13 @@ Section atomic.
                   Hlkm Hfr Hit Hunr Hheap Hfl Hne Hwf).
     iMod ("Hclose" with "[Hp Ho Hf Hfr]") as "_".
     { iNext. iExists (write_ms m on f (VLoc oy)), Og, U, T, F, Fr. iFrame.
-      iPureIntro. split; [exact HWF | split; [| split; [| split; [| split]]]].
+      iPureIntro. split; [exact HWF | split; [| split; [| split; [| split; [| split]]]]].
       - by apply (FLD_same m).
       - intros o0 t0 Hf0. exact (HWFW o0 t0 Hf0).
       - apply RefsRCU_upd; [exact HRefs | exact Hfrcu].
       - intros q t0 Hq. exact (HFrc q t0 Hq).
-      - exact Hwf'. }
+      - exact Hwf'.
+      - exact HWUW. }
     iModIntro. iFrame.
   Qed.
 
@@ -3028,7 +3135,7 @@ Section atomic_link.
     iIntros (HN Hfrcu Hnr Hf0 Hip HpathC Hnull)
             "#Hinv Hlk Hop Hon Hsv Hcells Hptf".
     iInv "Hinv" as (m Og U T F Fr)
-      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf)" "Hclose".
+      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf & %HWUW)" "Hclose".
     iDestruct (tobs_ctl_agree with "Ho Hop") as %Hlop.
     iDestruct (tobs_ctl_agree with "Ho Hon") as %Hlon.
     assert (Hitr : obsv (to_LState_t m Og U T F) op (Oiter lw))
@@ -3099,7 +3206,7 @@ Section atomic_link.
     { iNext.
       iExists (write_ms m op f (VLoc on)),
               (<[(on, lw) := {[Oiter lw]}]> Og), U, T, F, Fr.
-      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split]]]].
+      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split; [| split]]]]].
       - intros o Tr Hfl'. destruct (HFLD o Tr Hfl') as [t0 Hdet].
         exists t0. destruct Hdet as [Hd | Hd];
           [left | right];
@@ -3119,7 +3226,11 @@ Section atomic_link.
           as [[-> Hin'] | Hy].
         + apply elem_of_singleton in Hin'. discriminate.
         + exact (HFrc q t0 Hy).
-      - exact Hwf'. }
+      - exact Hwf'.
+      - apply (WUNLKW_ins m _ _ _ _ _ _ _ _ lw);
+          [ exact HWUW | reflexivity | exact Hlkm
+          | intros t0 [Hz | Hz]; apply elem_of_singleton in Hz;
+            discriminate ]. }
     iModIntro. iFrame.
   Qed.
 
@@ -3152,7 +3263,7 @@ Section atomic_link.
     iIntros (HN Hnr Hf4 Hip HpathC Hcell0)
             "#Hinv Hlk Hop Hon Hsv Hcells Hptf".
     iInv "Hinv" as (m Og U T F Fr)
-      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf)" "Hclose".
+      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf & %HWUW)" "Hclose".
     iDestruct (tobs_ctl_agree with "Ho Hop") as %Hlop.
     iDestruct (tobs_ctl_agree with "Ho Hon") as %Hlon.
     assert (Hitr : obsv (to_LState_t m Og U T F) op (Oiter lw))
@@ -3225,7 +3336,7 @@ Section atomic_link.
     { iNext.
       iExists (write_ms m op f (VLoc on)),
               (<[(on, lw) := {[Oiter lw]}]> Og), U, T, F, Fr.
-      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split]]]].
+      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split; [| split]]]]].
       - intros o Tr Hfl'. destruct (HFLD o Tr Hfl') as [t0 Hdet].
         exists t0. destruct Hdet as [Hd | Hd];
           [left | right];
@@ -3245,7 +3356,11 @@ Section atomic_link.
           as [[-> Hin'] | Hy].
         + apply elem_of_singleton in Hin'. discriminate.
         + exact (HFrc q t0 Hy).
-      - exact Hwf'. }
+      - exact Hwf'.
+      - apply (WUNLKW_ins m _ _ _ _ _ _ _ _ lw);
+          [ exact HWUW | reflexivity | exact Hlkm
+          | intros t0 [Hz | Hz]; apply elem_of_singleton in Hz;
+            discriminate ]. }
     iModIntro. iFrame.
   Qed.
 
@@ -3389,7 +3504,7 @@ Section atomic_unlink.
     iIntros (HN Hix Hiw HFrC HpathC Hcell2 Hnf)
             "#Hinv Hlk Hox Hoz How Hcells Hpt1 Hfrg".
     iInv "Hinv" as (m Og U T F Fr0)
-      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf)" "Hclose".
+      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf & %HWUW)" "Hclose".
     iDestruct (fr_agree with "Hfr Hfrg") as %->.
     iDestruct (tobs_ctl_agree with "Ho Hox") as %Hlox.
     iDestruct (tobs_ctl_agree with "Ho Hoz") as %Hloz.
@@ -3447,7 +3562,7 @@ Section atomic_unlink.
     { iNext.
       iExists (write_ms m ox f1 (VLoc ow)),
               (<[(oz, lw) := {[Ounlk lw]}]> Og), U, T, F, Fr.
-      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split]]]].
+      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split; [| split]]]]].
       - intros o Tr Hfl'. destruct (HFLD o Tr Hfl') as [t0 Hdet].
         exists t0. destruct Hdet as [Hd | Hd];
           [left | right];
@@ -3467,7 +3582,11 @@ Section atomic_unlink.
           as [[-> Hin'] | Hy].
         + apply elem_of_singleton in Hin'. discriminate.
         + exact (HFrc q t0 Hy).
-      - exact Hwf'. }
+      - exact Hwf'.
+      - apply (WUNLKW_ins m _ _ _ _ _ _ _ _ lw);
+          [ exact HWUW | reflexivity | exact Hlkm
+          | intros t0 [Hz | Hz]; apply elem_of_singleton in Hz;
+            [ by injection Hz | discriminate ] ]. }
     iModIntro. iFrame.
   Qed.
 
@@ -3510,7 +3629,7 @@ Section atomic_unlink.
     iIntros (HN Hno Hnr Hf0 Hip HFrC HpathC Hcn0 Hco0 Hnf)
             "#Hinv Hlk Hop Hon Hoo Hsv Hcells Hptf Hfrg".
     iInv "Hinv" as (m Og U T F Fr0)
-      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf)" "Hclose".
+      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf & %HWUW)" "Hclose".
     iDestruct (fr_agree with "Hfr Hfrg") as %->.
     iDestruct (tobs_ctl_agree with "Ho Hop") as %Hlop.
     iDestruct (tobs_ctl_agree with "Ho Hon") as %Hlon.
@@ -3608,7 +3727,7 @@ Section atomic_unlink.
       iExists (write_ms m op f (VLoc on)),
               (<[(on, lw) := {[Oiter lw]}]> (<[(oo, lw) := {[Ounlk lw]}]> Og)),
               U, T, F, Fr.
-      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split]]]].
+      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split; [| split]]]]].
       - intros o Tr Hfl'. destruct (HFLD o Tr Hfl') as [t0 Hdet].
         exists t0. destruct Hdet as [Hd | Hd];
           [left | right];
@@ -3646,7 +3765,15 @@ Section atomic_unlink.
             injection Hl as <-. apply elem_of_singleton in Hin'. discriminate.
           * rewrite lookup_insert_ne in Hl; [| done].
             apply (HFrc q t0). by exists t', sg.
-      - exact Hwf'. }
+      - exact Hwf'.
+      - apply (WUNLKW_ins m _ _ _ _ _ _ _ _ lw);
+          [ apply (WUNLKW_ins m m _ _ _ _ _ _ _ lw);
+            [ exact HWUW | reflexivity | exact Hlkm
+            | intros t0 [Hz | Hz]; apply elem_of_singleton in Hz;
+              [ by injection Hz | discriminate ] ]
+          | reflexivity | exact Hlkm
+          | intros t0 [Hz | Hz]; apply elem_of_singleton in Hz;
+            discriminate ]. }
     iModIntro. iFrame.
   Qed.
 
@@ -4872,7 +4999,7 @@ Section atomic_alloc.
     iIntros (HN Hnd Hrcu HFrC Hstkx HNx Hok) "#Hinv Hw Hfrg".
     iDestruct "Hw" as "(Hlk & Hsm & Hob & Hcells & Hflo)".
     iInv "Hinv" as (m Og U0 T F Fr0)
-      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf)" "Hclose".
+      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf & %HWUW)" "Hclose".
     iDestruct (fr_agree with "Hfr Hfrg") as %->.
     iDestruct "Hp" as "(Hm & Hlka & %Hrt & Hhp & Hst & Hrn & %Hbr)".
     iDestruct (lk_agree with "Hlka Hlk") as %Hlkm.
@@ -4939,7 +5066,7 @@ Section atomic_alloc.
     { iNext.
       iExists (alloc_ms m n fs x lw), (<[(n, lw) := {[Ofresh lw]}]> Og),
               U', T, F, (Fr ∪ {[n]}).
-      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split]]]].
+      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split; [| split]]]]].
       - intros o Tr Hfl'. destruct (HFLD o Tr Hfl') as [t0 Hdet].
         exists t0. destruct Hdet as [Hd | Hd];
           [left | right];
@@ -4959,7 +5086,11 @@ Section atomic_alloc.
           as [[-> Hin'] | Hy].
         + set_solver.
         + assert (Hq' : q ∈ Fr) by exact (HFrc q t0 Hy). set_solver.
-      - exact Hwf'. }
+      - exact Hwf'.
+      - apply (WUNLKW_ins m _ _ _ _ _ _ _ _ lw);
+          [ exact HWUW | reflexivity | exact Hlkm
+          | intros t0 [Hz | Hz]; apply elem_of_singleton in Hz;
+            discriminate ]. }
     (* the three freshness facts the environment's survival needs, read off the
        thread's own maps because they are submaps of the invariant's *)
     assert (HSn : forall k o, Sm !! k = Some o -> o <> n).
@@ -5046,7 +5177,7 @@ Section atomic_bind.
   Proof.
     iIntros (HN Hip) "#Hinv Hlk Hctl Hsv".
     iInv "Hinv" as (m Og U0 T F Fr)
-      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf)" "Hclose".
+      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf & %HWUW)" "Hclose".
     iDestruct (tobs_ctl_agree with "Ho Hctl") as %Hlook.
     assert (Hitr : obsv (to_LState_t m Og U0 T F) o (Oiter lw))
       by (by exists lw, sold).
@@ -5082,7 +5213,7 @@ Section atomic_bind.
     { iNext.
       iExists (bind_ms m y lw o),
               (<[(o, lw) := sold ∪ {[Oiter lw]}]> Og), U', T, F, Fr.
-      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split]]]].
+      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split; [| split]]]]].
       - intros q Tr Hfl'. destruct (HFLD q Tr Hfl') as [t0 Hdt].
         exists t0. destruct Hdt as [Hd | Hd]; [left | right];
           (destruct Hd as [t' [sg [Hl Hin']]];
@@ -5104,7 +5235,17 @@ Section atomic_bind.
         apply elem_of_union in Hin' as [Hin' | Hin'].
         + apply (HFrc o t0). by exists lw, sold.
         + apply elem_of_singleton in Hin'. discriminate.
-      - exact Hwf'. }
+      - exact Hwf'.
+      - apply (WUNLKW_ins m _ _ _ _ _ _ _ _ lw);
+          [ exact HWUW | reflexivity | exact Hlkm |].
+        intros t0 Hz.
+        assert (Hz' : lk m = Some t0).
+        { destruct Hz as [Hz | Hz]; apply elem_of_union in Hz as [Hz | Hz];
+            [ apply (HWUW o t0); left; by exists lw, sold
+            | apply elem_of_singleton in Hz; discriminate
+            | apply (HWUW o t0); right; by exists lw, sold
+            | apply elem_of_singleton in Hz; discriminate ]. }
+        rewrite Hlkm in Hz'. by injection Hz'. }
     iModIntro. iFrame.
   Qed.
 
