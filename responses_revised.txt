@@ -17,7 +17,7 @@ we mention this because a Rocq file that compiles proves considerably less than
 it looks.  This turned up more than we expected, and we think it materially
 strengthens the paper.
 
-Ten of the WellFormed invariants as published are defective:
+Ten of the WellFormed invariants are wrong or missing:
 
 - Unique-Reachable is vacuous as written, and admits heaps that are not trees.
 - Readers-Iterators-Only is contradictory in any state containing both a reader
@@ -132,7 +132,7 @@ thread that does not hold the lock.  Only the second repair is needed by any
 proof we give, so only it is carried; the first we report, because a reader of
 Unique-Reachable-Tree will assume it.
 
-A defect in the type rules rather than in an invariant. Neither
+There is also a defect in the type rules rather than in an invariant.  Neither
 T-Replace nor T-UnlinkH prevents a rcuFresh reference in the environment from
 holding a field that points at the node the rule unlinks; the aliasing premises
 quantify only over rcuItr references, and the denotation of a type environment
@@ -174,6 +174,12 @@ detached.  That the same defect appears twice, one invariant apart, and that we
 repaired the first without noticing the second, is the part worth reporting: the
 guard is what makes each of them provable locally, and it is also what makes
 them useless to every rule on the read side.
+
+With both invariants in place, ReadBegin is a closed triple -- the first on the read side.
+Its two premises, that the entering thread is not the writer and that it holds
+no detaching observation, were hypotheses of the action lemma; they are now
+proved, the first from the thread's own reader cell and the second from the two
+unguarded invariants.
 
 ReadEnd is the next rule and the one that does not close, for a reason worth
 reporting rather than deferring.  It is the one step in the system that writes
@@ -233,12 +239,6 @@ distinguishes a reader's new critical section from its old one, and without it
 the model cannot tell them apart.  The cost is a change to the state model,
 where the ticket costs only a camera; we report both and would take the
 counters.
-
-With both invariants in place, ReadBegin is a closed triple -- the first on the read side.
-Its two premises, that the entering thread is not the writer and that it holds
-no detaching observation, were hypotheses of the action lemma; they are now
-proved, the first from the thread's own reader cell and the second from the two
-unguarded invariants.
 
 That is eighteen in all: fourteen invariants, two rule defects, and two defects in
 the model.  Fourteen of the eighteen were found by attempting the proofs rather than by
@@ -351,7 +351,14 @@ lemma applied once, plus a ghost update.  Ten of those updates are at a single
 key; the other five are map-wide, and what they need turned out to be neither a
 new camera nor a new frame-preserving update but the observation that a
 map-wide change is an iterated single-key one, legal exactly when the thread
-owns every fragment it touches.  Two small induction lemmas supply it.  The one
+owns every fragment it touches -- or the key being free, which is the other way
+to earn the right to write there.  Two small induction lemmas supply it, four
+lines each.  What they do *not* ask is worth noticing: that the intermediate
+maps satisfy WellFormed.  The fold happens inside one opening of the invariant,
+so the half-finished states never appear in it and only the endpoint must be
+well formed.  That is what lets SyncStop recolour every observation in a single
+step.
+
 We then chose the physical-state predicate, which is what turns these steps
 into Hoare triples, and that is where the state model gave way.  The standard
 choice is a heap of points-to assertions, so that a thread's right to write a
@@ -632,25 +639,23 @@ free list at a node the thread no longer references, which is state it does not
 own -- that conjunct belongs in an invariant rather than in a type, and we
 report it rather than move it.
 
-What is left is the read side and the protocol, and the two obstacles are
-particular rather than general.  The reader's read cannot be stated at all,
-because the points-to assertion is exclusive: a reader must read cells the
-writer also holds.  The repair is a fractional heap, which is standard and which
-changes the camera under everything above; it is worth saying plainly that the
-write side needed no fractions and the read side cannot be done without them,
-which is after all what read-copy-update is about.  And WriteBegin asks that the
-lock is free while SyncStop asks that no thread is still bounding -- the two
-points where the protocol *tests* or *waits on* shared state rather than acting
-on state it owns.  Those are what an operational semantics is for, a
-compare-and-set and a wait loop, and they are the only two places in the system
-that need one.  The remaining four control actions need reader-set and
-bounding-set tokens, which is the lock's construction done twice more.
+What is left is narrower than it was, and the remaining obstacles are particular
+rather than general.  The reader's read cannot be stated at all, because the
+points-to assertion is exclusive: a reader must read cells the writer also
+holds.  The repair is a fractional heap, which is standard and which changes the
+camera under everything above; it is worth saying plainly that the write side
+needed no fractions and the read side cannot be done without them, which is
+after all what read-copy-update is about.  And WriteBegin asks that the lock is
+free while SyncStop asks that no thread is still bounding -- the two points
+where the protocol *tests* or *waits on* shared state rather than acting on
+state it owns.  Those are what an operational semantics is for, a compare-and-set
+and a wait loop, and they are the only two places in the system that need one.
 
-One last thing the field-list repair exposed, which we record rather than fix.
-The mutation rules are stated with "every field is an RCU field", which with a
-finite field list contradicts the class declaration the allocation rule needs,
-so the two cannot appear in one lemma.  The honest repair is to restrict
-No-Sharing's field conditions to declared fields.
+The tokens the control actions need are built, as described above, and
+ReadBegin closes.  What ReadEnd still needs is the change of representation the
+counters describe -- the free list ceasing to be the writer's resource -- which
+is a camera change under SyncStart, Free and one invariant.  We have proved the
+design sound rather than carried it out, and we say which of the two that is.
 
 One last thing worth saying about the infinite-heap defect, because it cuts the
 other way.  The checker never had it.  Fields there are a bitset over a declared
@@ -797,7 +802,7 @@ property for the free list. Together those two are what keep a newly arrived
 reader away from a node scheduled for reclamation.
 
 We have also mechanized the Free case of heap-domain closure, and now the whole
-of Free: all eighteen invariants, for the action as a step. Free is the only
+of Free: all nineteen invariants, for the action as a step. Free is the only
 action that removes a location, so it is the only place where the obligation --
 that no surviving edge points at the freed node -- is real; we give a
 counterexample showing it cannot be dispensed with, and the corrected
@@ -819,9 +824,10 @@ And the rest of the protocol is machine-checked as whole actions.  SyncStop is
 where the empty bounding set is spent: Readers-In-Free-List says every thread in
 an entry bounds a reclamation, and afterwards there are none, so every entry is
 empty -- which is exactly the conjunct the *freeable* denotation asks for,
-obtained rather than assumed.  ReadEnd is discussed above.  Of the four steps in
-the reclamation chain three are now complete; SyncStart has its
-Free-List-Reachability case and not yet the rest.
+obtained rather than assumed.  ReadEnd is discussed above.  All four
+steps of the reclamation chain -- ReadBegin, ReadEnd, SyncStart and SyncStop --
+are now complete as actions, each preserving all nineteen invariants; what is
+not complete is the resource reading of ReadEnd, for the reason given there.
 
 We will expand Section 6 along these lines.
 
