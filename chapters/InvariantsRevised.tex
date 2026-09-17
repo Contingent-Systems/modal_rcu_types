@@ -94,7 +94,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 212 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 223 say \emph{closed under the
 global context}, and none reports an axiom.
 
 \paragraph{1.\ OW --- No Sharing.\hfill\textsc{minor}}
@@ -1872,14 +1872,44 @@ it worth having tried is where the failure appears --- not at \textsc{ReadEnd},
 which the change was about, but at \textsc{ReadBegin}, which the change did not
 touch.
 
-So the repair is the one the development already recorded: a snapshot's value
-should be a disjoint union of tickets, one per bounding thread, so that a reader
-owns its own membership and spends it.  That makes \textsc{ReadEnd}'s write
-thread-local, and re-entry cannot restore a spent ticket.  The alternative that
-also works is to index snapshots by read-side critical section rather than by
-thread --- which is what an implementation's grace-period counter does, and
-under which the intersected reading \emph{is} sound, a section identity never
-being reused.  It costs a change to the state model, which the ticket does not.
+The repair the development already recorded is to make a snapshot's value a
+disjoint union of tickets, one per bounding thread, so that a reader owns its
+own membership and spends it.  That works, and re-entry cannot restore a spent
+ticket.  But there is a better one, and \texttt{rocq/Epochs.v} works it out:
+stop naming threads in snapshots at all.
+
+Let a registration carry \emph{when} the reader registered, and a snapshot carry
+\emph{when} the node was unlinked.  A snapshot's members are then the readers
+that registered no later than its grace period began --- derived, not stored.
+This is what an implementation's grace-period counter does, and what the
+comparison with Tassarotti's QSBR verification describes;
+the question is what it is worth as a model.
+
+Three things, and each is a theorem.  \textsc{ReadEnd} becomes a write to the
+departing thread's own registration and nothing else
+(\texttt{e\_end\_writes\_only\_its\_own}), and that single write produces all
+three updates the published rule performs as separate ones --- the thread leaves
+$R$, leaves $B$, and leaves every snapshot
+(\texttt{e\_end\_simulates}).  Entering joins nothing
+(\texttt{e\_begin\_joins\_nothing}): a reader registers at the current epoch and
+every running grace period was stamped earlier, so it is in no snapshot, which
+is the property the published model has to arrange by removing threads as they
+leave.  And the bookkeeping still satisfies the invariants the snapshot model is
+stated over --- \textbf{RINFL} is \texttt{e\_RINFL}, and \textbf{BR}, which the
+published set is missing entirely (\S\ref{sec:defect-br}), is immediate --- so
+this is a refinement rather than a different system.
+
+The re-entrancy failure is repaired, and the counters say exactly where the
+repair lives: \texttt{reentry\_safe} turns on the epoch being incremented when
+the grace period starts.  \texttt{increment\_is\_what\_makes\_reentry\_safe} is
+the contrast --- the same three steps against a \textsc{SyncStart} that stamps
+without incrementing, where the returning reader rejoins.  So the increment in
+an implementation's counter is not an implementation detail: it is the thing
+that distinguishes a reader's new critical section from its old one, and without
+it the model has no way to tell them apart.
+
+What it costs is a change to the state model, where the ticket costs only a
+camera.  We report both and would take the epochs.
 
 
 

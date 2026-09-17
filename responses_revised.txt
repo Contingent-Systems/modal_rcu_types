@@ -9,8 +9,8 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
-18,200 lines and 968 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 212
+18,500 lines and 985 lemmas and theorems, axiom-free).  The build refuses to
+succeed if the development contains an admitted proof, or if any of its 223
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -186,9 +186,34 @@ it is unsound, because of re-entrancy -- a thread that leaves and enters a new
 read section is a reader again, and rejoins every snapshot it was ever in,
 including grace periods that began after it left.  We give the witness.  What
 makes it worth having tried is where the failure shows up: not at ReadEnd, which
-the change was about, but at ReadBegin, which it did not touch.  The repair is
+the change was about, but at ReadBegin, which it did not touch.  One repair is
 to make a snapshot a disjoint union of per-thread tickets, so a reader owns its
 own membership and spends it; re-entry cannot restore a spent ticket.
+
+We think there is a better one, and we have worked it out.  Stop naming threads
+in snapshots.  Let a registration record *when* the reader registered and a
+snapshot record *when* the node was unlinked, so that a snapshot's members are
+derived -- the readers that registered no later than its grace period began --
+rather than stored.  This is what an implementation's grace-period counter does,
+which is the mechanism we already describe when comparing with Tassarotti's QSBR
+verification; the question was what it is worth as a model, and it is worth
+three things.  ReadEnd becomes a write to the departing thread's own
+registration and nothing else, and that single write produces all three updates
+the published rule performs separately: the thread leaves the readers, leaves
+the bounding threads, and leaves every snapshot.  Entering joins nothing, which
+is the property the published model has to arrange by removing threads as they
+leave.  And the bookkeeping still satisfies the invariants the snapshot model is
+stated over, so it is a refinement rather than a different system.
+
+The counters also say exactly where the re-entrancy repair lives: it turns on
+the epoch being incremented when the grace period starts, and we give the
+contrast -- the same three steps against a SyncStart that stamps without
+incrementing, where the returning reader rejoins.  So the increment in an
+implementation's counter is not an implementation detail.  It is what
+distinguishes a reader's new critical section from its old one, and without it
+the model cannot tell them apart.  The cost is a change to the state model,
+where the ticket costs only a camera; we report both and would take the
+counters.
 
 With both invariants in place, ReadBegin is a closed triple -- the first on the read side.
 Its two premises, that the entering thread is not the writer and that it holds
