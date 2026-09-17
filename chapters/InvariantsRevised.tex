@@ -89,9 +89,13 @@ means a typo, an unused binder, or a caption that contradicts its formula.
 
 All nineteen are mechanized in \texttt{rocq/WellFormed.v}, which also carries
 machine-checked proofs of the \textsc{critical} claims and a satisfiability
-witness (\S\ref{sec:inv-impact}).  That development is axiom-free; both
-\texttt{Print Assumptions} queries report \emph{closed under the global
-context}.
+witness (\S\ref{sec:inv-impact}).  The development is axiom-free, and this is
+checked rather than asserted: a successful build proves less than it looks,
+since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
+on standard output without failing anything.  \texttt{make check} rebuilds from
+scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
+the \texttt{Print Assumptions} reports: all 212 say \emph{closed under the
+global context}, and none reports an axiom.
 
 \paragraph{1.\ OW --- No Sharing.\hfill\textsc{minor}}
 \[
@@ -997,8 +1001,8 @@ a state transition rather than a typing rule --- and because it is the action
 the report handled worst.  The result is lopsided in a way worth recording.
 Eighteen of the nineteen fall out of two one-line facts, that freeing removes
 edges and therefore removes paths: every invariant with an \textbf{Edge} or
-\textbf{Reaches} hypothesis gets \emph{weaker}, and the nine that do not mention
-the heap are untouched outright.  \textbf{HD} is the only one that asserts
+\textbf{Reaches} hypothesis gets \emph{weaker}, and the eleven that do not
+mention the heap are untouched outright.  \textbf{HD} is the only one that asserts
 something must be \emph{in} the heap, and the only one with any content --- and it needs the
 corrected statement, since under the published \textbf{HD} the theorem is false.
 So the report's verdict on the case was right about eighteen nineteenths of it
@@ -1140,9 +1144,11 @@ writes a field \emph{and} changes the writer's observations, and for
 invariants were identities precisely because nothing touched the observation
 map.  Here they are not.  \textsc{T-Insert} promotes a node from \frsh{} to
 \itr{}, \textsc{T-UnlinkH} demotes one from \itr{} to \unlk{}, and
-\textsc{T-Replace} does both at once, so \textbf{RWOW}, \textbf{AWRT},
-\textbf{IFL}, \textbf{WULK}, \textbf{WF}, \textbf{FNR}, \textbf{RITR} and
-\textbf{RINFL} all acquire content.
+\textsc{T-Replace} does both at once, so ten of the eleven --- \textbf{RWOW},
+\textbf{AWRT}, \textbf{IFL}, \textbf{WULK}, \textbf{WF}, \textbf{FNR},
+\textbf{RITR}, \textbf{RINFL}, \textbf{WUNLK} and \textbf{WITR} --- all acquire
+content.  \textbf{WNR} is the one that does not, being the only one of the
+eleven that mentions no observation.
 
 The observation change is again given by properties rather than by a map
 operation, and here that is not merely for uniformity.  The revocation an
@@ -1835,6 +1841,17 @@ machine-state steps result --- \texttt{phys\_read\_begin},
 \texttt{phys\_sync\_stop} --- and they are the only ones in the development that
 move $R$ or $B$, which before the cell was true of no step at all.
 
+\textsc{ReadBegin} is now a closed triple, \texttt{read\_begin\_atomic}, and it
+is the first on the read side.  What makes it closed is worth stating, because
+it is what the two new invariants were for.  The action lemma
+\texttt{read\_begin\_update} carries both of \textsc{ReadBegin}'s premises as
+hypotheses --- that the entering thread is not the writer, and that it holds no
+detaching observation.  The triple proves them instead: the first from the
+thread's own cell, since the invariant now says the lock holder has no cell at
+all; the second from \textbf{WFreshW} and \textbf{WUNLKW} together with the
+first.  A rule whose premises are all discharged rather than assumed is the
+difference between mechanizing a lemma and mechanizing a rule.
+
 \textsc{ReadEnd} is the next rule, and it is the one that does not close, for a
 reason worth reporting rather than deferring.  It is the single step in the
 system that writes state another thread owns: the free-list snapshots are the
@@ -1864,19 +1881,20 @@ thread --- which is what an implementation's grace-period counter does, and
 under which the intersected reading \emph{is} sound, a section identity never
 being reused.  It costs a change to the state model, which the ticket does not.
 
-\textsc{ReadBegin} is now a closed triple, \texttt{read\_begin\_atomic}, and it
-is the first on the read side.  What makes it closed is worth stating, because
-it is what the two new invariants were for.  The action lemma
-\texttt{read\_begin\_update} carries both of \textsc{ReadBegin}'s premises as
-hypotheses --- that the entering thread is not the writer, and that it holds no
-detaching observation.  The triple proves them instead: the first from the
-thread's own cell, since the invariant now says the lock holder has no cell at
-all; the second from \textbf{WFreshW} and \textbf{WUNLKW} together with the
-first.  A rule whose premises are all discharged rather than assumed is the
-difference between mechanizing a lemma and mechanizing a rule.
 
-So the remainder is a fractional heap for the read side, and a compare-and-set
-and a wait loop for the two points where the protocol tests shared state.  The
+
+That last point is not only ours.  The paper's own comparison with Tassarotti's
+QSBR verification observes that implementations are structured so each reader
+thread keeps its own \emph{fragment} of the shared state, updated only by that
+thread and read by the write-side primitives.  That is the ticket, described as
+an implementation technique.  The model abstracts it away, and \textsc{ReadEnd}
+is the one place where the abstraction costs something: it turns a thread's
+update to its own fragment into an update to a structure the writer owns.
+
+So the remainder is a fractional heap for the read side, a ticket-valued free
+list so that \textsc{ReadEnd} writes only its own membership, and a
+compare-and-set and a wait loop for the two points where the protocol tests
+shared state.  The
 read-side denotation is now mechanized --- \texttt{D\_rcuItrR}, transcribed from
 the figure --- together with the reader's acquisition
 (\texttt{reader\_post\_env}).  That one is worth a caution: the denotation's

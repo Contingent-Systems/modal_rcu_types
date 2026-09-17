@@ -9,9 +9,9 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
-17,300 lines and 931 results, axiom-free).  The build refuses to succeed if
-the development contains an admitted proof, or if any of its hundred and
-two hundred assumption checks reports an axiom rather than closed under the
+18,200 lines and 968 lemmas and theorems, axiom-free).  The build refuses to
+succeed if the development contains an admitted proof, or if any of its 212
+assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
 it looks.  This turned up more than we expected, and we think it materially
@@ -226,17 +226,19 @@ What the invariants give is the half of each case that is about the shared
 structure rather than the types, which is the half the technical report treats
 as trivial and the half where we found the defects.
 
-For Free, seventeen of the eighteen follow from a single observation, that
+For Free, eighteen of the nineteen follow from a single observation, that
 freeing removes edges and therefore removes paths, so every invariant with a
-reachability or edge hypothesis gets weaker.  Heap-Domain-Closure is the only
-one whose conclusion is about the heap and the only one with any content.  That
-is a fair account of what "trivial" was doing: right about seventeen eighteenths
-of the case and wrong about the part that mattered.
+reachability or edge hypothesis gets weaker and the nine that do not mention the
+heap are untouched outright.  Heap-Domain-Closure is the only one whose
+conclusion is about the heap and the only one with any content -- and it needs
+the corrected statement, since under the published one the theorem is false.
+That is a fair account of what "trivial" was doing: right about eighteen
+nineteenths of the case and wrong about the part that mattered.
 
 The three heap mutations are the hardest, and for a reason that appears only
 when the action is attempted in full: each writes a field *and* changes the
-writer's observations, so the ten heap-free invariants, which were identities
-for the other three actions, all acquire content.  The revocation an unlink
+writer's observations, so ten of the eleven heap-free invariants, which were
+identities for the other three actions, acquire content.  The revocation an unlink
 performs is of *the writer's* iterator observation and of nothing else -- the
 readers still traversing the node keep theirs, which is the whole point of the
 structure -- so an update replacing a location's observation set outright would

@@ -700,12 +700,12 @@ Print Assumptions sync_stop_preserves_FNR.
 
     Most of WellFormed does not mention the heap.  A field write changes [hp]
     and nothing else, so those invariants transfer definitionally -- each proof
-    below is the identity.  Recording it as nine one-line lemmas rather than
+    below is the identity.  Recording it as eleven one-line lemmas rather than
     leaving it implicit is worth the space: it says precisely which cases of an
     atomic-action lemma have content and which do not, and the report's habit of
     calling a case trivial without saying why is what hid three defects.
 
-    The eight that are *not* here -- OW, ULKR, FLR, FPI, FR, HD, and the two
+    The nine that are *not* here -- OW, ULKR, FLR, FPI, FR, HD, UNQR and the two
     halves of UNQRT -- all mention the heap, and every one of them needed a real
     argument. *)
 
@@ -728,6 +728,10 @@ Section untouched.
   Lemma write_RITR   : RITR s   -> RITR s'.   Proof. exact (fun H => H). Qed.
   Lemma write_RINFL  : RINFL s  -> RINFL s'.  Proof. exact (fun H => H). Qed.
   Lemma write_WNR    : WNR s    -> WNR s'.    Proof. exact (fun H => H). Qed.
+  (* The two the revision added, which belong here for the same reason and
+     were missing only because the section predates them. *)
+  Lemma write_WUNLK  : WUNLK s  -> WUNLK s'.  Proof. exact (fun H => H). Qed.
+  Lemma write_WITR   : WITR s   -> WITR s'.   Proof. exact (fun H => H). Qed.
 
 End untouched.
 
