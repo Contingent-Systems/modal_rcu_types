@@ -10,7 +10,7 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
 18,500 lines and 985 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 225
+succeed if the development contains an admitted proof, or if any of its 226
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -601,6 +601,15 @@ the allocation, the two writes that build the replacement, and the splice run as
 a single chain over the concrete tree, from the entry environment to one in
 which the deleted node is typed unlinked and the fresh node stands in its place.
 The write half of the paper's worked example is mechanized.
+
+The other example, the linked-list delete, is mechanized too, and the reason to
+do it was different.  It is a single unlinking, so it found nothing the tree had
+not; what it checks is that the machinery is about the rules rather than about
+trees.  The two differ in what one would want them to differ in -- the tree
+needs four steps and a framing lemma about mirroring, the list needs one step
+and the ordinary framing -- while the rule applied is the same rule at the same
+interface, with nothing list-specific on either side.  That is the reuse claim
+we make in the related work, checked rather than asserted.
 
 We tried two larger repairs first, and the wrong ones are instructive.  Guarding
 Unlinked-Reachability by RCU-ness so it matches No-Sharing does make the

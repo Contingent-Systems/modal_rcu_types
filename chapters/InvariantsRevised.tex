@@ -94,7 +94,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 225 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 226 say \emph{closed under the
 global context}, and none reports an axiom.
 
 \paragraph{1.\ OW --- No Sharing.\hfill\textsc{minor}}
@@ -1768,8 +1768,21 @@ starting from the entry environment and ending with \texttt{current} typed
 \texttt{unlinked} and the fresh node in its place.  The write half of the
 paper's worked example is mechanized.
 
-Two things about that instantiation are worth reporting, because they are what
-the general lemmas could not say.  The mirror condition is not an abstract
+\texttt{rocq/LinkedList.v} does the paper's other example, and the reason to do
+it is different.  The delete is a single unlinking, \texttt{prev.Next =
+current.Next}, so it finds nothing the tree did not; what it checks is that the
+machinery is about the rules rather than about trees.  The two files differ in
+what one would want them to differ in --- the tree needs four steps and the
+mirror framing lemma, the list needs one step and the ordinary one --- while the
+rule applied is the same rule at the same interface, with no list-specific
+machinery on either side.  That is the claim \S\ref{sec:relatedwork} makes about
+reuse across singly-linked and tree structures, checked rather than asserted.
+The surviving variable also differs in the way that matters: in the list it sits
+\emph{above} the deleted node, so ordinary framing suffices, where in the tree
+it sits below the replaced one, which is what forced the mirror.
+
+Two things about the tree's instantiation are worth reporting, because they are
+what the general lemmas could not say.  The mirror condition is not an abstract
 hypothesis there: it is discharged by enumeration, and the clause that does the
 work is the one saying no \emph{prefix} of a surviving variable's path reaches
 the fresh node --- three folds per variable in a four-node tree.  And the
