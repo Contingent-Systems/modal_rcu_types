@@ -3967,6 +3967,82 @@ End entry.
 
 Print Assumptions read_begin_preserves_WellFormed.
 
+(** ** Why ReadEnd has to write the free list
+
+    ReadEnd's free-list update is the one step in the development that writes
+    state another thread owns: the entries are the writer's, created by
+    SyncStart, and the departing reader rewrites every one it appears in.  The
+    resource-level lemma has to hold all of them, which is the wrong resource
+    for a per-thread act.
+
+    The obvious economy is to leave the entries alone and read them against the
+    threads still running.  A thread that has left its read section bounds
+    nothing, so intersecting the snapshot with [R] looks like it should have the
+    same effect as removing the thread from the snapshot -- and it would make
+    ReadEnd touch nothing but its own reader cell.
+
+    It does not work, and the reason is re-entrancy.  A thread that leaves its
+    read section and enters a new one is in [R] again, and the intersected
+    reading puts it back into every snapshot it was ever in, including grace
+    periods that started after it left and have nothing to do with its new
+    section.  We tried this repair and record why it is wrong, because the
+    failure is not visible until ReadBegin is asked to preserve the invariant.
+
+    So the recorded repair is the right one: the free-list value should be a
+    disjoint union of tickets, one per bounding thread, so that a reader owns
+    its own membership and deallocates it.  That makes ReadEnd's write
+    thread-local, and re-entry does not restore a ticket that has been spent.
+    (The other sound repair is to index snapshots by read-side critical section
+    rather than by thread, which is what an implementation's grace-period
+    counter does; then the intersected reading is sound, because a section
+    identity is never reused.  It costs a change to the state model, which the
+    ticket does not.) *)
+
+Definition flistR (m : MState) (F : gmap Loc (gset TID)) (o : Loc)
+  : option (TID -> Prop) :=
+  match F !! o with
+  | Some s => Some (fun t => t ∈ s /\ rds m t)
+  | None   => None
+  end.
+
+Definition RINFL_R (m : MState) (F : gmap Loc (gset TID)) : Prop :=
+  forall o Tr t, flistR m F o = Some Tr -> Tr t -> bnd m t.
+
+(** Thread 9 is in a snapshot it has already left: under the intersected
+    reading that is harmless, because it is not a reader. *)
+Definition stale_ms : MState :=
+  {| stk := fun _ _ => None;
+     hp  := fun o _ => if Nat.eqb o 0 then Some VNull else None;
+     lk  := Some 0; rt := 0;
+     rds := fun _ => False;
+     bnd := fun _ => False |}.
+
+Definition stale_F : gmap Loc (gset TID) := {[ 1 := {[ 9 ]} ]}.
+
+Lemma stale_RINFL_R : RINFL_R stale_ms stale_F.
+Proof.
+  intros o Tr t Hfl HTr. rewrite /flistR in Hfl.
+  destruct (stale_F !! o) as [s0|] eqn:HS; [| discriminate].
+  injection Hfl as <-. destruct HTr as [_ H]. destruct H.
+Qed.
+
+(** Until it starts reading again, and rejoins a grace period that is not
+    waiting for it. *)
+Theorem reentry_breaks_the_intersected_reading :
+  RINFL_R stale_ms stale_F
+  /\ ~ rds stale_ms 9
+  /\ ~ RINFL_R (read_begin_ms stale_ms 9) stale_F.
+Proof.
+  repeat apply conj; [exact stale_RINFL_R | intros H; exact H |].
+  intros H.
+  apply (H 1 (fun t => t ∈ ({[9]} : gset TID)
+                       /\ rds (read_begin_ms stale_ms 9) t) 9).
+  - rewrite /flistR /stale_F lookup_insert_eq. reflexivity.
+  - split; [by apply elem_of_singleton | by right].
+Qed.
+
+Print Assumptions reentry_breaks_the_intersected_reading.
+
 (** ** Acquiring a reference
 
     A reader following [x.f] to [z] adds [iterator] to its own entry for [z] and

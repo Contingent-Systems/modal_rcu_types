@@ -1938,7 +1938,16 @@ Qed.
     value should be a [gset_disj] of tickets so that a reader owns its own
     membership and deallocates that, rather than rewriting the set.  It is
     recorded here rather than done because it changes the camera under all of
-    SyncStart, Free and IFL, and that is a change to make deliberately. *)
+    SyncStart, Free and IFL, and that is a change to make deliberately.
+
+    One cheaper repair suggests itself and does not work, and the development
+    now records why: leave the entries alone and read a snapshot against the
+    threads still running.  That would make ReadEnd touch nothing but its own
+    reader cell, and it is unsound, because a thread that leaves its read
+    section and enters a new one is a reader again and rejoins every snapshot it
+    was ever in.  [reentry_breaks_the_intersected_reading] in [Actions.v] is the
+    witness, and the failure appears at ReadBegin rather than at ReadEnd, which
+    is why it is worth having tried. *)
 
 Section read_end_step.
   Context `{!rcuG Σ, !invGS_gen hlc Σ}.

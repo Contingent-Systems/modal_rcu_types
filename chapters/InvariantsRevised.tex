@@ -1835,6 +1835,35 @@ machine-state steps result --- \texttt{phys\_read\_begin},
 \texttt{phys\_sync\_stop} --- and they are the only ones in the development that
 move $R$ or $B$, which before the cell was true of no step at all.
 
+\textsc{ReadEnd} is the next rule, and it is the one that does not close, for a
+reason worth reporting rather than deferring.  It is the single step in the
+system that writes state another thread owns: the free-list snapshots are the
+writer's, created by \textsc{SyncStart}, and a departing reader rewrites every
+one it appears in.  The resource-level lemma has to hold all of them, which is
+the wrong resource for a per-thread act.
+
+The obvious economy is to leave the snapshots alone and read them against the
+threads still running --- a thread that has left its read section bounds
+nothing, so intersecting a snapshot with $R$ ought to do the work of removing
+the thread from it, and \textsc{ReadEnd} would then touch nothing but its own
+reader cell.  We tried that repair and it is unsound, because of re-entrancy: a
+thread that leaves its read section and enters a new one is in $R$ again, and
+the intersected reading puts it back into every snapshot it was ever in,
+including grace periods that began after it left.
+\texttt{reentry\_breaks\_the\_intersected\_reading} is the witness.  What makes
+it worth having tried is where the failure appears --- not at \textsc{ReadEnd},
+which the change was about, but at \textsc{ReadBegin}, which the change did not
+touch.
+
+So the repair is the one the development already recorded: a snapshot's value
+should be a disjoint union of tickets, one per bounding thread, so that a reader
+owns its own membership and spends it.  That makes \textsc{ReadEnd}'s write
+thread-local, and re-entry cannot restore a spent ticket.  The alternative that
+also works is to index snapshots by read-side critical section rather than by
+thread --- which is what an implementation's grace-period counter does, and
+under which the intersected reading \emph{is} sound, a section identity never
+being reused.  It costs a change to the state model, which the ticket does not.
+
 \textsc{ReadBegin} is now a closed triple, \texttt{read\_begin\_atomic}, and it
 is the first on the read side.  What makes it closed is worth stating, because
 it is what the two new invariants were for.  The action lemma

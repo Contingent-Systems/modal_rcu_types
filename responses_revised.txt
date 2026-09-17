@@ -175,7 +175,22 @@ repaired the first without noticing the second, is the part worth reporting: the
 guard is what makes each of them provable locally, and it is also what makes
 them useless to every rule on the read side.
 
-With both in place, ReadBegin is a closed triple -- the first on the read side.
+ReadEnd is the next rule and the one that does not close, for a reason worth
+reporting rather than deferring.  It is the one step in the system that writes
+state another thread owns: the free-list snapshots belong to the writer, which
+created them at SyncStart, and a departing reader rewrites every one it appears
+in.  The obvious economy is to leave them alone and read a snapshot against the
+threads still running, since a thread that has left its read section bounds
+nothing; ReadEnd would then touch only its own reader cell.  We tried that and
+it is unsound, because of re-entrancy -- a thread that leaves and enters a new
+read section is a reader again, and rejoins every snapshot it was ever in,
+including grace periods that began after it left.  We give the witness.  What
+makes it worth having tried is where the failure shows up: not at ReadEnd, which
+the change was about, but at ReadBegin, which it did not touch.  The repair is
+to make a snapshot a disjoint union of per-thread tickets, so a reader owns its
+own membership and spends it; re-entry cannot restore a spent ticket.
+
+With both invariants in place, ReadBegin is a closed triple -- the first on the read side.
 Its two premises, that the entering thread is not the writer and that it holds
 no detaching observation, were hypotheses of the action lemma; they are now
 proved, the first from the thread's own reader cell and the second from the two
