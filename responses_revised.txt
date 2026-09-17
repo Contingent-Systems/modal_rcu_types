@@ -10,7 +10,7 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
 18,500 lines and 985 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 223
+succeed if the development contains an admitted proof, or if any of its 225
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -211,6 +211,18 @@ what the published rule says it is.  So all three steps correspond and the only
 difference is which of them has to write what.  The bookkeeping also still
 satisfies the invariants the snapshot model states about it, so this is a
 representation of the same system rather than a different one.
+
+The ownership objection has a second end and the counters answer that too.
+Free needs to know a snapshot is empty, and in the published model it knows by
+owning the entry -- which is what made the entry the writer's property and the
+reader's write illegal to begin with.  Here it owns nothing, because quiescence
+past an epoch is stable: once every registration is later than e, every
+registration stays later than e, under all four steps, since registrations only
+get newer and the counter never goes backwards.  A stable fact needs no
+exclusive ownership, so SyncStop hands Free a certificate rather than a
+resource, and the free list stops needing to be anybody's property.  The reader
+writes only its own registration and the writer reads only a fact it already
+holds.
 
 The counters also say exactly where the re-entrancy repair lives: it turns on
 the epoch being incremented when the grace period starts, and we give the

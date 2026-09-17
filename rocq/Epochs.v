@@ -318,6 +318,85 @@ Proof.
   exact (Nat.lt_irrefl e (Nat.lt_le_trans _ _ _ (Hq t e' Hr) Hle)).
 Qed.
 
+(** ** Quiescence is stable, which is the other half of the ownership story
+
+    The reader's half is that ReadEnd writes only its own registration.  The
+    writer's half is the converse problem: Free needs to know a snapshot is
+    empty, and under the published model it knows that by *owning* the entry --
+    which is what made the entry the writer's resource and the reader's write
+    illegal.
+
+    With epochs it does not have to own anything, because quiescence past an
+    epoch is *stable*: once every registration is later than [e], every
+    registration stays later than [e], under all four steps.  Registrations only
+    ever get newer, because a reader enters at the current epoch and the counter
+    never goes backwards.
+
+    That is what makes the wait's result a fact the writer can simply keep.  In
+    the resource reading a stable fact needs no exclusive ownership -- it may be
+    duplicated and carried -- so SyncStop can hand Free a certificate rather
+    than a resource, and the free list stops needing to be anybody's property.
+    Between this and [e_end_is_read_end] the ownership objection is answered at
+    both ends. *)
+
+Lemma e_quiescent_begin s t e :
+  e < egen s -> e_quiescent s e -> e_quiescent (e_begin s t) e.
+Proof.
+  intros Hlt Hq t' e' H. simpl in H.
+  destruct (decide (t' = t)) as [-> | Hne].
+  - rewrite lookup_insert_eq in H. injection H as <-. exact Hlt.
+  - rewrite lookup_insert_ne in H; [| exact (fun Hc => Hne (eq_sym Hc))].
+    exact (Hq t' e' H).
+Qed.
+
+Lemma e_quiescent_end s t e : e_quiescent s e -> e_quiescent (e_end s t) e.
+Proof.
+  intros Hq t' e' H. simpl in H.
+  destruct (decide (t' = t)) as [-> | Hne].
+  - by rewrite lookup_delete_eq in H.
+  - rewrite lookup_delete_ne in H; [| exact (fun Hc => Hne (eq_sym Hc))].
+    exact (Hq t' e' H).
+Qed.
+
+Lemma e_quiescent_sync_start s ds e :
+  e_quiescent s e -> e_quiescent (e_sync_start s ds) e.
+Proof. intros Hq t e' H. exact (Hq t e' H). Qed.
+
+(** Freeing a node removes its stamp and touches no registration. *)
+Definition e_free (s : EState) (o : Loc) : EState :=
+  {| egen := egen s; ereg := ereg s; estamp := delete o (estamp s) |}.
+
+Lemma e_quiescent_free s o e : e_quiescent s e -> e_quiescent (e_free s o) e.
+Proof. intros Hq t e' H. exact (Hq t e' H). Qed.
+
+(** For a node that is actually awaiting reclamation the side condition of the
+    first lemma is automatic, so the certificate survives every step of the
+    system without a hypothesis the writer would have to maintain. *)
+Theorem quiescence_is_stable s o e :
+  EWF s -> estamp s !! o = Some e -> e_quiescent s e ->
+  (forall t, e_quiescent (e_begin s t) e)
+  /\ (forall t, e_quiescent (e_end s t) e)
+  /\ (forall ds, e_quiescent (e_sync_start s ds) e)
+  /\ (forall o', e_quiescent (e_free s o') e).
+Proof.
+  intros HWF Hst Hq. repeat apply conj.
+  - intros t. exact (e_quiescent_begin s t e (proj1 HWF o e Hst) Hq).
+  - intros t. exact (e_quiescent_end s t e Hq).
+  - intros ds. exact (e_quiescent_sync_start s ds e Hq).
+  - intros o'. exact (e_quiescent_free s o' e Hq).
+Qed.
+
+(** And what the certificate licenses, which is exactly the conjunct the
+    [freeable] denotation asks for: the snapshot is empty.  The writer reads
+    this off a fact it carries, not off an entry it owns. *)
+Corollary e_free_premise s o e :
+  estamp s !! o = Some e -> e_quiescent s e ->
+  e_F s !! o = Some ∅.
+Proof.
+  intros Hst Hq. unfold e_F. rewrite lookup_fmap, Hst. simpl.
+  by rewrite (e_quiescent_entry_empty s o e Hst Hq).
+Qed.
+
 (** ** It is a refinement, not a replacement
 
     The two invariants the snapshot model states about this bookkeeping hold of
@@ -354,4 +433,6 @@ Print Assumptions e_sync_start_snapshot.
 Print Assumptions reentry_safe.
 Print Assumptions increment_is_what_makes_reentry_safe.
 Print Assumptions e_quiescent_entry_empty.
+Print Assumptions quiescence_is_stable.
+Print Assumptions e_free_premise.
 Print Assumptions e_RINFL.

@@ -94,7 +94,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 223 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 225 say \emph{closed under the
 global context}, and none reports an axiom.
 
 \paragraph{1.\ OW --- No Sharing.\hfill\textsc{minor}}
@@ -1910,6 +1910,22 @@ to write what.
 The bookkeeping also still satisfies the invariants the snapshot model is stated
 over --- \textbf{RINFL} is \texttt{e\_RINFL}, and \textbf{BR}, which the
 published set is missing entirely (\S\ref{sec:defect-br}), is immediate.
+
+The ownership objection has a second end, and the epochs answer that too.
+\textsc{Free} needs to know a snapshot is empty, and under the published model
+it knows by \emph{owning} the entry --- which is what made the entry the
+writer's resource and the reader's write illegal in the first place.  Here it
+need own nothing, because quiescence past an epoch is \emph{stable}: once every
+registration is later than $e$, every registration stays later than $e$, under
+all four steps (\texttt{quiescence\_is\_stable}).  Registrations only get newer,
+a reader entering at the current epoch and the counter never going backwards.  A
+stable fact needs no exclusive ownership in the resource reading --- it may be
+duplicated and carried --- so \textsc{SyncStop} hands \textsc{Free} a
+certificate rather than a resource (\texttt{e\_free\_premise}), and the free
+list stops needing to be anybody's property at all.
+
+That is the whole of the objection answered: the reader writes only its own
+registration, and the writer reads only a fact it already holds.
 
 The re-entrancy failure is repaired, and the counters say exactly where the
 repair lives: \texttt{reentry\_safe} turns on the epoch being incremented when
