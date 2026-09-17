@@ -71,7 +71,7 @@ ROCQ      ?= rocq
 ROCQFLAGS := -R . RCU
 
 VFILES  := WellFormed.v HeapPaths.v IrisGhost.v Denotations.v Actions.v \
-           Compose.v Triples.v Epochs.v BST.v LinkedList.v
+           Compose.v Epochs.v Triples.v BST.v LinkedList.v
 VOFILES := $(VFILES:.v=.vo)
 
 all: $(VOFILES)
@@ -81,7 +81,8 @@ IrisGhost.vo: WellFormed.vo
 Denotations.vo: WellFormed.vo HeapPaths.vo
 Actions.vo: WellFormed.vo HeapPaths.vo IrisGhost.vo Denotations.vo
 Compose.vo: WellFormed.vo
-Triples.vo: WellFormed.vo HeapPaths.vo IrisGhost.vo Denotations.vo Actions.vo
+Triples.vo: WellFormed.vo HeapPaths.vo IrisGhost.vo Denotations.vo Actions.vo \
+            Epochs.vo
 Epochs.vo: WellFormed.vo HeapPaths.vo IrisGhost.vo Denotations.vo Actions.vo
 LinkedList.vo: WellFormed.vo HeapPaths.vo IrisGhost.vo Denotations.vo \
                 Actions.vo Triples.vo
@@ -93,7 +94,7 @@ BST.vo: WellFormed.vo HeapPaths.vo IrisGhost.vo Denotations.vo Actions.vo \
 
 # A successful build proves less here than it looks.  `Admitted.` compiles and
 # writes a .vo like any other proof, and `Print Assumptions` reports an axiom on
-# stdout without failing anything.  So the development's actual claim -- 226
+# stdout without failing anything.  So the development's actual claim -- 221
 # results, every one closed under the global context, no axioms -- is precisely
 # the thing that building it does not check.  This target checks it.
 #

@@ -103,7 +103,7 @@ Qed.
 
 (** The entry environment, which is computation in a concrete map exactly as it
     was for the tree. *)
-Lemma LG_ok FType : EnvOK LHd LW LU FType LFs LSm LOb LC0 ∅ LG.
+Lemma LG_ok FType Qc : EnvOK LHd LW LU Qc FType LFs LSm LOb LC0 ∅ LG.
 Proof.
   intros x ty Hin.
   destruct Hin as [Heq | [Heq | [Heq | [Heq | []]]]];
@@ -181,30 +181,31 @@ Proof.
     injection Hstk as <-. discriminate Hk1.
 Qed.
 
-Lemma LGrest_ok FType : EnvOK LHd LW LU FType LFs LSm LOb LC0 ∅ LGrest.
+Lemma LGrest_ok FType Qc : EnvOK LHd LW LU Qc FType LFs LSm LOb LC0 ∅ LGrest.
 Proof.
-  intros x ty Hin. apply (LG_ok FType).
+  intros x ty Hin. apply (LG_ok FType Qc).
   destruct Hin as [Heq | []]. rewrite -Heq. by left.
 Qed.
 
 Section list_delete.
-  Context `{!rcuG Σ, !physG Σ, !readerG Σ, !heapG Σ, !lockG Σ, !stackG Σ,
+  Context `{!rcuG Σ, !physG Σ, !heapG Σ, !lockG Σ, !stackG Σ,
             !freshG Σ, !invGS_gen hlc Σ}.
   Context (FType : FName -> FieldKind).
+  Context (Qc : nat -> Prop).
 
   (** [prev.Next = current.Next].  One application of \textsc{T-UnlinkH} at the
       concrete list, with every side condition a lookup in a concrete map --
       which is the point: nothing here is about lists. *)
-  Lemma list_delete N γm γh γl γs γd γo γf γr E :
+  Lemma list_delete N γm γh γl γs γo γf γr γe γq E :
     ↑N ⊆ E ->
-    rcu_invT FType (phys γm γh γl γs γd LHd LFs) N γo γf γr -∗
+    rcu_invT FType (phys γm γh γl γs LHd LFs) N γo γf γr γe γq -∗
     writer γo γs γh γl γf LW LSm LOb LC0 ∅ -∗
     fr_frag γr (∅ : gset Loc)
     ={E}=∗ writer γo γs γh γl γf LW LSm
              (<[LCur := {[Ounlk LW]}]> LOb)
              (<[(LPrv, Nx) := VLoc LNxt]> LC0) ∅
            ∗ fr_frag γr (∅ : gset Loc)
-           ∗ ⌜EnvOK LHd LW LU FType LFs LSm
+           ∗ ⌜EnvOK LHd LW LU Qc FType LFs LSm
                 (<[LCur := {[Ounlk LW]}]> LOb)
                 (<[(LPrv, Nx) := VLoc LNxt]> LC0) ∅
                 ([(vPrev, TItr [Nx]
@@ -214,9 +215,9 @@ Section list_delete.
                   (vNext, TItr ([Nx] ++ [Nx]) (fun _ => None))] ++ LGrest)⌝.
   Proof.
     iIntros (HN) "#Hinv Hw Hfr".
-    iApply (unlink_typed FType LHd LFs N γm γh γl γs γd γo γf γr E LW
+    iApply (unlink_typed FType LHd LFs N γm γh γl γs γo γf γr γe γq E LW
               vPrev vCurr vNext LPrv Nx LCur Nx LNxt [Nx]
-              LU LSm LOb LC0 ∅ ∅ (fun _ _ => VNull)
+              LU Qc LSm LOb LC0 ∅ ∅ (fun _ _ => VNull)
               {[Oiter LW]} {[Oiter LW]} LGrest
               with "Hinv Hw Hfr").
     - exact HN.
@@ -250,7 +251,7 @@ Section list_delete.
     - intros q g. discriminate.
     - exact LGrest_obs.
     - exact LGrest_cell.
-    - exact (LGrest_ok FType).
+    - exact (LGrest_ok FType Qc).
   Qed.
 
   Print Assumptions list_delete.

@@ -369,6 +369,11 @@ Definition e_free (s : EState) (o : Loc) : EState :=
 Lemma e_quiescent_free s o e : e_quiescent s e -> e_quiescent (e_free s o) e.
 Proof. intros Hq t e' H. exact (Hq t e' H). Qed.
 
+(** Freeing deletes one entry from the derived free list, which is what the
+    published Free does to it. *)
+Lemma e_F_free s o : e_F (e_free s o) = delete o (e_F s).
+Proof. unfold e_F, e_free. simpl. by rewrite fmap_delete. Qed.
+
 (** For a node that is actually awaiting reclamation the side condition of the
     first lemma is automatic, so the certificate survives every step of the
     system without a hypothesis the writer would have to maintain. *)
@@ -433,6 +438,7 @@ Print Assumptions e_sync_start_snapshot.
 Print Assumptions reentry_safe.
 Print Assumptions increment_is_what_makes_reentry_safe.
 Print Assumptions e_quiescent_entry_empty.
+Print Assumptions e_F_free.
 Print Assumptions quiescence_is_stable.
 Print Assumptions e_free_premise.
 Print Assumptions e_RINFL.

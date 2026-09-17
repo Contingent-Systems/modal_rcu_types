@@ -32,7 +32,8 @@ From iris.algebra.lib Require Import excl_auth.
 From iris.base_logic.lib Require Import invariants own.
 From iris.proofmode Require Import proofmode.
 From stdpp Require Import gmap sets.
-From RCU Require Import WellFormed HeapPaths IrisGhost Denotations Actions.
+From RCU Require Import WellFormed HeapPaths IrisGhost Denotations Actions
+                        Epochs.
 
 (** ** Deleting a free-list entry
 
@@ -49,7 +50,7 @@ Section ghost_delete.
     iIntros "Ha Hc". unfold fl_auth, fl_ctl. rewrite fmap_delete.
     iMod (own_update_2 with "Ha Hc") as "Hr".
     { apply auth_update.
-      apply (delete_local_update _ _ d (Excl (s : leibnizO (gset TID)))).
+      apply (delete_local_update _ _ d (Excl (s : leibnizO nat))).
       by rewrite lookup_singleton_eq. }
     iDestruct "Hr" as "[Hr _]". by iModIntro.
   Qed.
@@ -141,95 +142,81 @@ Print Assumptions fr_agree.
 
 (** ** Readers
 
-    The first ghost state on the read side, and the reason the reclamation half
-    needs any: [R] and [B] are the only parts of the machine state that no
-    thread owns a fragment of, so nothing in the resource reading says who may
-    change them.
+    The reader state is a per-thread registration cell, [reg_cell] in
+    [IrisGhost.v]: [None] outside a read-side critical section, [Some e] inside
+    one entered at epoch [e].  It replaces an earlier two-valued cell, for the
+    reason [Epochs.v] gives -- the epoch is what distinguishes a reader's new
+    critical section from its old one, and without it ReadEnd cannot be a
+    thread-local step.
 
-    The first attempt made a reader token a *set* token -- the disjoint-union
-    camera, one element per active reader.  That certifies membership and
-    nothing else, and it is not enough: \textsc{ReadBegin}'s premise is that the
-    thread is *not* already a reader, and a membership token cannot say that.
-    So the reader state is a per-thread two-valued cell instead, owned by the
-    thread whether it is inside a critical section or outside one.  Entering
-    trades [false] for [true] and leaving trades back, and both directions are
-    now derivable from what the thread holds.
+    [RepresentsR] ties the machine state's reader set to the registrations.
+    [R] is a finite map as a result, for the reason the heap and the stack are
+    finite: a fragment is an element of a camera.  The thread set was already
+    finite, so this is the model catching up with itself. *)
 
-    [R] becomes a finite map here, for the same reason the heap and the stack
-    became finite: a fragment is an element of a camera.  The published model
-    has [R : TID -> Prop].  The development already makes the thread set [T]
-    finite, so this is the model catching up with itself.  A thread with no cell
-    is not a reader, which is the right reading of a thread that has never
-    entered one. *)
+Definition RepresentsR (r : TID -> Prop) (Rg : gmap TID (option nat)) : Prop :=
+  forall t, r t <-> (exists e, Rg !! t = Some (Some e)).
 
-Definition rdUR : ucmra := authUR (gmapUR TID (exclR (leibnizO bool))).
+(** The epoch state the invariant's bookkeeping is read from. *)
+Definition mkE (g : nat) (Rg : gmap TID (option nat)) (St : gmap Loc nat)
+  : EState :=
+  {| egen := g; ereg := omap id Rg; estamp := St |}.
 
-Class readerG (Σ : gFunctors) := ReaderG { reader_inG :: inG Σ rdUR }.
-Definition readerΣ : gFunctors := #[ GFunctor rdUR ].
-Global Instance subG_readerΣ {Σ} : subG readerΣ Σ -> readerG Σ.
-Proof. solve_inG. Qed.
+(** Clearing a registration is exactly the epoch layer's ReadEnd, so
+    [e_end_is_read_end] applies to it. *)
+Lemma mkE_end g Rg St t :
+  mkE g (<[t := None]> Rg) St = e_end (mkE g Rg St) t.
+Proof.
+  unfold mkE, e_end. simpl. f_equal.
+  apply map_eq. intros t'. rewrite lookup_omap.
+  destruct (decide (t' = t)) as [-> | Hne].
+  - by rewrite lookup_insert_eq lookup_delete_eq.
+  - rewrite lookup_insert_ne; [| exact (fun Hc => Hne (eq_sym Hc))].
+    rewrite lookup_delete_ne; [| exact (fun Hc => Hne (eq_sym Hc))].
+    by rewrite lookup_omap.
+Qed.
 
-Definition RepresentsR (r : TID -> Prop) (M : gmap TID bool) : Prop :=
-  forall t, r t <-> M !! t = Some true.
+(** Registering is the epoch layer's ReadBegin. *)
+Lemma mkE_begin g Rg St t :
+  mkE g (<[t := Some g]> Rg) St = e_begin (mkE g Rg St) t.
+Proof.
+  unfold mkE, e_begin. simpl. f_equal.
+  apply map_eq. intros t'. rewrite lookup_omap.
+  destruct (decide (t' = t)) as [-> | Hne].
+  - by rewrite lookup_insert_eq lookup_insert_eq.
+  - rewrite lookup_insert_ne; [| exact (fun Hc => Hne (eq_sym Hc))].
+    rewrite lookup_insert_ne; [| exact (fun Hc => Hne (eq_sym Hc))].
+    by rewrite lookup_omap.
+Qed.
 
-Section readerghost.
-  Context `{!readerG Σ}.
+Lemma mkE_F_free g Rg St d :
+  e_F (mkE g Rg (delete d St)) = delete d (e_F (mkE g Rg St)).
+Proof. exact (e_F_free (mkE g Rg St) d). Qed.
 
-  Definition rd_auth (γ : gname) (M : gmap TID bool) : iProp Σ :=
-    own γ (● (Excl <$> M : gmap TID (excl (leibnizO bool)))).
-  (** [rd_st γ t b]: thread [t]'s own cell.  [b] is whether it is inside a
-      read-side critical section. *)
-  Definition rd_st (γ : gname) (t : TID) (b : bool) : iProp Σ :=
-    own γ (◯ {[ t := Excl (b : leibnizO bool) ]}).
+Lemma EWF_del g Rg St d : EWF (mkE g Rg St) -> EWF (mkE g Rg (delete d St)).
+Proof.
+  intros [Hs Hr]. split; [| exact Hr].
+  intros o e H. simpl in H.
+  destruct (decide (o = d)) as [-> | Hne]; [by rewrite lookup_delete_eq in H |].
+  rewrite lookup_delete_ne in H; [| exact (fun Hc => Hne (eq_sym Hc))].
+  exact (Hs o e H).
+Qed.
 
-  Global Instance rd_auth_timeless γ M : Timeless (rd_auth γ M).
-  Proof. apply _. Qed.
-  Global Instance rd_st_timeless γ t b : Timeless (rd_st γ t b).
-  Proof. apply _. Qed.
+Lemma mkE_F_end g Rg St t :
+  e_F (mkE g (<[t := None]> Rg) St) = read_end_F (e_F (mkE g Rg St)) t.
+Proof.
+  rewrite mkE_end. exact (proj2 (proj2 (e_end_is_read_end (mkE g Rg St) t))).
+Qed.
 
-  (** Both directions, which is the point of the cell: the thread's own state
-      tells it whether it is a reader, not merely that it is one. *)
-  Lemma rd_st_agree γ M t b :
-    rd_auth γ M -∗ rd_st γ t b -∗ ⌜M !! t = Some b⌝.
-  Proof.
-    iIntros "Ha Hf".
-    iDestruct (own_valid_2 with "Ha Hf") as %Hv.
-    iPureIntro.
-    apply auth_both_valid_discrete in Hv as [Hincl _].
-    apply singleton_included_l in Hincl as [y [Hlk Hle]].
-    rewrite lookup_fmap in Hlk.
-    apply fmap_Some_equiv in Hlk as [b0 [Hb0 Hy]].
-    rewrite Hb0. f_equal.
-    rewrite Hy Excl_included in Hle. exact (eq_sym Hle).
-  Qed.
-
-  Lemma rd_st_excl γ t b b' : rd_st γ t b -∗ rd_st γ t b' -∗ False.
-  Proof.
-    iIntros "H1 H2".
-    iDestruct (own_valid_2 with "H1 H2") as %Hv.
-    rewrite -auth_frag_op auth_frag_valid singleton_op singleton_valid in Hv.
-    iPureIntro. exact (exclusive_l (Excl (b : leibnizO bool))
-                        (Excl (b' : leibnizO bool)) Hv).
-  Qed.
-
-  Lemma rd_st_update γ M t b b' :
-    rd_auth γ M -∗ rd_st γ t b ==∗ rd_auth γ (<[t := b']> M) ∗ rd_st γ t b'.
-  Proof.
-    iIntros "Ha Hf". rewrite /rd_auth /rd_st.
-    iMod (own_update_2 _ _ _ (● (Excl <$> (<[t := b']> M)
-                                 : gmap TID (excl (leibnizO bool)))
-                              ⋅ ◯ {[t := Excl (b' : leibnizO bool)]})
-           with "Ha Hf") as "[Ha Hf]".
-    { rewrite fmap_insert. apply auth_update.
-      apply singleton_local_update_any.
-      intros y _. by apply exclusive_local_update. }
-    iModIntro. iFrame.
-  Qed.
-
-End readerghost.
-
-Print Assumptions rd_st_agree.
-Print Assumptions rd_st_update.
+Lemma mkE_reg g Rg St t e :
+  ereg (mkE g Rg St) !! t = Some e <-> Rg !! t = Some (Some e).
+Proof.
+  simpl. rewrite lookup_omap. split.
+  - destruct (Rg !! t) as [[e0|]|] eqn:E; simpl;
+      [| discriminate | discriminate].
+    intros H. injection H as <-. reflexivity.
+  - intros H. by rewrite H.
+Qed.
 
 (** References live in RCU fields.  This is what the mutation rules actually
     need, and it replaces the published proofs' assumption that *every* field is
@@ -306,12 +293,24 @@ Section invariantT.
   Context (FType : FName -> FieldKind).
   Context (phys : MState -> iProp Σ).
 
-  Definition rcu_invT_inner (γo γf γr : gname) : iProp Σ :=
+  (** The free list is no longer a map of snapshots that somebody owns.  It is
+      stamps, owned by the writer, and registrations, owned one cell each by
+      the readers; the snapshots are derived.  [Epochs.v] is the argument that
+      this is the same system, and it is what makes ReadEnd a write to the
+      departing reader's own cell.
+
+      [w] is the watermark: every registration is at least [w], and [w] only
+      grows, so a fragment of it is the persistent certificate a completed
+      grace period leaves behind. *)
+  Definition rcu_invT_inner (γo γf γr γe γq : gname) : iProp Σ :=
     ∃ (m : MState) (Og : ObsMap) (U : Var -> TID -> Prop)
-      (T : gset TID) (F : gmap Loc (gset TID)) (Fr : gset Loc),
+      (T : gset TID) (F : gmap Loc (gset TID)) (St : gmap Loc nat)
+      (Rg : gmap TID (option nat)) (g w : nat) (Fr : gset Loc),
       phys m
       ∗ tobs_auth γo Og
-      ∗ fl_auth γf F
+      ∗ fl_auth γf St
+      ∗ reg_auth γe Rg
+      ∗ wm_auth γq w
       ∗ fr_auth γr Fr
       ∗ ⌜ObsWF Og⌝
       ∗ ⌜FLD (to_LState_t m Og U T F)⌝
@@ -319,13 +318,21 @@ Section invariantT.
       ∗ ⌜RefsRCU FType (hp m)⌝
       ∗ ⌜forall q t, obsv (to_LState_t m Og U T F) q (Ofresh t) -> q ∈ Fr⌝
       ∗ ⌜WellFormed FType (to_LState_t m Og U T F)⌝
-      ∗ ⌜WUNLKW (to_LState_t m Og U T F)⌝.
+      ∗ ⌜WUNLKW (to_LState_t m Og U T F)⌝
+      (* the free list is derived, not owned: stamps are the writer's and
+         registrations are the readers' own, and [F] is what they say *)
+      ∗ ⌜F = e_F (mkE g Rg St)⌝
+      ∗ ⌜EWF (mkE g Rg St)⌝
+      ∗ ⌜RepresentsR (rds m) Rg⌝
+      ∗ ⌜forall t, bnd m t <-> e_bnd (mkE g Rg St) t⌝
+      ∗ ⌜forall t, lk m = Some t -> Rg !! t = None⌝
+      ∗ ⌜w <= g /\ forall t e, Rg !! t = Some (Some e) -> w <= e⌝.
 
-  Definition rcu_invT (N : namespace) (γo γf γr : gname) : iProp Σ :=
-    inv N (rcu_invT_inner γo γf γr).
+  Definition rcu_invT (N : namespace) (γo γf γr γe γq : gname) : iProp Σ :=
+    inv N (rcu_invT_inner γo γf γr γe γq).
 
-  Global Instance rcu_invT_persistent N γo γf γr :
-    Persistent (rcu_invT N γo γf γr).
+  Global Instance rcu_invT_persistent N γo γf γr γe γq :
+    Persistent (rcu_invT N γo γf γr γe γq).
   Proof. apply _. Qed.
 
 End invariantT.
@@ -346,28 +353,30 @@ Section free_step.
   Context (FType : FName -> FieldKind).
   Context (phys : MState -> iProp Σ).
 
-  Lemma free_update γo γf m Og U T F d t sd :
+  Lemma free_update γo γf g Rg m Og U T St d t e :
     (* the rule's premise: the variable freed is typed [freeable] *)
-    obsv (to_LState_t m Og U T F) d (Ofree t) ->
-    WellFormed FType (to_LState_t m Og U T F) ->
-    (* the thread holds the node's free-list entry *)
-    fl_ctl γf d sd -∗
+    obsv (to_LState_t m Og U T (e_F (mkE g Rg St))) d (Ofree t) ->
+    WellFormed FType (to_LState_t m Og U T (e_F (mkE g Rg St))) ->
+    (* the thread holds the node's stamp, which is the writer's to hold *)
+    fl_ctl γf d e -∗
     (* the invariant's contents *)
-    phys m -∗ tobs_auth γo Og -∗ fl_auth γf F -∗
+    phys m -∗ tobs_auth γo Og -∗ fl_auth γf St -∗
     (* the physical step *)
     (phys m ==∗ phys (free_ms m d)) -∗
     (* ... and the contents come back, re-established *)
     |==> phys (free_ms m d)
          ∗ tobs_auth γo Og
-         ∗ fl_auth γf (delete d F)
+         ∗ fl_auth γf (delete d St)
          ∗ ⌜WellFormed FType
-              (to_LState_t (free_ms m d) Og U T (delete d F))⌝.
+              (to_LState_t (free_ms m d) Og U T
+                 (e_F (mkE g Rg (delete d St))))⌝.
   Proof.
     iIntros (Hfree Hwf) "Hctl Hp Ho Hf Hstep".
     iMod ("Hstep" with "Hp") as "Hp".
     iMod (fl_delete with "Hf Hctl") as "Hf".
     iModIntro. iFrame. iPureIntro.
-    exact (free_preserves_WellFormed FType m Og U T F d t Hwf Hfree).
+    rewrite (e_F_free (mkE g Rg St) d).
+    exact (free_preserves_WellFormed FType m Og U T _ d t Hwf Hfree).
   Qed.
 
 End free_step.
@@ -407,7 +416,7 @@ Qed.
 
 Section unlink_obs.
   Variables (m : MState) (Og : ObsMap) (U : Var -> TID -> Prop)
-            (T : gset TID) (F : gmap Loc (gset TID)).
+            (T : gset TID) (F : gmap Loc (gset TID)) (St : gmap Loc nat).
   Variables (lw : TID) (ox : Loc) (f1 : FName) (oz ow : Loc).
   Hypothesis Hwf  : ObsWF Og.
   Hypothesis Hctl : Og !! (oz, lw) = Some {[Oiter lw]}.
@@ -498,7 +507,7 @@ Section unlink_step.
       + intros o ob Hx Hy. eapply uo_keep; eauto.
   Qed.
 
-  Lemma unlink_update γo γf m Og U T F lw ox f1 oz f2 ow rho :
+  Lemma unlink_update γo γf m Og U T F St lw ox f1 oz f2 ow rho :
     (* the encoding's well-formedness, carried by the invariant *)
     ObsWF Og ->
     WellFormed FType (to_LState_t m Og U T F) ->
@@ -518,13 +527,13 @@ Section unlink_step.
     (* the writer holds exactly its iterator observation on the node *)
     tobs_ctl γo oz lw {[Oiter lw]} -∗
     (* the invariant's contents *)
-    phys m -∗ tobs_auth γo Og -∗ fl_auth γf F -∗
+    phys m -∗ tobs_auth γo Og -∗ fl_auth γf St -∗
     (* the physical step *)
     (phys m ==∗ phys (write_ms m ox f1 (VLoc ow))) -∗
     |==> phys (write_ms m ox f1 (VLoc ow))
          ∗ tobs_auth γo (<[(oz, lw) := {[Ounlk lw]}]> Og)
          ∗ tobs_ctl γo oz lw {[Ounlk lw]}
-         ∗ fl_auth γf F
+         ∗ fl_auth γf St
          ∗ ⌜ObsWF (<[(oz, lw) := {[Ounlk lw]}]> Og)⌝
          ∗ ⌜WellFormed FType
               (to_LState_t (write_ms m ox f1 (VLoc ow))
@@ -637,7 +646,7 @@ Section quiet_steps.
   Context (FType : FName -> FieldKind).
   Context (phys : MState -> iProp Σ).
 
-  Lemma write_fresh_update γo γf m Og U T F lw on f oy :
+  Lemma write_fresh_update γo γf m Og U T F St lw on f oy :
     WellFormed FType (to_LState_t m Og U T F) ->
     lk m = Some lw ->
     obsv (to_LState_t m Og U T F) on (Ofresh lw) ->
@@ -646,10 +655,10 @@ Section quiet_steps.
     InHeap (to_LState_t m Og U T F) oy ->
     flist (to_LState_t m Og U T F) oy = None ->
     oy <> rt m ->
-    phys m -∗ tobs_auth γo Og -∗ fl_auth γf F -∗
+    phys m -∗ tobs_auth γo Og -∗ fl_auth γf St -∗
     (phys m ==∗ phys (write_ms m on f (VLoc oy))) -∗
     |==> phys (write_ms m on f (VLoc oy))
-         ∗ tobs_auth γo Og ∗ fl_auth γf F
+         ∗ tobs_auth γo Og ∗ fl_auth γf St
          ∗ ⌜WellFormed FType (to_LState_t (write_ms m on f (VLoc oy)) Og U T F)⌝.
   Proof.
     iIntros (Hinv Hlk Hfr Hit Hun Hin Hfl Hrt) "Hp Ho Hf Hstep".
@@ -658,16 +667,16 @@ Section quiet_steps.
              Hlk Hfr Hit Hun Hin Hfl Hrt Hinv).
   Qed.
 
-  Lemma read_begin_update γo γf m Og U T F t :
+  Lemma read_begin_update γo γf m Og U T F St t :
     WellFormed FType (to_LState_t m Og U T F) ->
     (forall lw, lk m = Some lw -> lw <> t) ->
     (forall o, ~ obsv (to_LState_t m Og U T F) o (Ounlk t)
             /\ ~ obsv (to_LState_t m Og U T F) o (Ofree t)
             /\ ~ obsv (to_LState_t m Og U T F) o (Ofresh t)) ->
-    phys m -∗ tobs_auth γo Og -∗ fl_auth γf F -∗
+    phys m -∗ tobs_auth γo Og -∗ fl_auth γf St -∗
     (phys m ==∗ phys (read_begin_ms m t)) -∗
     |==> phys (read_begin_ms m t)
-         ∗ tobs_auth γo Og ∗ fl_auth γf F
+         ∗ tobs_auth γo Og ∗ fl_auth γf St
          ∗ ⌜WellFormed FType (to_LState_t (read_begin_ms m t) Og U T F)⌝.
   Proof.
     iIntros (Hinv Hnw Hcl) "Hp Ho Hf Hstep".
@@ -732,7 +741,7 @@ Section grant_steps.
       + intros ob [t [sg [Hl _]]]. rewrite Hnone in Hl. discriminate.
   Qed.
 
-  Lemma alloc_update γo γf m Og U U' T F lw n x fs :
+  Lemma alloc_update γo γf m Og U U' T F St lw n x fs :
     ObsWF Og ->
     WellFormed FType (to_LState_t m Og U T F) ->
     (forall t, Og !! (n, t) = None) ->
@@ -748,12 +757,12 @@ Section grant_steps.
     flist (to_LState_t m Og U T F) n = None ->
     (* the class declaration: the node's field list holds every RCU field *)
     (forall g, FType g = RCUField -> In g fs) ->
-    phys m -∗ tobs_auth γo Og -∗ fl_auth γf F -∗
+    phys m -∗ tobs_auth γo Og -∗ fl_auth γf St -∗
     (phys m ==∗ phys (alloc_ms m n fs x lw)) -∗
     |==> phys (alloc_ms m n fs x lw)
          ∗ tobs_auth γo (<[(n, lw) := {[Ofresh lw]}]> Og)
          ∗ tobs_ctl γo n lw {[Ofresh lw]}
-         ∗ fl_auth γf F
+         ∗ fl_auth γf St
          ∗ ⌜ObsWF (<[(n, lw) := {[Ofresh lw]}]> Og)⌝
          ∗ ⌜WellFormed FType
               (to_LState_t (alloc_ms m n fs x lw)
@@ -779,18 +788,18 @@ Section grant_steps2.
 
   (** A reader's read: the observation is added to the reader's own entry, which
       is why a concurrent writer's entry for the same node is untouched. *)
-  Lemma reader_acquire_update γo γf m Og U T F t z sz :
+  Lemma reader_acquire_update γo γf m Og U T F St t z sz :
     ObsWF Og ->
     WellFormed FType (to_LState_t m Og U T F) ->
     rds m t ->
     (forall Tr, flist (to_LState_t m Og U T F) z = Some Tr -> Tr t) ->
     (forall t0, ~ obsv (to_LState_t m Og U T F) z (Ofresh t0)) ->
     tobs_ctl γo z t sz -∗
-    phys m -∗ tobs_auth γo Og -∗ fl_auth γf F -∗
+    phys m -∗ tobs_auth γo Og -∗ fl_auth γf St -∗
     |==> phys m
          ∗ tobs_auth γo (<[(z, t) := sz ∪ {[Oiter t]}]> Og)
          ∗ tobs_ctl γo z t (sz ∪ {[Oiter t]})
-         ∗ fl_auth γf F
+         ∗ fl_auth γf St
          ∗ ⌜ObsWF (<[(z, t) := sz ∪ {[Oiter t]}]> Og)⌝
          ∗ ⌜WellFormed FType
               (to_LState_t m (<[(z, t) := sz ∪ {[Oiter t]}]> Og) U T F)⌝.
@@ -846,7 +855,7 @@ Section grant_steps2.
                  (fun _ Hin => elem_of_union_l _ _ _ Hin)).
   Qed.
 
-  Lemma bind_update γo γf m Og U U' T F tb y o sold :
+  Lemma bind_update γo γf m Og U U' T F St tb y o sold :
     ObsWF Og ->
     WellFormed FType (to_LState_t m Og U T F) ->
     (lk m = Some tb \/ rds m tb) ->
@@ -857,12 +866,12 @@ Section grant_steps2.
     ~ Detached (to_LState_t m Og U T F) o ->
     flist (to_LState_t m Og U T F) o = None ->
     tobs_ctl γo o tb sold -∗
-    phys m -∗ tobs_auth γo Og -∗ fl_auth γf F -∗
+    phys m -∗ tobs_auth γo Og -∗ fl_auth γf St -∗
     (phys m ==∗ phys (bind_ms m y tb o)) -∗
     |==> phys (bind_ms m y tb o)
          ∗ tobs_auth γo (<[(o, tb) := sold ∪ {[Oiter tb]}]> Og)
          ∗ tobs_ctl γo o tb (sold ∪ {[Oiter tb]})
-         ∗ fl_auth γf F
+         ∗ fl_auth γf St
          ∗ ⌜ObsWF (<[(o, tb) := sold ∪ {[Oiter tb]}]> Og)⌝
          ∗ ⌜WellFormed FType
               (to_LState_t (bind_ms m y tb o)
@@ -967,7 +976,7 @@ Section promote_steps.
       + exists lw, {[Ofresh lw]}. split; [exact Hlook | set_solver].
   Qed.
 
-  Lemma insert_update γo γf m Og U T F lw op f on oo f4 rho :
+  Lemma insert_update γo γf m Og U T F St lw op f on oo f4 rho :
     ObsWF Og ->
     WellFormed FType (to_LState_t m Og U T F) ->
     (forall t t' sg, Og !! (on, t') = Some sg -> Ofresh t ∈ sg -> t' = lw) ->
@@ -983,12 +992,12 @@ Section promote_steps.
     hstar (hp m) (rt m) rho = Some op ->
     UNQR_h (hp m) (rt m) ->
     tobs_ctl γo on lw {[Ofresh lw]} -∗
-    phys m -∗ tobs_auth γo Og -∗ fl_auth γf F -∗
+    phys m -∗ tobs_auth γo Og -∗ fl_auth γf St -∗
     (phys m ==∗ phys (write_ms m op f (VLoc on))) -∗
     |==> phys (write_ms m op f (VLoc on))
          ∗ tobs_auth γo (<[(on, lw) := {[Oiter lw]}]> Og)
          ∗ tobs_ctl γo on lw {[Oiter lw]}
-         ∗ fl_auth γf F
+         ∗ fl_auth γf St
          ∗ ⌜ObsWF (<[(on, lw) := {[Oiter lw]}]> Og)⌝
          ∗ ⌜WellFormed FType
               (to_LState_t (write_ms m op f (VLoc on))
@@ -1045,7 +1054,7 @@ Section promote_steps.
       + exists lw, {[Ofresh lw]}. split; [exact Hlook | set_solver].
   Qed.
 
-  Lemma link_null_update γo γf m Og U T F lw op f on rho :
+  Lemma link_null_update γo γf m Og U T F St lw op f on rho :
     ObsWF Og ->
     WellFormed FType (to_LState_t m Og U T F) ->
     (* the observational form: any entry here holding a [fresh] observation is
@@ -1063,12 +1072,12 @@ Section promote_steps.
     hstar (hp m) (rt m) rho = Some op ->
     UNQR_h (hp m) (rt m) ->
     tobs_ctl γo on lw {[Ofresh lw]} -∗
-    phys m -∗ tobs_auth γo Og -∗ fl_auth γf F -∗
+    phys m -∗ tobs_auth γo Og -∗ fl_auth γf St -∗
     (phys m ==∗ phys (write_ms m op f (VLoc on))) -∗
     |==> phys (write_ms m op f (VLoc on))
          ∗ tobs_auth γo (<[(on, lw) := {[Oiter lw]}]> Og)
          ∗ tobs_ctl γo on lw {[Oiter lw]}
-         ∗ fl_auth γf F
+         ∗ fl_auth γf St
          ∗ ⌜ObsWF (<[(on, lw) := {[Oiter lw]}]> Og)⌝
          ∗ ⌜WellFormed FType
               (to_LState_t (write_ms m op f (VLoc on))
@@ -1098,7 +1107,7 @@ Print Assumptions link_null_update.
 
 Section replace_obs.
   Variables (m : MState) (Og : ObsMap) (U : Var -> TID -> Prop)
-            (T : gset TID) (F : gmap Loc (gset TID)).
+            (T : gset TID) (F : gmap Loc (gset TID)) (St : gmap Loc nat).
   Variables (lw : TID) (op : Loc) (f : FName) (oo on : Loc).
   Hypothesis Hne   : on <> oo.
   Hypothesis Hwf   : ObsWF Og.
@@ -1262,7 +1271,7 @@ Section replace_step.
       + exists lw, {[Oiter lw]}. split; [exact Hoo | set_solver].
   Qed.
 
-  Lemma replace_update γo γf m Og U T F lw op f oo on rho :
+  Lemma replace_update γo γf m Og U T F St lw op f oo on rho :
     ObsWF Og ->
     WellFormed FType (to_LState_t m Og U T F) ->
     on <> oo ->
@@ -1285,13 +1294,13 @@ Section replace_step.
     (forall q t0, obsv (to_LState_t m Og U T F) q (Ounlk t0)
                \/ obsv (to_LState_t m Og U T F) q (Ofree t0) -> t0 = lw) ->
     tobs_ctl γo on lw {[Ofresh lw]} -∗ tobs_ctl γo oo lw {[Oiter lw]} -∗
-    phys m -∗ tobs_auth γo Og -∗ fl_auth γf F -∗
+    phys m -∗ tobs_auth γo Og -∗ fl_auth γf St -∗
     (phys m ==∗ phys (write_ms m op f (VLoc on))) -∗
     |==> phys (write_ms m op f (VLoc on))
          ∗ tobs_auth γo (<[(on, lw) := {[Oiter lw]}]>
                            (<[(oo, lw) := {[Ounlk lw]}]> Og))
          ∗ tobs_ctl γo on lw {[Oiter lw]} ∗ tobs_ctl γo oo lw {[Ounlk lw]}
-         ∗ fl_auth γf F
+         ∗ fl_auth γf St
          ∗ ⌜ObsWF (<[(on, lw) := {[Oiter lw]}]>
                      (<[(oo, lw) := {[Ounlk lw]}]> Og))⌝
          ∗ ⌜WellFormed FType
@@ -1439,8 +1448,8 @@ Section ghost_bulk.
   Proof.
     iIntros (Hlk) "Ha".
     iMod (own_update _ _ (● (Excl <$> (<[o := s]> F)
-                              : gmap Loc (excl (leibnizO (gset TID))))
-                          ⋅ ◯ {[o := Excl (s : leibnizO (gset TID))]})
+                              : gmap Loc (excl (leibnizO nat)))
+                          ⋅ ◯ {[o := Excl (s : leibnizO nat)]})
            with "Ha") as "[Ha Hf]".
     { rewrite fmap_insert. apply auth_update_alloc.
       apply alloc_singleton_local_update; [| done].
@@ -1448,7 +1457,7 @@ Section ghost_bulk.
     iModIntro. iFrame.
   Qed.
 
-  Lemma fl_upd_list γ (l : list (Loc * gset TID)) F :
+  Lemma fl_upd_list γ (l : list (Loc * nat)) F :
     NoDup l.*1 ->
     ([∗ list] p ∈ l, (∃ s, fl_ctl γ p.1 s) ∨ ⌜F !! p.1 = None⌝) -∗
     fl_auth γ F ==∗
@@ -1558,53 +1567,84 @@ Section sync_start_step.
   Context (FType : FName -> FieldKind).
   Context (phys : MState -> iProp Σ).
 
-  Lemma sync_start_update γo γf m Og U T F
-        (l : list (Loc * gset TID)) (Rs : gset TID) :
-    WellFormed FType (to_LState_t m Og U T F) ->
-    FLD (to_LState_t m Og U T F) ->
+  (** SyncStart in epoch terms, which is simpler than the snapshot version it
+      replaces: there is no set to write, only a stamp, and the snapshot the
+      published rule stores is what the registrations already say.  The bump of
+      the counter is what separates the readers this grace period waits for
+      from the ones that start after it. *)
+  Lemma sync_start_update γo γf g Rg m Og U T St (l : list (Loc * nat)) :
+    WellFormed FType (to_LState_t m Og U T (e_F (mkE g Rg St))) ->
+    FLD (to_LState_t m Og U T (e_F (mkE g Rg St))) ->
+    EWF (mkE g Rg St) ->
+    RepresentsR (rds m) Rg ->
     NoDup l.*1 ->
-    (* the snapshot is of the current readers *)
-    (forall t, t ∈ Rs <-> rds m t) ->
-    (* every entry written holds it *)
-    (forall p, p ∈ l -> p.2 = Rs) ->
-    (* every detached node is written *)
-    (forall o t, (obsv (to_LState_t m Og U T F) o (Ounlk t)
-                  \/ obsv (to_LState_t m Og U T F) o (Ofree t)) -> (o, Rs) ∈ l) ->
+    (* every node stamped is stamped with the current epoch *)
+    (forall p, p ∈ l -> p.2 = g) ->
+    (* every detached node is stamped *)
+    (forall o t, (obsv (to_LState_t m Og U T (e_F (mkE g Rg St))) o (Ounlk t)
+                  \/ obsv (to_LState_t m Og U T (e_F (mkE g Rg St))) o (Ofree t))
+                 -> (o, g) ∈ l) ->
     (* and nothing else is *)
     (forall p, p ∈ l -> exists t,
-        obsv (to_LState_t m Og U T F) p.1 (Ounlk t)
-        \/ obsv (to_LState_t m Og U T F) p.1 (Ofree t)) ->
-    (* the thread holds, or may claim, every entry it writes *)
-    ([∗ list] p ∈ l, (∃ s, fl_ctl γf p.1 s) ∨ ⌜F !! p.1 = None⌝) -∗
-    phys m -∗ tobs_auth γo Og -∗ fl_auth γf F -∗
+        obsv (to_LState_t m Og U T (e_F (mkE g Rg St))) p.1 (Ounlk t)
+        \/ obsv (to_LState_t m Og U T (e_F (mkE g Rg St))) p.1 (Ofree t)) ->
+    ([∗ list] p ∈ l, (∃ s, fl_ctl γf p.1 s) ∨ ⌜St !! p.1 = None⌝) -∗
+    phys m -∗ tobs_auth γo Og -∗ fl_auth γf St -∗
     (phys m ==∗ phys (sync_start_ms m)) -∗
     |==> phys (sync_start_ms m)
          ∗ tobs_auth γo Og
-         ∗ fl_auth γf (ins_list F l)
+         ∗ fl_auth γf (ins_list St l)
          ∗ ([∗ list] p ∈ l, fl_ctl γf p.1 p.2)
          ∗ ⌜WellFormed FType
-              (to_LState_t (sync_start_ms m) Og U T (ins_list F l))⌝.
+              (to_LState_t (sync_start_ms m) Og U T
+                 (e_F (mkE (S g) Rg (ins_list St l))))⌝.
   Proof.
-    iIntros (Hwf Hfld Hnd Hsnap Hval Hcov Hon) "Hfrags Hp Ho Hf Hstep".
+    iIntros (Hwf Hfld HEWF HRR Hnd Hval Hcov Hon) "Hfrags Hp Ho Hf Hstep".
     iMod ("Hstep" with "Hp") as "Hp".
     iMod (fl_upd_list with "Hfrags Hf") as "[Hf Hfrags]"; [exact Hnd |].
     iModIntro. iFrame. iPureIntro.
-    eapply (sync_start_preserves_WellFormed FType m Og U T F (ins_list F l) Rs);
-      [exact Hsnap | | | | exact Hwf].
-    - intros o s0 Hlk.
+    (* every stamp in the new map is the current epoch: the ones written are,
+       and the ones already there were at detached nodes, so they were
+       rewritten *)
+    assert (Hallg : forall o e, ins_list St l !! o = Some e -> e = g).
+    { intros o e Hlk.
       destruct (ins_list_inv _ _ _ _ Hlk) as [Hin | [Hni Hold]].
-      + exact (Hval (o, s0) Hin).
-      + exfalso. apply Hni.
-        assert (Hfl : flist (to_LState_t m Og U T F) o
-                      = Some (fun t => t ∈ s0)) by (simpl; by rewrite Hold).
+      - exact (Hval (o, e) Hin).
+      - exfalso. apply Hni.
+        assert (Hfl : flist (to_LState_t m Og U T (e_F (mkE g Rg St))) o
+                      = Some (fun t => t ∈ e_snapshot (mkE g Rg St) e)).
+        { simpl. unfold e_F. by rewrite lookup_fmap Hold. }
         destruct (Hfld o _ Hfl) as [t Hdet].
-        exact (list_elem_of_fmap_2 fst l (o, Rs) (Hcov o t Hdet)).
-    - intros o t Hdet. exact (ins_list_in F l o Rs (Hcov o t Hdet)).
-    - intros o s0 Hlk.
-      destruct (ins_list_inv _ _ _ _ Hlk) as [Hin | [_ Hold]].
-      + exact (Hon (o, s0) Hin).
-      + assert (Hfl : flist (to_LState_t m Og U T F) o
-                      = Some (fun t => t ∈ s0)) by (simpl; by rewrite Hold).
+        exact (list_elem_of_fmap_2 fst l (o, g) (Hcov o t Hdet)). }
+    (* and the snapshot at the current epoch is every registered reader *)
+    assert (Hsnapg : e_snapshot (mkE (S g) Rg (ins_list St l)) g
+                     = dom (ereg (mkE g Rg St))).
+    { apply set_eq. intros t. rewrite e_snapshot_elem elem_of_dom. simpl.
+      split; [by intros [e' [H _]] | intros [e' H]; exists e'; split;
+        [exact H | exact (proj2 HEWF t e' H)]]. }
+    eapply (sync_start_preserves_WellFormed FType m Og U T
+              (e_F (mkE g Rg St)) (e_F (mkE (S g) Rg (ins_list St l)))
+              (dom (ereg (mkE g Rg St))));
+      [| | | | exact Hwf].
+    - intros t. rewrite elem_of_dom. split.
+      + intros [e' H]. apply HRR. exists e'. by apply (mkE_reg g Rg St t e').
+      + intros Hrd. destruct (proj1 (HRR t) Hrd) as [e' H].
+        exists e'. by apply (mkE_reg g Rg St t e').
+    - intros o s0 Hlk. unfold e_F in Hlk. rewrite lookup_fmap in Hlk.
+      apply fmap_Some in Hlk as [e [E Hq]].
+      rewrite Hq (Hallg o e E). exact Hsnapg.
+    - intros o t Hdet.
+      assert (Hin : (o, g) ∈ l) by exact (Hcov o t Hdet).
+      destruct (ins_list_in St l o g Hin) as [v' Hv'].
+      exists (e_snapshot (mkE (S g) Rg (ins_list St l)) v').
+      unfold e_F. by rewrite lookup_fmap Hv'.
+    - intros o s0 Hlk. unfold e_F in Hlk. rewrite lookup_fmap in Hlk.
+      apply fmap_Some in Hlk as [e [E Hq]].
+      destruct (ins_list_inv _ _ _ _ E) as [Hin | [_ Hold]].
+      + exact (Hon (o, e) Hin).
+      + assert (Hfl : flist (to_LState_t m Og U T (e_F (mkE g Rg St))) o
+                      = Some (fun t => t ∈ e_snapshot (mkE g Rg St) e)).
+        { simpl. unfold e_F. by rewrite lookup_fmap Hold. }
         exact (Hfld o _ Hfl).
   Qed.
 
@@ -1635,7 +1675,7 @@ Section sync_stop_step.
   Context (FType : FName -> FieldKind).
   Context (phys : MState -> iProp Σ).
 
-  Lemma sync_stop_update γo γf m Og U T F lw
+  Lemma sync_stop_update γo γf m Og U T F St lw
         (l : list ((Loc * TID) * gset obs)) :
     WellFormed FType (to_LState_t m Og U T F) ->
     ObsWF Og ->
@@ -1650,11 +1690,11 @@ Section sync_stop_step.
     (forall o sg, Og !! (o, lw) = Some sg ->
         ((o, lw), set_map sync_obs sg) ∈ l) ->
     ([∗ list] p ∈ l, (∃ s, tobs_ctl γo p.1.1 p.1.2 s) ∨ ⌜Og !! p.1 = None⌝) -∗
-    phys m -∗ tobs_auth γo Og -∗ fl_auth γf F -∗
+    phys m -∗ tobs_auth γo Og -∗ fl_auth γf St -∗
     (phys m ==∗ phys (sync_stop_ms m)) -∗
     |==> phys (sync_stop_ms m)
          ∗ tobs_auth γo (ins_list Og l)
-         ∗ fl_auth γf F
+         ∗ fl_auth γf St
          ∗ ([∗ list] p ∈ l, tobs_ctl γo p.1.1 p.1.2 p.2)
          ∗ ⌜ObsWF (ins_list Og l)⌝
          ∗ ⌜WellFormed FType
@@ -1741,7 +1781,7 @@ Section write_begin_step.
   Context (FType : FName -> FieldKind).
   Context (phys : MState -> iProp Σ).
 
-  Lemma write_begin_update γo γf m Og U T F lw
+  Lemma write_begin_update γo γf m Og U T F St lw
         (l : list ((Loc * TID) * gset obs)) :
     WellFormed FType (to_LState_t m Og U T F) ->
     ObsWF Og ->
@@ -1766,11 +1806,11 @@ Section write_begin_step.
     (forall p ob, p ∈ l -> ob ∈ p.2 ->
         ob = Oiter lw \/ (exists sg, Og !! p.1 = Some sg /\ ob ∈ sg)) ->
     ([∗ list] p ∈ l, (∃ s, tobs_ctl γo p.1.1 p.1.2 s) ∨ ⌜Og !! p.1 = None⌝) -∗
-    phys m -∗ tobs_auth γo Og -∗ fl_auth γf F -∗
+    phys m -∗ tobs_auth γo Og -∗ fl_auth γf St -∗
     (phys m ==∗ phys (write_begin_ms m lw)) -∗
     |==> phys (write_begin_ms m lw)
          ∗ tobs_auth γo (ins_list Og l)
-         ∗ fl_auth γf F
+         ∗ fl_auth γf St
          ∗ ([∗ list] p ∈ l, tobs_ctl γo p.1.1 p.1.2 p.2)
          ∗ ⌜ObsWF (ins_list Og l)⌝
          ∗ ⌜WellFormed FType
@@ -1954,46 +1994,47 @@ Section read_end_step.
   Context (FType : FName -> FieldKind).
   Context (phys : MState -> iProp Σ).
 
-  Lemma read_end_update γo γf m Og U T F t
-        (l : list ((Loc * TID) * gset obs)) (lF : list (Loc * gset TID)) :
-    WellFormed FType (to_LState_t m Og U T F) ->
+  (** ReadEnd, and it is now a thread-local step.  The departing reader clears
+      its own registration; the free list is not touched, because the snapshots
+      it appears in are derived from that registration.  [mkE_F_end] is the
+      equation -- what the clearing does to the derived free list is exactly
+      the published rule's [read_end_F]. *)
+  Lemma read_end_update γo γe g Rg m Og U T St t e
+        (l : list ((Loc * TID) * gset obs)) :
+    WellFormed FType (to_LState_t m Og U T (e_F (mkE g Rg St))) ->
     ObsWF Og ->
     rds m t ->
-    (* the observation retirement *)
+    (* the observation retirement, unchanged from the snapshot version *)
     NoDup l.*1 ->
     (forall p, p ∈ l -> p.1.2 = t) ->
     (forall p, p ∈ l -> exists sg, Og !! p.1 = Some sg
         /\ (forall ob, ob ∈ p.2 <-> (ob = Oroot /\ Oroot ∈ sg))) ->
     (forall o sg, Og !! (o, t) = Some sg -> exists v, ((o, t), v) ∈ l) ->
-    (* and the free-list one *)
-    NoDup lF.*1 ->
-    (forall p, p ∈ lF -> exists s, F !! p.1 = Some s /\ p.2 = s ∖ {[t]}) ->
-    (forall o s, F !! o = Some s -> (o, s ∖ {[t]}) ∈ lF) ->
     ([∗ list] p ∈ l, (∃ s, tobs_ctl γo p.1.1 p.1.2 s) ∨ ⌜Og !! p.1 = None⌝) -∗
-    ([∗ list] p ∈ lF, (∃ s, fl_ctl γf p.1 s) ∨ ⌜F !! p.1 = None⌝) -∗
-    phys m -∗ tobs_auth γo Og -∗ fl_auth γf F -∗
+    (* and the reader's own cell, which is the whole of the free-list half *)
+    reg_cell γe t (Some e) -∗
+    phys m -∗ tobs_auth γo Og -∗ reg_auth γe Rg -∗
     (phys m ==∗ phys (read_end_ms m t)) -∗
     |==> phys (read_end_ms m t)
          ∗ tobs_auth γo (ins_list Og l)
-         ∗ fl_auth γf (read_end_F F t)
+         ∗ reg_auth γe (<[t := None]> Rg)
+         ∗ reg_cell γe t None
          ∗ ([∗ list] p ∈ l, tobs_ctl γo p.1.1 p.1.2 p.2)
-         ∗ ([∗ list] p ∈ lF, fl_ctl γf p.1 p.2)
          ∗ ⌜ObsWF (ins_list Og l)⌝
          ∗ ⌜WellFormed FType
               (to_LState_t (read_end_ms m t) (ins_list Og l)
-                 (fun x t' => U x t' \/ t' = t) T (read_end_F F t))⌝.
+                 (fun x t' => U x t' \/ t' = t) T
+                 (e_F (mkE g (<[t := None]> Rg) St)))⌝.
   Proof.
-    iIntros (Hwf Hobs Hrd Hnd Hkey Hval Hcov HFnd HFval HFcov)
-            "Hog Hfl Hp Ho Hf Hstep".
-    assert (Heq : ins_list F lF = read_end_F F t)
-      by exact (ins_list_read_end F t lF HFnd HFval HFcov).
+    iIntros (Hwf Hobs Hrd Hnd Hkey Hval Hcov) "Hog Hcell Hp Ho Hr Hstep".
     iMod ("Hstep" with "Hp") as "Hp".
     iMod (tobs_upd_list with "Hog Ho") as "[Ho Hog]"; [exact Hnd |].
-    iMod (fl_upd_list with "Hfl Hf") as "[Hf Hfl]"; [exact HFnd |].
-    iModIntro. rewrite -Heq. iFrame. iPureIntro. rewrite Heq. split.
+    iMod (reg_cell_update _ _ _ _ None with "Hr Hcell") as "[Hr Hcell]".
+    iModIntro. iFrame. iPureIntro. split.
     - exact (retire_ObsWF Og l Hobs Hval).
-    - apply (read_end_preserves_WellFormed FType m Og (ins_list Og l)
-               U (fun x t' => U x t' \/ t' = t) T F t);
+    - rewrite mkE_F_end.
+      apply (read_end_preserves_WellFormed FType m Og (ins_list Og l)
+               U (fun x t' => U x t' \/ t' = t) T (e_F (mkE g Rg St)) t);
         [| | | | | exact Hrd | exact Hwf].
       + intros o ob Htid. exact (retire_self Og l t _ _ _ _ o ob
                                    Hobs Hnd Hval Hcov Htid).
@@ -2019,7 +2060,7 @@ Section write_end_step.
   Context (FType : FName -> FieldKind).
   Context (phys : MState -> iProp Σ).
 
-  Lemma write_end_update γo γf m Og U T F lw
+  Lemma write_end_update γo γf m Og U T F St lw
         (l : list ((Loc * TID) * gset obs)) :
     WellFormed FType (to_LState_t m Og U T F) ->
     ObsWF Og ->
@@ -2031,11 +2072,11 @@ Section write_end_step.
         /\ (forall ob, ob ∈ p.2 <-> (ob = Oroot /\ Oroot ∈ sg))) ->
     (forall o sg, Og !! (o, lw) = Some sg -> exists v, ((o, lw), v) ∈ l) ->
     ([∗ list] p ∈ l, (∃ s, tobs_ctl γo p.1.1 p.1.2 s) ∨ ⌜Og !! p.1 = None⌝) -∗
-    phys m -∗ tobs_auth γo Og -∗ fl_auth γf F -∗
+    phys m -∗ tobs_auth γo Og -∗ fl_auth γf St -∗
     (phys m ==∗ phys (write_end_ms m)) -∗
     |==> phys (write_end_ms m)
          ∗ tobs_auth γo (ins_list Og l)
-         ∗ fl_auth γf F
+         ∗ fl_auth γf St
          ∗ ([∗ list] p ∈ l, tobs_ctl γo p.1.1 p.1.2 p.2)
          ∗ ⌜ObsWF (ins_list Og l)⌝
          ∗ ⌜WellFormed FType
@@ -2619,39 +2660,18 @@ End stackghost.
 Print Assumptions sv_agree.
 
 Section physical.
-  Context `{!physG Σ, !readerG Σ, !heapG Σ, !lockG Σ, !stackG Σ}.
+  Context `{!physG Σ, !heapG Σ, !lockG Σ, !stackG Σ}.
 
   (** The readers, as the physical state's own component: a finite set with
       the authority over the tokens.  Every action that does not touch [R]
       carries it across unchanged, which is what [rdown_same] says. *)
-  (** The second clause is the resource-level form of ``a thread is in the
-      write protocol or in the read protocol, never both'': the lock holder has
-      no reader cell at all.  WNR says only that the writer is not an *active*
-      reader, which is not enough for ReadBegin -- at the moment a thread
-      enters, WNR is satisfied by its being outside, and says nothing about
-      whether it is the writer.  Holding a cell is what says it is not. *)
-  Definition rdown (γd : gname) (m : MState) : iProp Σ :=
-    ∃ M, ⌜RepresentsR (rds m) M⌝
-         ∗ ⌜forall t, lk m = Some t -> M !! t = None⌝
-         ∗ rd_auth γd M.
-
-  Lemma rdown_same γd m m' :
-    rds m' = rds m -> lk m' = lk m -> rdown γd m -∗ rdown γd m'.
-  Proof.
-    iIntros (He Hl) "H". iDestruct "H" as (M) "(%HR & %HL & Ha)".
-    iExists M. iFrame. iPureIntro. rewrite He Hl. by split.
-  Qed.
-
-  Definition phys (γm γh γl γs γd : gname) (root : Loc) (fs : list FName)
+  Definition phys (γm γh γl γs : gname) (root : Loc) (fs : list FName)
       (m : MState) : iProp Σ :=
     own γm (Excl (m : leibnizO MState))
     ∗ lk_auth γl (lk m)
     ∗ ⌜rt m = root⌝
     ∗ (∃ H, ⌜Represents (hp m) H⌝ ∗ ⌜HeapShape fs (hp m)⌝ ∗ hp_auth γh H)
-    ∗ (∃ S, ⌜RepresentsS (stk m) S⌝ ∗ stk_auth γs S)
-    (* the read side: the active readers, with one token each, and BR *)
-    ∗ rdown γd m
-    ∗ ⌜forall t, bnd m t -> rds m t⌝.
+    ∗ (∃ S, ⌜RepresentsS (stk m) S⌝ ∗ stk_auth γs S).
 
   Lemma phys_rest γm m m' :
     own γm (Excl (m : leibnizO MState))
@@ -2661,67 +2681,59 @@ Section physical.
     by apply cmra_update_exclusive.
   Qed.
 
-  (** A step that leaves the machine state's five owned components alone.
-      Before the read side existed this lemma let [R] and [B] change freely,
-      which was the hole: nothing in the resource reading said who may move a
-      thread in or out of either.  Now they are owned, so they are named here
-      and the steps that do change them are the four below. *)
-  Lemma phys_ctrl γm γh γl γs γd root fs m m' :
+  (** A step that leaves the heap, the stack, the lock and the root alone: the
+      reader and bounding sets are not [phys]'s any more -- they are the
+      invariant's registrations -- so the six control actions are this lemma
+      plus a ghost step on those. *)
+  Lemma phys_ctrl γm γh γl γs root fs m m' :
     hp m' = hp m -> stk m' = stk m -> lk m' = lk m -> rt m' = rt m ->
-    rds m' = rds m -> (forall t, bnd m' t -> rds m' t) ->
-    phys γm γh γl γs γd root fs m ==∗ phys γm γh γl γs γd root fs m'.
+    phys γm γh γl γs root fs m ==∗ phys γm γh γl γs root fs m'.
   Proof.
-    iIntros (Hh Hs Hl Hr Hrd Hbd) "(Hm & Hlk & %Hrt & Hhp & Hst & Hrn & %Hbr)".
+    iIntros (Hh Hs Hl Hr) "(Hm & Hlk & %Hrt & Hhp & Hst)".
     iMod (phys_rest with "Hm") as "Hm".
     iDestruct "Hhp" as (H) "(%HR & %HS & Ha)".
     iDestruct "Hst" as (S) "[%HRS Hb]".
-    iDestruct (rdown_same _ m m' Hrd Hl with "Hrn") as "Hrn".
-    iModIntro. rewrite /phys Hl. iFrame "Hm Hlk Hrn".
+    iModIntro. rewrite /phys Hl. iFrame "Hm Hlk".
     iSplitR; [iPureIntro; by rewrite Hr |].
     iSplitL "Ha".
-    { iExists H. iFrame. iPureIntro. rewrite Hh. by split. }
-    iSplitL "Hb".
-    { iExists S. iFrame. iPureIntro. by rewrite Hs. }
-    iPureIntro. exact Hbd.
+    - iExists H. iFrame. iPureIntro. rewrite Hh. by split.
+    - iExists S. iFrame. iPureIntro. by rewrite Hs.
   Qed.
 
   (** A field write: licensed by holding the cell, which is what carries the
       rule's premise about the heap out of the invariant in the first place. *)
-  Lemma phys_write γm γh γl γs γd root fs m o f v v' :
-    phys γm γh γl γs γd root fs m -∗ pt γh o f v ==∗
-    phys γm γh γl γs γd root fs (write_ms m o f v') ∗ pt γh o f v'
+  Lemma phys_write γm γh γl γs root fs m o f v v' :
+    phys γm γh γl γs root fs m -∗ pt γh o f v ==∗
+    phys γm γh γl γs root fs (write_ms m o f v') ∗ pt γh o f v'
     ∗ ⌜hp m o f = Some v⌝.
   Proof.
-    iIntros "(Hm & Hlk & %Hrt & Hhp & Hst & Hrn & %Hbr) Hpt".
+    iIntros "(Hm & Hlk & %Hrt & Hhp & Hst) Hpt".
     iDestruct "Hhp" as (H) "(%HR & %HS & Ha)".
     iDestruct (pt_agree with "Ha Hpt") as %Hag.
     assert (Hcell : hp m o f = Some v) by (rewrite HR; exact Hag).
     iMod (phys_rest _ _ (write_ms m o f v') with "Hm") as "Hm".
     iMod (pt_update with "Ha Hpt") as "[Ha Hpt]".
-    iDestruct (rdown_same _ m (write_ms m o f v') eq_refl eq_refl with "Hrn") as "Hrn".
-    iModIntro. iSplitL "Hm Hlk Ha Hst Hrn"; last first.
+    iModIntro. iSplitL "Hm Hlk Ha Hst"; last first.
     { iFrame "Hpt". by iPureIntro. }
-    rewrite /phys /=. iFrame "Hm Hlk Hst Hrn".
+    rewrite /phys /=. iFrame "Hm Hlk Hst".
     iSplitR; [by iPureIntro |].
-    iSplitL "Ha".
-    { iExists (<[(o, f) := v']> H). iFrame. iPureIntro. split.
-      - by apply Represents_upd.
-      - apply HeapShape_upd; [exact HS | exact (HS o f v Hcell)]. }
-    iPureIntro. exact Hbr.
+    iExists (<[(o, f) := v']> H). iFrame. iPureIntro. split.
+    - by apply Represents_upd.
+    - apply HeapShape_upd; [exact HS | exact (HS o f v Hcell)].
   Qed.
 
   (** Allocation hands the new node's cells to the allocating thread, and
       rebinds the variable. *)
-  Lemma phys_alloc_step γm γh γl γs γd root fs m n x t o0 :
+  Lemma phys_alloc_step γm γh γl γs root fs m n x t o0 :
     NoDup fs ->
     (forall g, hp m n g = None) ->
-    phys γm γh γl γs γd root fs m -∗ sv γs x t o0 ==∗
-    phys γm γh γl γs γd root fs (alloc_ms m n fs x t)
+    phys γm γh γl γs root fs m -∗ sv γs x t o0 ==∗
+    phys γm γh γl γs root fs (alloc_ms m n fs x t)
     ∗ sv γs x t n
     ∗ ([∗ list] p ∈ ((fun f => ((n, f), VNull)) <$> fs),
          pt γh p.1.1 p.1.2 p.2).
   Proof.
-    iIntros (Hnd Hfresh) "(Hm & Hlk & %Hrt & Hhp & Hst & Hrn & %Hbr) Hsv".
+    iIntros (Hnd Hfresh) "(Hm & Hlk & %Hrt & Hhp & Hst) Hsv".
     iMod (phys_rest _ _ (alloc_ms m n fs x t) with "Hm") as "Hm".
     iDestruct "Hhp" as (H) "(%HR & %HS & Ha)".
     iDestruct "Hst" as (S) "[%HRS Hb]".
@@ -2737,47 +2749,41 @@ Section physical.
       by apply NoDup_fmap_2. }
     { intros p Hp. apply list_elem_of_fmap_1 in Hp.
       destruct Hp as [g [-> _]]. simpl. by rewrite -HR. }
-    iDestruct (rdown_same _ m (alloc_ms m n fs x t) eq_refl eq_refl with "Hrn") as "Hrn".
-    iModIntro. rewrite /phys /=. iFrame "Hm Hlk Hsv Hl Hrn".
+    iModIntro. rewrite /phys /=. iFrame "Hm Hlk Hsv Hl".
     iSplitR; [by iPureIntro |].
     iSplitL "Ha".
-    { iExists (ins_list H ((fun f => ((n, f), VNull)) <$> fs)). iFrame.
-      iPureIntro. split; [by apply Represents_alloc | by apply HeapShape_alloc]. }
-    iSplitL "Hb".
-    { iExists (<[(x, t) := n]> S). iFrame. iPureIntro.
-      by apply RepresentsS_upd. }
-    iPureIntro. exact Hbr.
+    - iExists (ins_list H ((fun f => ((n, f), VNull)) <$> fs)). iFrame.
+      iPureIntro. split; [by apply Represents_alloc | by apply HeapShape_alloc].
+    - iExists (<[(x, t) := n]> S). iFrame. iPureIntro.
+      by apply RepresentsS_upd.
   Qed.
 
   (** A binding: the stack changes, nothing else does. *)
-  Lemma phys_bind γm γh γl γs γd root fs m y t o o0 :
-    phys γm γh γl γs γd root fs m -∗ sv γs y t o0 ==∗
-    phys γm γh γl γs γd root fs (bind_ms m y t o) ∗ sv γs y t o.
+  Lemma phys_bind γm γh γl γs root fs m y t o o0 :
+    phys γm γh γl γs root fs m -∗ sv γs y t o0 ==∗
+    phys γm γh γl γs root fs (bind_ms m y t o) ∗ sv γs y t o.
   Proof.
-    iIntros "(Hm & Hlk & %Hrt & Hhp & Hst & Hrn & %Hbr) Hsv".
+    iIntros "(Hm & Hlk & %Hrt & Hhp & Hst) Hsv".
     iMod (phys_rest _ _ (bind_ms m y t o) with "Hm") as "Hm".
     iDestruct "Hhp" as (H) "(%HR & %HS & Ha)".
     iDestruct "Hst" as (S) "[%HRS Hb]".
     iMod (sv_update with "Hb Hsv") as "[Hb Hsv]".
-    iDestruct (rdown_same _ m (bind_ms m y t o) eq_refl eq_refl with "Hrn") as "Hrn".
-    iModIntro. rewrite /phys /=. iFrame "Hm Hlk Hsv Hrn".
+    iModIntro. rewrite /phys /=. iFrame "Hm Hlk Hsv".
     iSplitR; [by iPureIntro |].
     iSplitL "Ha".
-    { iExists H. iFrame. iPureIntro. by split. }
-    iSplitL "Hb".
-    { iExists (<[(y, t) := o]> S). iFrame. iPureIntro.
-      by apply RepresentsS_upd. }
-    iPureIntro. exact Hbr.
+    - iExists H. iFrame. iPureIntro. by split.
+    - iExists (<[(y, t) := o]> S). iFrame. iPureIntro.
+      by apply RepresentsS_upd.
   Qed.
 
   (** Reclamation consumes them. *)
-  Lemma phys_free_step γm γh γl γs γd root fs m d (l : list ((Loc * FName) * Val)) :
+  Lemma phys_free_step γm γh γl γs root fs m d (l : list ((Loc * FName) * Val)) :
     (forall p, p ∈ l -> p.1.1 = d) ->
     (forall f, In f fs -> exists v, ((d, f), v) ∈ l) ->
     ([∗ list] p ∈ l, pt γh p.1.1 p.1.2 p.2) -∗
-    phys γm γh γl γs γd root fs m ==∗ phys γm γh γl γs γd root fs (free_ms m d).
+    phys γm γh γl γs root fs m ==∗ phys γm γh γl γs root fs (free_ms m d).
   Proof.
-    iIntros (Hd Hfs) "Hpts (Hm & Hlk & %Hrt & Hhp & Hst & Hrn & %Hbr)".
+    iIntros (Hd Hfs) "Hpts (Hm & Hlk & %Hrt & Hhp & Hst)".
     iDestruct "Hhp" as (H) "(%HR & %HS & Ha)".
     iDestruct (pt_list_agree with "Ha Hpts") as %Hag.
     (* the node's cells are exactly the declared ones, so [l] covers them *)
@@ -2788,110 +2794,11 @@ Section physical.
       rewrite HR Hw' in Hlk. by injection Hlk as <-. }
     iMod (phys_rest _ _ (free_ms m d) with "Hm") as "Hm".
     iMod (pt_delete_list with "Hpts Ha") as "Ha".
-    iDestruct (rdown_same _ m (free_ms m d) eq_refl eq_refl with "Hrn") as "Hrn".
-    iModIntro. rewrite /phys /=. iFrame "Hm Hlk Hst Hrn".
+    iModIntro. rewrite /phys /=. iFrame "Hm Hlk Hst".
     iSplitR; [by iPureIntro |].
-    iSplitL "Ha".
-    { iExists (del_list H l.*1). iFrame. iPureIntro. split.
-      - by apply (Represents_free_del (hp m) H d l).
-      - by apply HeapShape_free. }
-    iPureIntro. exact Hbr.
-  Qed.
-
-  (** ** The read side
-
-      Four steps, and they are the only ones that move [R] or [B].  Each is
-      where a published rule's effect on the reader and bounding sets lives,
-      and before the token existed none of them could be stated: [phys] said
-      nothing about either set, so any step could have set them to anything. *)
-
-  (** ReadBegin flips the thread's cell.  Its premise -- that the thread is not
-      already a reader -- is now read off the cell it holds, which is the thing
-      a membership token could not supply. *)
-  Lemma phys_read_begin γm γh γl γs γd root fs m t :
-    phys γm γh γl γs γd root fs m -∗ rd_st γd t false
-    ==∗ phys γm γh γl γs γd root fs (read_begin_ms m t) ∗ rd_st γd t true
-        ∗ ⌜~ rds m t⌝ ∗ ⌜forall lw, lk m = Some lw -> lw <> t⌝.
-  Proof.
-    iIntros "(Hm & Hlk & %Hrt & Hhp & Hst & Hrn & %Hbr) Hcell".
-    iDestruct "Hrn" as (M) "(%HRR & %HLK & Hra)".
-    iDestruct (rd_st_agree with "Hra Hcell") as %Hlkc.
-    assert (Hnr : ~ rds m t).
-    { intros Hrd. rewrite (proj1 (HRR t) Hrd) in Hlkc. by injection Hlkc. }
-    iMod (rd_st_update _ _ _ _ true with "Hra Hcell") as "[Hra Hcell]".
-    iMod (phys_rest _ _ (read_begin_ms m t) with "Hm") as "Hm".
-    iModIntro. rewrite /phys /=.
-    iSplitR "Hcell"; last first.
-    { iFrame "Hcell". iPureIntro. split; [exact Hnr |].
-      intros lw Hlw ->. by rewrite (HLK t Hlw) in Hlkc. }
-    iFrame "Hm Hlk Hhp Hst".
-    iSplitR; [by iPureIntro |].
-    iSplitL "Hra".
-    { iExists (<[t := true]> M). iFrame. iPureIntro. split.
-      - intros t'. destruct (decide (t' = t)) as [-> | Hne].
-        + rewrite lookup_insert_eq. split; [done | by right].
-        + rewrite lookup_insert_ne; [| exact (fun Hc => Hne (eq_sym Hc))].
-          split; [intros [Hrd | Hc]; [exact (proj1 (HRR t') Hrd) | done]
-                 | intros Hin; left; exact (proj2 (HRR t') Hin)].
-      - intros t0 Hlk0. rewrite lookup_insert_ne;
-          [exact (HLK t0 Hlk0) | intros ->; by rewrite (HLK t0 Hlk0) in Hlkc]. }
-    iPureIntro. intros t' Hb. left. exact (Hbr t' Hb).
-  Qed.
-
-  (** ReadEnd flips it back, and the cell is what licenses the step: a thread
-      cannot take another thread out of [R].  It also hands back the fact that
-      the thread *was* a reader, which is what RITR is applied to. *)
-  Lemma phys_read_end γm γh γl γs γd root fs m t :
-    phys γm γh γl γs γd root fs m -∗ rd_st γd t true
-    ==∗ phys γm γh γl γs γd root fs (read_end_ms m t) ∗ rd_st γd t false
-        ∗ ⌜rds m t⌝.
-  Proof.
-    iIntros "(Hm & Hlk & %Hrt & Hhp & Hst & Hrn & %Hbr) Hcell".
-    iDestruct "Hrn" as (M) "(%HRR & %HLK & Hra)".
-    iDestruct (rd_st_agree with "Hra Hcell") as %Hlkc.
-    assert (Hr : rds m t) by exact (proj2 (HRR t) Hlkc).
-    iMod (rd_st_update _ _ _ _ false with "Hra Hcell") as "[Hra Hcell]".
-    iMod (phys_rest _ _ (read_end_ms m t) with "Hm") as "Hm".
-    iModIntro. rewrite /phys /=.
-    iSplitR "Hcell"; last first.
-    { iFrame "Hcell". iPureIntro. exact Hr. }
-    iFrame "Hm Hlk Hhp Hst".
-    iSplitR; [by iPureIntro |].
-    iSplitL "Hra".
-    { iExists (<[t := false]> M). iFrame. iPureIntro. split.
-      - intros t'. destruct (decide (t' = t)) as [-> | Hne].
-        + rewrite lookup_insert_eq.
-          split; [by intros [_ Hc] | discriminate].
-        + rewrite lookup_insert_ne; [| exact (fun Hc => Hne (eq_sym Hc))].
-          split; [intros [Hrd _]; exact (proj1 (HRR t') Hrd)
-                 | intros Hin; split; [exact (proj2 (HRR t') Hin) | exact Hne]].
-      - intros t0 Hlk0. rewrite lookup_insert_ne;
-          [exact (HLK t0 Hlk0) | intros ->; by rewrite (HLK t0 Hlk0) in Hlkc]. }
-    iPureIntro. intros t' [Hb Hne]. split; [exact (Hbr t' Hb) | exact Hne].
-  Qed.
-
-  (** SyncStart takes the snapshot.  This is the step that establishes BR, and
-      the only one that does. *)
-  Lemma phys_sync_start γm γh γl γs γd root fs m :
-    phys γm γh γl γs γd root fs m
-    ==∗ phys γm γh γl γs γd root fs (sync_start_ms m).
-  Proof.
-    iIntros "H". iApply (phys_ctrl with "H");
-      [reflexivity | reflexivity | reflexivity | reflexivity | reflexivity |].
-    intros t Hb. exact Hb.
-  Qed.
-
-  (** SyncStop empties it.  The step is licensed by the bounding set already
-      being empty -- which is the wait, not this lemma: nothing here says it
-      ever becomes empty, and [grace_period_stuck] is why that is a real
-      obligation rather than a formality. *)
-  Lemma phys_sync_stop γm γh γl γs γd root fs m :
-    phys γm γh γl γs γd root fs m
-    ==∗ phys γm γh γl γs γd root fs (sync_stop_ms m).
-  Proof.
-    iIntros "H". iApply (phys_ctrl with "H");
-      [reflexivity | reflexivity | reflexivity | reflexivity | reflexivity |].
-    intros t [].
+    iExists (del_list H l.*1). iFrame. iPureIntro. split.
+    - by apply (Represents_free_del (hp m) H d l).
+    - by apply HeapShape_free.
   Qed.
 
 End physical.
@@ -2899,10 +2806,6 @@ End physical.
 Print Assumptions phys_write.
 Print Assumptions phys_alloc_step.
 Print Assumptions phys_free_step.
-Print Assumptions phys_read_begin.
-Print Assumptions phys_read_end.
-Print Assumptions phys_sync_start.
-Print Assumptions phys_sync_stop.
 
 (** * Two steps with nothing left open
 
@@ -2946,64 +2849,80 @@ Lemma FLD_same m m' Og U T F :
 Proof. intros HF o Tr Hfl. exact (HF o Tr Hfl). Qed.
 
 Section atomic.
-  Context `{!rcuG Σ, !physG Σ, !readerG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ,
+  Context `{!rcuG Σ, !physG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ,
             !invGS_gen hlc Σ}.
   Context (FType : FName -> FieldKind).
   Context (root : Loc) (fs : list FName).
 
   (** ** T-Free *)
-  Lemma free_atomic N γm γh γl γs γd γo γf γr E d t sd
+  Lemma free_atomic N γm γh γl γs γo γf γr γe γq E d t (sd : nat)
         (l : list ((Loc * FName) * Val)) :
     ↑N ⊆ E ->
     (forall p, p ∈ l -> p.1.1 = d) ->
     (forall f, In f fs -> exists v, ((d, f), v) ∈ l) ->
-    rcu_invT FType (phys γm γh γl γs γd root fs) N γo γf γr -∗
+    rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr γe γq -∗
     tobs_ctl γo d t {[Ofree t]} -∗
     fl_ctl γf d sd -∗
     ([∗ list] p ∈ l, pt γh p.1.1 p.1.2 p.2)
     ={E}=∗ tobs_ctl γo d t {[Ofree t]}.
   Proof.
     iIntros (HN Hd Hfs) "#Hinv Hobs Hfl Hpts".
-    iInv "Hinv" as (m Og U T F Fr)
-      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf & %HWUW)" "Hclose".
+    iInv "Hinv" as (m Og U T F St Rg gg ww Fr)
+      ">(Hp & Ho & Hf & Hreg & Hwm & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc
+         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm)" "Hclose".
     iDestruct (tobs_ctl_agree with "Ho Hobs") as %Hlk.
     assert (Hfree : obsv (to_LState_t m Og U T F) d (Ofree t)).
     { exists t, {[Ofree t]}. split; [exact Hlk | by apply elem_of_singleton]. }
-    iMod (free_update FType (phys γm γh γl γs γd root fs) γo γf m Og U T F d t sd
-            Hfree Hwf with "Hfl Hp Ho Hf [Hpts]") as "(Hp & Ho & Hf & %Hwf')".
+    subst F.
+    iMod (free_update FType (phys γm γh γl γs root fs) γo γf gg Rg m Og U T St
+            d t sd Hfree Hwf with "Hfl Hp Ho Hf [Hpts]")
+      as "(Hp & Ho & Hf & %Hwf')".
     { iIntros "Hp". by iMod (phys_free_step with "Hpts Hp") as "$". }
-    iMod ("Hclose" with "[Hp Ho Hf Hfr]") as "_".
-    { iNext. iExists (free_ms m d), Og, U, T, (delete d F), Fr. iFrame.
-      iPureIntro. split; [exact HWF | split; [| split; [| split; [| split; [| split]]]]].
-      - by apply FLD_free.
-      - intros o0 t0 Hf0. exact (HWFW o0 t0 Hf0).
+    iMod ("Hclose" with "[Hp Ho Hf Hreg Hwm Hfr]") as "_".
+    { iNext.
+      iExists (free_ms m d), Og, U, T, (e_F (mkE gg Rg (delete d St))),
+              (delete d St), Rg, gg, ww, Fr. iFrame.
+      iPureIntro. split; [exact HWF | split; [| split; [| split; [| split; [| split;
+        [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]]]]].
+      - rewrite mkE_F_free. by apply FLD_free.
+      - rewrite mkE_F_free. intros o0 t0 Hf0. exact (HWFW o0 t0 Hf0).
       - apply RefsRCU_free. exact HRefs.
-      - intros q t0 Hq. exact (HFrc q t0 Hq).
+      - rewrite mkE_F_free. intros q t0 Hq. exact (HFrc q t0 Hq).
       - exact Hwf'.
-      - exact HWUW. }
+      - rewrite mkE_F_free. exact HWUW.
+      - reflexivity.
+      - by apply EWF_del.
+      - exact HRR.
+      - exact HBnd.
+      - exact HLk.
+      - exact HWm. }
     by iModIntro.
   Qed.
 
   (** ** T-ReadBegin, and the first closed triple on the read side
 
-      A thread holding its own reader cell, outside a critical section, enters
-      one.  Nothing else is required of it: the two premises the action lemma
-      carries as hypotheses -- that the thread is not the writer, and that it
-      holds no detaching observation -- are both discharged here rather than
-      assumed.  The first comes from the cell (the lock holder has none), the
-      second from WFreshW and WUNLKW together with the first.  That is what the
-      unguarded form of WUNLK buys, and it is the reason for adding it. *)
-  Lemma read_begin_atomic N γm γh γl γs γd γo γf γr E t :
+      A thread holding its own registration, outside a critical section, enters
+      one -- registering at the current epoch, which is what distinguishes this
+      section from any it ran before.  Nothing else is required of it: both
+      premises the action lemma carries as hypotheses are discharged here.  The
+      first, that the thread is not the writer, comes from the registration
+      itself, since the invariant says the lock holder has none; the second,
+      that it holds no detaching observation, from WFreshW and WUNLKW together
+      with the first. *)
+  Lemma read_begin_atomic N γm γh γl γs γo γf γr γe γq E t :
     ↑N ⊆ E ->
-    rcu_invT FType (phys γm γh γl γs γd root fs) N γo γf γr -∗
-    rd_st γd t false
-    ={E}=∗ rd_st γd t true.
+    rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr γe γq -∗
+    reg_cell γe t None
+    ={E}=∗ ∃ e, reg_cell γe t (Some e).
   Proof.
     iIntros (HN) "#Hinv Hcell".
-    iInv "Hinv" as (m Og U T F Fr)
-      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf
-         & %HWUW)" "Hclose".
-    iMod (phys_read_begin with "Hp Hcell") as "(Hp & Hcell & %Hnr & %Hnw)".
+    iInv "Hinv" as (m Og U T F St Rg gg ww Fr)
+      ">(Hp & Ho & Hf & Hreg & Hwm & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc
+         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm)" "Hclose".
+    iDestruct (reg_cell_agree with "Hreg Hcell") as %Hcell.
+    (* the thread is not the writer, because the lock holder has no cell *)
+    assert (Hnw : forall lw, lk m = Some lw -> lw <> t).
+    { intros lw Hlw Heq. subst lw. by rewrite (HLk t Hlw) in Hcell. }
     assert (Hclean : forall o,
               ~ obsv (to_LState_t m Og U T F) o (Ounlk t)
               /\ ~ obsv (to_LState_t m Og U T F) o (Ofree t)
@@ -3013,18 +2932,66 @@ Section atomic.
         | pose proof (HWUW o t (or_intror Hbad)) as Hlk
         | pose proof (HWFW o t Hbad) as Hlk ];
         exact (Hnw t Hlk eq_refl). }
-    iMod ("Hclose" with "[Hp Ho Hf Hfr]") as "_".
-    { iNext. iExists (read_begin_ms m t), Og, U, T, F, Fr. iFrame.
+    (* the thread is not a reader, so it bounds nothing *)
+    assert (Hnrd : ~ rds m t).
+    { intros Hrd. destruct (proj1 (HRR t) Hrd) as [e' He']. by rewrite Hcell in He'. }
+    iMod (phys_ctrl _ _ _ _ _ _ m (read_begin_ms m t)
+            eq_refl eq_refl eq_refl eq_refl with "Hp") as "Hp".
+    iMod (reg_cell_update _ _ _ _ (Some gg) with "Hreg Hcell") as "[Hreg Hcell]".
+    iMod ("Hclose" with "[Hp Ho Hf Hreg Hwm Hfr]") as "_".
+    { iNext. iExists (read_begin_ms m t), Og, U, T, F, St,
+                     (<[t := Some gg]> Rg), gg, ww, Fr. iFrame.
       iPureIntro.
-      split; [exact HWF | split; [| split; [| split; [| split; [| split]]]]].
+      split; [exact HWF | split; [| split; [| split; [| split; [| split;
+        [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]]]]].
       - exact HFLD.
       - exact HWFW.
       - exact HRefs.
       - exact HFrc.
       - exact (read_begin_preserves_WellFormed FType m Og U T F t
                  Hnw Hclean Hwf).
-      - exact HWUW. }
-    by iModIntro.
+      - exact HWUW.
+      - assert (Hnone : ereg (mkE gg Rg St) !! t = None)
+          by (simpl; by rewrite lookup_omap Hcell).
+        rewrite mkE_begin
+          (e_begin_keeps_the_free_list (mkE gg Rg St) t HEWF Hnone).
+        exact HFeq.
+      - rewrite mkE_begin. by apply EWF_begin.
+      - intros t'. simpl. destruct (decide (t' = t)) as [-> | Hne].
+        + rewrite lookup_insert_eq. split.
+          * intros _. by exists gg.
+          * intros _. by right.
+        + rewrite lookup_insert_ne; [| exact (fun Hc => Hne (eq_sym Hc))].
+          split.
+          * intros [Hrd | Hc]; [exact (proj1 (HRR t') Hrd) | by destruct (Hne Hc)].
+          * intros H. left. exact (proj2 (HRR t') H).
+      - intros t'. simpl. destruct (decide (t' = t)) as [-> | Hne].
+        + split.
+          * intros Hb. exfalso.
+            destruct (proj1 (HBnd t) Hb) as [e' [He' _]].
+            simpl in He'. rewrite lookup_omap Hcell in He'. discriminate He'.
+          * intros [e' [He' Hlt]]. exfalso.
+            simpl in He'. rewrite lookup_omap lookup_insert_eq in He'.
+            simpl in He'. injection He' as <-. exact (Nat.lt_irrefl gg Hlt).
+        + split.
+          * intros Hb. destruct (proj1 (HBnd t') Hb) as [e' [He' Hlt]].
+            exists e'. split; [| exact Hlt]. simpl in He' |- *.
+            rewrite lookup_omap lookup_insert_ne;
+              [| exact (fun Hc => Hne (eq_sym Hc))].
+            by rewrite lookup_omap in He'.
+          * intros [e' [He' Hlt]]. apply (HBnd t'). exists e'.
+            split; [| exact Hlt]. simpl in He' |- *.
+            rewrite lookup_omap lookup_insert_ne in He';
+              [| exact (fun Hc => Hne (eq_sym Hc))].
+            by rewrite lookup_omap.
+      - intros t0 Hlk0. rewrite lookup_insert_ne;
+          [exact (HLk t0 Hlk0) | intros ->; exact (Hnw t0 Hlk0 eq_refl)].
+      - split; [exact (proj1 HWm) |].
+        intros t0 e0 H. destruct (decide (t0 = t)) as [-> | Hne].
+        + rewrite lookup_insert_eq in H. injection H as <-. exact (proj1 HWm).
+        + rewrite lookup_insert_ne in H;
+            [exact (proj2 HWm t0 e0 H) | exact (fun Hc => Hne (eq_sym Hc))]. }
+    iModIntro. by iExists gg.
   Qed.
 
   Print Assumptions read_begin_atomic.
@@ -3032,7 +2999,7 @@ Section atomic.
   (** ** T-WriteFH: a field of a fresh node.  A mutation, with the heap premise
       carried by the cell being written and the unreachability of the fresh
       node derived rather than assumed. *)
-  Lemma write_fresh_atomic N γm γh γl γs γd γo γf γr E lw on f oy x g
+  Lemma write_fresh_atomic N γm γh γl γs γo γf γr γe γq E lw on f oy x g
         sn sy v vy C :
     ↑N ⊆ E ->
     (* the field written is an RCU field: the rules write the structure, and
@@ -3043,7 +3010,7 @@ Section atomic.
     (* the witness that the target is in the heap is a condition on the cell
        map, since the rule only reads it *)
     C !! (oy, g) = Some vy ->
-    rcu_invT FType (phys γm γh γl γs γd root fs) N γo γf γr -∗
+    rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr γe γq -∗
     lk_tok γl lw -∗
     tobs_ctl γo on lw sn -∗
     tobs_ctl γo oy lw sy -∗
@@ -3055,8 +3022,9 @@ Section atomic.
   Proof.
     iIntros (HN Hfrcu Hnr Hyr Hin Hiy Hcy)
             "#Hinv Hlk Hon Hoy Hsv Hcells Hptn".
-    iInv "Hinv" as (m Og U T F Fr)
-      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf & %HWUW)" "Hclose".
+    iInv "Hinv" as (m Og U T F St Rg gg ww Fr)
+      ">(Hp & Ho & Hf & Hreg & Hwm & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc
+         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm)" "Hclose".
     (* the premises, one resource at a time *)
     iDestruct (tobs_ctl_agree with "Ho Hon") as %Hlon.
     iDestruct (tobs_ctl_agree with "Ho Hoy") as %Hloy.
@@ -3064,7 +3032,7 @@ Section atomic.
       by (by exists lw, sn).
     assert (Hit : obsv (to_LState_t m Og U T F) oy (Oiter lw))
       by (by exists lw, sy).
-    iDestruct "Hp" as "(Hm & Hlka & %Hrt & Hhp & Hst & Hrn & %Hbr)".
+    iDestruct "Hp" as "(Hm & Hlka & %Hrt & Hhp & Hst)".
     iDestruct (lk_agree with "Hlka Hlk") as %Hlkm.
     iDestruct "Hst" as (S) "[%HRS Hb]".
     iDestruct (sv_agree with "Hb Hsv") as %Hsvag.
@@ -3087,25 +3055,31 @@ Section atomic.
     assert (Hheap : InHeap (to_LState_t m Og U T F) oy) by (by exists g, vy).
     assert (Hne : oy <> rt m) by (rewrite Hrt; exact Hyr).
     (* reassemble [phys] and take the step *)
-    iAssert (phys γm γh γl γs γd root fs m) with "[Hm Hlka Ha Hb Hrn]" as "Hp".
-    { rewrite /phys. iFrame "Hm Hlka Hrn". iSplitR; [by iPureIntro |].
-      iSplitL "Ha"; [iExists H; by iFrame |].
-      iSplitL "Hb"; [iExists S; by iFrame |]. by iPureIntro. }
+    iAssert (phys γm γh γl γs root fs m) with "[Hm Hlka Ha Hb]" as "Hp".
+    { rewrite /phys. iFrame "Hm Hlka". iSplitR; [by iPureIntro |].
+      iSplitL "Ha"; [iExists H; by iFrame | iExists S; by iFrame]. }
     iMod (phys_write with "Hp Hptn") as "(Hp & Hptn & _)".
     (* the ghost state does not move: the pure action lemma is the whole step *)
     assert (Hwf' : WellFormed FType
                      (to_LState_t (write_ms m on f (VLoc oy)) Og U T F))
       by exact (write_fresh_preserves_WellFormed FType m Og U T F lw on f oy
                   Hlkm Hfr Hit Hunr Hheap Hfl Hne Hwf).
-    iMod ("Hclose" with "[Hp Ho Hf Hfr]") as "_".
-    { iNext. iExists (write_ms m on f (VLoc oy)), Og, U, T, F, Fr. iFrame.
-      iPureIntro. split; [exact HWF | split; [| split; [| split; [| split; [| split]]]]].
+    iMod ("Hclose" with "[Hp Ho Hf Hreg Hwm Hfr]") as "_".
+    { iNext. iExists (write_ms m on f (VLoc oy)), Og, U, T, F, St, Rg, gg, ww, Fr. iFrame.
+      iPureIntro. split; [exact HWF | split; [| split; [| split; [| split; [| split;
+        [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]]]]].
       - by apply (FLD_same m).
       - intros o0 t0 Hf0. exact (HWFW o0 t0 Hf0).
       - apply RefsRCU_upd; [exact HRefs | exact Hfrcu].
       - intros q t0 Hq. exact (HFrc q t0 Hq).
       - exact Hwf'.
-      - exact HWUW. }
+      - exact HWUW.
+      - exact HFeq.
+      - exact HEWF.
+      - exact HRR.
+      - exact HBnd.
+      - exact HLk.
+      - exact HWm. }
     iModIntro. iFrame.
   Qed.
 
@@ -3115,12 +3089,12 @@ Print Assumptions free_atomic.
 Print Assumptions write_fresh_atomic.
 
 Section atomic_link.
-  Context `{!rcuG Σ, !physG Σ, !readerG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ,
+  Context `{!rcuG Σ, !physG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ,
             !invGS_gen hlc Σ}.
   Context (FType : FName -> FieldKind).
   Context (root : Loc) (fs : list FName).
 
-  Lemma link_null_atomic N γm γh γl γs γd γo γf γr E lw op f on rho x f0 sp v
+  Lemma link_null_atomic N γm γh γl γs γo γf γr γe γq E lw op f on rho x f0 sp v
         C :
     ↑N ⊆ E ->
     FType f = RCUField ->
@@ -3130,7 +3104,7 @@ Section atomic_link.
        cell map rather than as separate resources *)
     hstarC C root rho = Some op ->
     (forall g, In g fs -> C !! (on, g) = Some VNull) ->
-    rcu_invT FType (phys γm γh γl γs γd root fs) N γo γf γr -∗
+    rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr γe γq -∗
     lk_tok γl lw -∗
     tobs_ctl γo op lw sp -∗
     tobs_ctl γo on lw {[Ofresh lw]} -∗
@@ -3143,8 +3117,9 @@ Section atomic_link.
   Proof.
     iIntros (HN Hfrcu Hnr Hf0 Hip HpathC Hnull)
             "#Hinv Hlk Hop Hon Hsv Hcells Hptf".
-    iInv "Hinv" as (m Og U T F Fr)
-      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf & %HWUW)" "Hclose".
+    iInv "Hinv" as (m Og U T F St Rg gg ww Fr)
+      ">(Hp & Ho & Hf & Hreg & Hwm & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc
+         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm)" "Hclose".
     iDestruct (tobs_ctl_agree with "Ho Hop") as %Hlop.
     iDestruct (tobs_ctl_agree with "Ho Hon") as %Hlon.
     assert (Hitr : obsv (to_LState_t m Og U T F) op (Oiter lw))
@@ -3152,7 +3127,7 @@ Section atomic_link.
     assert (Hfr : obsv (to_LState_t m Og U T F) on (Ofresh lw))
       by (exists lw, {[Ofresh lw]}; split;
           [exact Hlon | by apply elem_of_singleton]).
-    iDestruct "Hp" as "(Hm & Hlka & %Hrt & Hhp & Hst & Hrn & %Hbr)".
+    iDestruct "Hp" as "(Hm & Hlka & %Hrt & Hhp & Hst)".
     iDestruct (lk_agree with "Hlka Hlk") as %Hlkm.
     iDestruct "Hst" as (S) "[%HRS Hb]".
     iDestruct (sv_agree with "Hb Hsv") as %Hsvag.
@@ -3202,20 +3177,20 @@ Section atomic_link.
     assert (Hrho' : hstar (hp m) (rt m) rho = Some op)
       by (rewrite Hrt; exact Hrho).
     (* reassemble, write, and take the ghost step *)
-    iAssert (phys γm γh γl γs γd root fs m) with "[Hm Hlka Ha Hb Hrn]" as "Hp".
-    { rewrite /phys. iFrame "Hm Hlka Hrn". iSplitR; [by iPureIntro |].
-      iSplitL "Ha"; [iExists H; by iFrame |].
-      iSplitL "Hb"; [iExists S; by iFrame |]. by iPureIntro. }
+    iAssert (phys γm γh γl γs root fs m) with "[Hm Hlka Ha Hb]" as "Hp".
+    { rewrite /phys. iFrame "Hm Hlka". iSplitR; [by iPureIntro |].
+      iSplitL "Ha"; [iExists H; by iFrame | iExists S; by iFrame]. }
     destruct (link_null_pure FType m Og U T F lw op f on rho
                 HWF Hwf Hsole Hlon Hlkm Hitr Hpn Hni Hin Hrt' Hfl Hrho' HU)
       as [HWF' Hwf'].
     iMod (phys_write with "Hp Hptf") as "(Hp & Hptf & _)".
     iMod (tobs_set with "Ho Hon") as "[Ho Hon]".
-    iMod ("Hclose" with "[Hp Ho Hf Hfr]") as "_".
+    iMod ("Hclose" with "[Hp Ho Hf Hreg Hwm Hfr]") as "_".
     { iNext.
       iExists (write_ms m op f (VLoc on)),
-              (<[(on, lw) := {[Oiter lw]}]> Og), U, T, F, Fr.
-      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split; [| split]]]]].
+              (<[(on, lw) := {[Oiter lw]}]> Og), U, T, F, St, Rg, gg, ww, Fr.
+      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split; [| split;
+        [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]]]]].
       - intros o Tr Hfl'. destruct (HFLD o Tr Hfl') as [t0 Hdet].
         exists t0. destruct Hdet as [Hd | Hd];
           [left | right];
@@ -3239,7 +3214,13 @@ Section atomic_link.
       - apply (WUNLKW_ins m _ _ _ _ _ _ _ _ lw);
           [ exact HWUW | reflexivity | exact Hlkm
           | intros t0 [Hz | Hz]; apply elem_of_singleton in Hz;
-            discriminate ]. }
+            discriminate ].
+      - exact HFeq.
+      - exact HEWF.
+      - exact HRR.
+      - exact HBnd.
+      - exact HLk.
+      - exact HWm. }
     iModIntro. iFrame.
   Qed.
 
@@ -3251,14 +3232,14 @@ Section atomic_link.
       resource as before read differently: the thread holds all of the node's
       declared cells, one of them a pointer and the rest null, and the class
       declaration says there are no others. *)
-  Lemma insert_atomic N γm γh γl γs γd γo γf γr E lw op f on oo f4 rho x sp C :
+  Lemma insert_atomic N γm γh γl γs γo γf γr γe γq E lw op f on oo f4 rho x sp C :
     ↑N ⊆ E ->
     on <> root -> In f4 fs ->
     Oiter lw ∈ sp ->
     hstarC C root rho = Some op ->
     (forall g, In g fs ->
        C !! (on, g) = Some (if decide (g = f4) then VLoc oo else VNull)) ->
-    rcu_invT FType (phys γm γh γl γs γd root fs) N γo γf γr -∗
+    rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr γe γq -∗
     lk_tok γl lw -∗
     tobs_ctl γo op lw sp -∗
     tobs_ctl γo on lw {[Ofresh lw]} -∗
@@ -3271,8 +3252,9 @@ Section atomic_link.
   Proof.
     iIntros (HN Hnr Hf4 Hip HpathC Hcell0)
             "#Hinv Hlk Hop Hon Hsv Hcells Hptf".
-    iInv "Hinv" as (m Og U T F Fr)
-      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf & %HWUW)" "Hclose".
+    iInv "Hinv" as (m Og U T F St Rg gg ww Fr)
+      ">(Hp & Ho & Hf & Hreg & Hwm & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc
+         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm)" "Hclose".
     iDestruct (tobs_ctl_agree with "Ho Hop") as %Hlop.
     iDestruct (tobs_ctl_agree with "Ho Hon") as %Hlon.
     assert (Hitr : obsv (to_LState_t m Og U T F) op (Oiter lw))
@@ -3280,7 +3262,7 @@ Section atomic_link.
     assert (Hfr : obsv (to_LState_t m Og U T F) on (Ofresh lw))
       by (exists lw, {[Ofresh lw]}; split;
           [exact Hlon | by apply elem_of_singleton]).
-    iDestruct "Hp" as "(Hm & Hlka & %Hrt & Hhp & Hst & Hrn & %Hbr)".
+    iDestruct "Hp" as "(Hm & Hlka & %Hrt & Hhp & Hst)".
     iDestruct (lk_agree with "Hlka Hlk") as %Hlkm.
     iDestruct "Hst" as (S) "[%HRS Hb]".
     iDestruct (sv_agree with "Hb Hsv") as %Hsvag.
@@ -3332,20 +3314,20 @@ Section atomic_link.
     assert (Hrt' : on <> rt m) by (rewrite Hrt; exact Hnr).
     assert (Hrho' : hstar (hp m) (rt m) rho = Some op)
       by (rewrite Hrt; exact Hrho).
-    iAssert (phys γm γh γl γs γd root fs m) with "[Hm Hlka Ha Hb Hrn]" as "Hp".
-    { rewrite /phys. iFrame "Hm Hlka Hrn". iSplitR; [by iPureIntro |].
-      iSplitL "Ha"; [iExists H; by iFrame |].
-      iSplitL "Hb"; [iExists S; by iFrame |]. by iPureIntro. }
+    iAssert (phys γm γh γl γs root fs m) with "[Hm Hlka Ha Hb]" as "Hp".
+    { rewrite /phys. iFrame "Hm Hlka". iSplitR; [by iPureIntro |].
+      iSplitL "Ha"; [iExists H; by iFrame | iExists S; by iFrame]. }
     destruct (insert_pure FType m Og U T F lw op f on oo f4 rho
                 HWF Hwf Hsole Hlon Hlkm HRefs Hedge Hitr Hpo Hni Hin Hrt' Hfl
                 Hrho' HU) as [HWF' Hwf'].
     iMod (phys_write with "Hp Hptf") as "(Hp & Hptf & _)".
     iMod (tobs_set with "Ho Hon") as "[Ho Hon]".
-    iMod ("Hclose" with "[Hp Ho Hf Hfr]") as "_".
+    iMod ("Hclose" with "[Hp Ho Hf Hreg Hwm Hfr]") as "_".
     { iNext.
       iExists (write_ms m op f (VLoc on)),
-              (<[(on, lw) := {[Oiter lw]}]> Og), U, T, F, Fr.
-      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split; [| split]]]]].
+              (<[(on, lw) := {[Oiter lw]}]> Og), U, T, F, St, Rg, gg, ww, Fr.
+      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split; [| split;
+        [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]]]]].
       - intros o Tr Hfl'. destruct (HFLD o Tr Hfl') as [t0 Hdet].
         exists t0. destruct Hdet as [Hd | Hd];
           [left | right];
@@ -3369,7 +3351,13 @@ Section atomic_link.
       - apply (WUNLKW_ins m _ _ _ _ _ _ _ _ lw);
           [ exact HWUW | reflexivity | exact Hlkm
           | intros t0 [Hz | Hz]; apply elem_of_singleton in Hz;
-            discriminate ]. }
+            discriminate ].
+      - exact HFeq.
+      - exact HEWF.
+      - exact HRR.
+      - exact HBnd.
+      - exact HLk.
+      - exact HWm. }
     iModIntro. iFrame.
   Qed.
 
@@ -3481,12 +3469,12 @@ Section fresh_env.
 End fresh_env.
 
 Section atomic_unlink.
-  Context `{!rcuG Σ, !physG Σ, !readerG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ,
+  Context `{!rcuG Σ, !physG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ,
             !invGS_gen hlc Σ}.
   Context (FType : FName -> FieldKind).
   Context (root : Loc) (fs : list FName).
 
-  Lemma unlink_atomic N γm γh γl γs γd γo γf γr E lw ox f1 oz f2 ow rho
+  Lemma unlink_atomic N γm γh γl γs γo γf γr γe γq E lw ox f1 oz f2 ow rho
         sx sw Fr val C :
     ↑N ⊆ E ->
     Oiter lw ∈ sx -> Oiter lw ∈ sw ->
@@ -3497,7 +3485,7 @@ Section atomic_unlink.
        rather than a resource taken apart from it *)
     C !! (oz, f2) = Some (VLoc ow) ->
     (forall q g, val q g <> VLoc oz) ->
-    rcu_invT FType (phys γm γh γl γs γd root fs) N γo γf γr -∗
+    rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr γe γq -∗
     lk_tok γl lw -∗
     tobs_ctl γo ox lw sx -∗
     tobs_ctl γo oz lw {[Oiter lw]} -∗
@@ -3512,8 +3500,9 @@ Section atomic_unlink.
   Proof.
     iIntros (HN Hix Hiw HFrC HpathC Hcell2 Hnf)
             "#Hinv Hlk Hox Hoz How Hcells Hpt1 Hfrg".
-    iInv "Hinv" as (m Og U T F Fr0)
-      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf & %HWUW)" "Hclose".
+    iInv "Hinv" as (m Og U T F St Rg gg ww Fr0)
+      ">(Hp & Ho & Hf & Hreg & Hwm & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc
+         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm)" "Hclose".
     iDestruct (fr_agree with "Hfr Hfrg") as %->.
     iDestruct (tobs_ctl_agree with "Ho Hox") as %Hlox.
     iDestruct (tobs_ctl_agree with "Ho Hoz") as %Hloz.
@@ -3525,7 +3514,7 @@ Section atomic_unlink.
           [exact Hloz | by apply elem_of_singleton]).
     assert (Hitw : obsv (to_LState_t m Og U T F) ow (Oiter lw))
       by (by exists lw, sw).
-    iDestruct "Hp" as "(Hm & Hlka & %Hrt & Hhp & Hst & Hrn & %Hbr)".
+    iDestruct "Hp" as "(Hm & Hlka & %Hrt & Hhp & Hst)".
     iDestruct (lk_agree with "Hlka Hlk") as %Hlkm.
     iDestruct "Hhp" as (H) "(%HR & %HS & Ha)".
     iDestruct (cells_agree with "Ha Hcells") as %Hcellag.
@@ -3559,19 +3548,20 @@ Section atomic_unlink.
       exact HUq. }
     assert (Hrho' : hstar (hp m) (rt m) rho = Some ox)
       by (rewrite Hrt; exact Hrho).
-    iAssert (phys γm γh γl γs γd root fs m) with "[Hm Hlka Ha Hst Hrn]" as "Hp".
-    { rewrite /phys. iFrame "Hm Hlka Hst Hrn". iSplitR; [by iPureIntro |].
-      iSplitL "Ha"; [iExists H; by iFrame |]. by iPureIntro. }
+    iAssert (phys γm γh γl γs root fs m) with "[Hm Hlka Ha Hst]" as "Hp".
+    { rewrite /phys. iFrame "Hm Hlka Hst". iSplitR; [by iPureIntro |].
+      iExists H. by iFrame. }
     destruct (unlink_pure FType m Og U T F lw ox f1 oz f2 ow rho
                 HWF Hwf Hloz HRefs Hlkm He1 He2 Hitx Hitz Hitw Hfl Hrho' HU
                 Hnofresh) as [HWF' Hwf'].
     iMod (phys_write with "Hp Hpt1") as "(Hp & Hpt1 & _)".
     iMod (tobs_set with "Ho Hoz") as "[Ho Hoz]".
-    iMod ("Hclose" with "[Hp Ho Hf Hfr]") as "_".
+    iMod ("Hclose" with "[Hp Ho Hf Hreg Hwm Hfr]") as "_".
     { iNext.
       iExists (write_ms m ox f1 (VLoc ow)),
-              (<[(oz, lw) := {[Ounlk lw]}]> Og), U, T, F, Fr.
-      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split; [| split]]]]].
+              (<[(oz, lw) := {[Ounlk lw]}]> Og), U, T, F, St, Rg, gg, ww, Fr.
+      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split; [| split;
+        [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]]]]].
       - intros o Tr Hfl'. destruct (HFLD o Tr Hfl') as [t0 Hdet].
         exists t0. destruct Hdet as [Hd | Hd];
           [left | right];
@@ -3595,7 +3585,13 @@ Section atomic_unlink.
       - apply (WUNLKW_ins m _ _ _ _ _ _ _ _ lw);
           [ exact HWUW | reflexivity | exact Hlkm
           | intros t0 [Hz | Hz]; apply elem_of_singleton in Hz;
-            [ by injection Hz | discriminate ] ]. }
+            [ by injection Hz | discriminate ] ].
+      - exact HFeq.
+      - exact HEWF.
+      - exact HRR.
+      - exact HBnd.
+      - exact HLk.
+      - exact HWm. }
     iModIntro. iFrame.
   Qed.
 
@@ -3611,7 +3607,7 @@ Section atomic_unlink.
       and the node it replaces agree on every field, which is the thread holding
       both nodes' cells with the same values.  Under the class declaration the
       declared fields are all there are, so agreeing on those is agreeing. *)
-  Lemma replace_atomic N γm γh γl γs γd γo γf γr E lw op f oo on rho x f0 sp Fr
+  Lemma replace_atomic N γm γh γl γs γo γf γr γe γq E lw op f oo on rho x f0 sp Fr
         val valo C :
     ↑N ⊆ E ->
     on <> oo -> on <> root -> In f0 fs ->
@@ -3621,7 +3617,7 @@ Section atomic_unlink.
     (forall g, In g fs -> C !! (on, g) = Some (valo g)) ->
     (forall g, In g fs -> C !! (oo, g) = Some (valo g)) ->
     (forall q g, val q g <> VLoc oo) ->
-    rcu_invT FType (phys γm γh γl γs γd root fs) N γo γf γr -∗
+    rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr γe γq -∗
     lk_tok γl lw -∗
     tobs_ctl γo op lw sp -∗
     tobs_ctl γo on lw {[Ofresh lw]} -∗
@@ -3637,8 +3633,9 @@ Section atomic_unlink.
   Proof.
     iIntros (HN Hno Hnr Hf0 Hip HFrC HpathC Hcn0 Hco0 Hnf)
             "#Hinv Hlk Hop Hon Hoo Hsv Hcells Hptf Hfrg".
-    iInv "Hinv" as (m Og U T F Fr0)
-      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf & %HWUW)" "Hclose".
+    iInv "Hinv" as (m Og U T F St Rg gg ww Fr0)
+      ">(Hp & Ho & Hf & Hreg & Hwm & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc
+         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm)" "Hclose".
     iDestruct (fr_agree with "Hfr Hfrg") as %->.
     iDestruct (tobs_ctl_agree with "Ho Hop") as %Hlop.
     iDestruct (tobs_ctl_agree with "Ho Hon") as %Hlon.
@@ -3648,7 +3645,7 @@ Section atomic_unlink.
     assert (Hfr : obsv (to_LState_t m Og U T F) on (Ofresh lw))
       by (exists lw, {[Ofresh lw]}; split;
           [exact Hlon | by apply elem_of_singleton]).
-    iDestruct "Hp" as "(Hm & Hlka & %Hrt & Hhp & Hst & Hrn & %Hbr)".
+    iDestruct "Hp" as "(Hm & Hlka & %Hrt & Hhp & Hst)".
     iDestruct (lk_agree with "Hlka Hlk") as %Hlkm.
     iDestruct "Hst" as (S) "[%HRS Hb]".
     iDestruct (sv_agree with "Hb Hsv") as %Hsvag.
@@ -3721,22 +3718,22 @@ Section atomic_unlink.
     assert (Hrt' : on <> rt m) by (rewrite Hrt; exact Hnr).
     assert (Hrho' : hstar (hp m) (rt m) rho = Some op)
       by (rewrite Hrt; exact Hrho).
-    iAssert (phys γm γh γl γs γd root fs m) with "[Hm Hlka Ha Hb Hrn]" as "Hp".
-    { rewrite /phys. iFrame "Hm Hlka Hrn". iSplitR; [by iPureIntro |].
-      iSplitL "Ha"; [iExists H; by iFrame |].
-      iSplitL "Hb"; [iExists S; by iFrame |]. by iPureIntro. }
+    iAssert (phys γm γh γl γs root fs m) with "[Hm Hlka Ha Hb]" as "Hp".
+    { rewrite /phys. iFrame "Hm Hlka". iSplitR; [by iPureIntro |].
+      iSplitL "Ha"; [iExists H; by iFrame | iExists S; by iFrame]. }
     destruct (replace_pure FType m Og U T F lw op f oo on rho
                 HWF Hwf Hno Hsole Hlon Hloo Hlkm HRefs Hedge Hmir Hitr Hni Hin
                 Hrt' Hfl Hrho' HU Hnofresh Huw) as [HWF' Hwf'].
     iMod (phys_write with "Hp Hptf") as "(Hp & Hptf & _)".
     iMod (tobs_set with "Ho Hoo") as "[Ho Hoo]".
     iMod (tobs_set with "Ho Hon") as "[Ho Hon]".
-    iMod ("Hclose" with "[Hp Ho Hf Hfr]") as "_".
+    iMod ("Hclose" with "[Hp Ho Hf Hreg Hwm Hfr]") as "_".
     { iNext.
       iExists (write_ms m op f (VLoc on)),
               (<[(on, lw) := {[Oiter lw]}]> (<[(oo, lw) := {[Ounlk lw]}]> Og)),
-              U, T, F, Fr.
-      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split; [| split]]]]].
+              U, T, F, St, Rg, gg, ww, Fr.
+      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split; [| split;
+        [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]]]]].
       - intros o Tr Hfl'. destruct (HFLD o Tr Hfl') as [t0 Hdet].
         exists t0. destruct Hdet as [Hd | Hd];
           [left | right];
@@ -3782,7 +3779,13 @@ Section atomic_unlink.
               [ by injection Hz | discriminate ] ]
           | reflexivity | exact Hlkm
           | intros t0 [Hz | Hz]; apply elem_of_singleton in Hz;
-            discriminate ]. }
+            discriminate ].
+      - exact HFeq.
+      - exact HEWF.
+      - exact HRR.
+      - exact HBnd.
+      - exact HLk.
+      - exact HWm. }
     iModIntro. iFrame.
   Qed.
 
@@ -3940,12 +3943,15 @@ Section writerstate.
       + rewrite lookup_insert_ne in Hlk; [| done]. exact (Hrest k' o' Hlk).
   Qed.
 
-  Definition fl_own (γf : gname) (Fl : gmap Loc (gset TID)) : iProp Σ :=
+  (** The writer's free list is stamps now: which threads a snapshot contains
+      is the readers' business, and the writer holding the stamp is what lets
+      it free the node once the grace period past that stamp is complete. *)
+  Definition fl_own (γf : gname) (Fl : gmap Loc nat) : iProp Σ :=
     [∗ map] o ↦ sg ∈ Fl, fl_ctl γf o sg.
 
-  Lemma fl_own_agree γf F Fl :
-    fl_auth γf F -∗ fl_own γf Fl -∗
-    ⌜forall o sg, Fl !! o = Some sg -> F !! o = Some sg⌝.
+  Lemma fl_own_agree γf St Fl :
+    fl_auth γf St -∗ fl_own γf Fl -∗
+    ⌜forall o sg, Fl !! o = Some sg -> St !! o = Some sg⌝.
   Proof.
     iIntros "Ha Hc". rewrite /fl_own.
     iInduction Fl as [|o sg Fl Ho] "IH" using map_ind.
@@ -3974,7 +3980,7 @@ Section writerstate.
 
   Definition writer (γo γs γh γl γf : gname) (t : TID)
       (Sm : gmap (Var * TID) Loc) (Ob : gmap Loc (gset obs))
-      (C : gmap (Loc * FName) Val) (Fl : gmap Loc (gset TID)) : iProp Σ :=
+      (C : gmap (Loc * FName) Val) (Fl : gmap Loc nat) : iProp Σ :=
     lk_tok γl t ∗ stk_own γs Sm ∗ obs_own γo t Ob ∗ cells γh C
     ∗ fl_own γf Fl.
 
@@ -4049,13 +4055,13 @@ Definition RootOK (root : Loc) (t : TID)
     reasoning below needs: five submap facts, extracted once. *)
 
 Record Agrees (t : TID) (S : gmap (Var * TID) Loc) (Og : ObsMap)
-    (H : gmap (Loc * FName) Val) (F : gmap Loc (gset TID)) (lkm : option TID)
+    (H : gmap (Loc * FName) Val) (St : gmap Loc nat) (lkm : option TID)
     (Sm : gmap (Var * TID) Loc) (Ob : gmap Loc (gset obs))
-    (C : gmap (Loc * FName) Val) (Fl : gmap Loc (gset TID)) : Prop := {
+    (C : gmap (Loc * FName) Val) (Fl : gmap Loc nat) : Prop := {
   ag_stk : forall k o, Sm !! k = Some o -> S !! k = Some o;
   ag_obs : forall o sg, Ob !! o = Some sg -> Og !! (o, t) = Some sg;
   ag_cell : forall k v, C !! k = Some v -> H !! k = Some v;
-  ag_fl : forall o sg, Fl !! o = Some sg -> F !! o = Some sg;
+  ag_fl : forall o e, Fl !! o = Some e -> St !! o = Some e;
   ag_lk : lkm = Some t;
 }.
 
@@ -4064,11 +4070,17 @@ Section transfer_pure.
   Variables (root : Loc) (t : TID) (fs : list FName).
   Variables (U : Var -> TID -> Prop).
   Variables (m : MState) (Og : ObsMap) (T : gset TID)
-            (F : gmap Loc (gset TID)).
+            (F : gmap Loc (gset TID)) (St : gmap Loc nat).
+  Variables (Qc : nat -> Prop).
   Variables (H : gmap (Loc * FName) Val) (S : gmap (Var * TID) Loc).
   Variables (Sm : gmap (Var * TID) Loc) (Ob : gmap Loc (gset obs))
-            (C : gmap (Loc * FName) Val) (Fl : gmap Loc (gset TID)).
-  Hypothesis Hag : Agrees t S Og H F (lk m) Sm Ob C Fl.
+            (C : gmap (Loc * FName) Val) (Fl : gmap Loc nat).
+  Hypothesis Hag : Agrees t S Og H St (lk m) Sm Ob C Fl.
+  (** A stamp the thread holds a certificate for names a completed grace
+      period, so its snapshot is empty.  This is the writer's half of the
+      ownership story in [Epochs.v]: the emptiness is a fact it carries, not an
+      entry it owns. *)
+  Hypothesis HQ : forall o e, St !! o = Some e -> Qc e -> F !! o = Some ∅.
   Hypothesis HR  : Represents (hp m) H.
   Hypothesis HRS : RepresentsS (stk m) S.
   Hypothesis Hrt : rt m = root.
@@ -4167,17 +4179,18 @@ Section transfer_pure.
 
   Lemma tr_freeable x :
     DetOK t U (Ofree t) Sm Ob x ->
-    (forall o, Sm !! (x, t) = Some o -> Fl !! o = Some ∅) ->
+    (forall o, Sm !! (x, t) = Some o -> exists e, Fl !! o = Some e /\ Qc e) ->
     D_freeable s t x.
   Proof.
     intros (o & sg & Hstk & Hob & Hin & Hundf) Hfle. exists o.
+    destruct (Hfle o Hstk) as [e [Hfl Hq]].
     repeat apply conj.
     - exact (tr_stk x o Hstk).
     - exact (tr_obs o sg _ Hob Hin).
     - exact (ag_lk _ _ _ _ _ _ _ _ _ _ Hag).
     - simpl. exact Hundf.
     - simpl.
-      rewrite (ag_fl _ _ _ _ _ _ _ _ _ _ Hag o ∅ (Hfle o Hstk)).
+      rewrite (HQ o e (ag_fl _ _ _ _ _ _ _ _ _ _ Hag o e Hfl) Hq).
       exists (fun t' => t' ∈ (∅ : gset TID)). split; [reflexivity |].
       intros t'. by apply not_elem_of_empty.
   Qed.
@@ -4202,16 +4215,18 @@ End transfer_pure.
     second conjunct belongs in an invariant, not in a type. *)
 
 Definition TyOK (root : Loc) (t : TID) (U : Var -> TID -> Prop)
+    (Qc : nat -> Prop)
     (FType : FName -> FieldKind) (fs : list FName)
     (Sm : gmap (Var * TID) Loc) (Ob : gmap Loc (gset obs))
-    (C : gmap (Loc * FName) Val) (Fl : gmap Loc (gset TID))
+    (C : gmap (Loc * FName) Val) (Fl : gmap Loc nat)
     (x : Var) (ty : Ty) : Prop :=
   match ty with
   | TItr rho N => ItrOK root t U Sm Ob C x rho N
   | TFresh N   => FreshOK t U fs Sm Ob C x N
   | TUnlinked  => DetOK t U (Ounlk t) Sm Ob x
   | TFreeable  => DetOK t U (Ofree t) Sm Ob x
-                  /\ (forall o, Sm !! (x, t) = Some o -> Fl !! o = Some ∅)
+                  /\ (forall o, Sm !! (x, t) = Some o ->
+                        exists e, Fl !! o = Some e /\ Qc e)
   | TRoot      => RootOK root t Sm Ob x
   | TUndef     => False
   end.
@@ -4224,22 +4239,23 @@ Definition tyN (ty : Ty) : FieldMap :=
   end.
 
 Definition EnvOK (root : Loc) (t : TID) (U : Var -> TID -> Prop)
+    (Qc : nat -> Prop)
     (FType : FName -> FieldKind) (fs : list FName)
     (Sm : gmap (Var * TID) Loc) (Ob : gmap Loc (gset obs))
-    (C : gmap (Loc * FName) Val) (Fl : gmap Loc (gset TID))
+    (C : gmap (Loc * FName) Val) (Fl : gmap Loc nat)
     (G : Env) : Prop :=
-  forall x ty, In (x, ty) G -> TyOK root t U FType fs Sm Ob C Fl x ty.
+  forall x ty, In (x, ty) G -> TyOK root t U Qc FType fs Sm Ob C Fl x ty.
 
 Section transfer.
-  Context `{!rcuG Σ, !physG Σ, !readerG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ}.
+  Context `{!rcuG Σ, !physG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ}.
   Context (FType : FName -> FieldKind).
 
   (** What the writer holds implies what its type environment says.  This is the
       statement the eight triples were missing: their preconditions are
       resources, and this is the reading under which those resources *are* the
       typing judgement's environment. *)
-  Lemma writer_env γo γs γh γl γf root t fs U Sm Ob C Fl G
-        m Og T F H S :
+  Lemma writer_env γo γs γh γl γf root t fs U Qc Sm Ob C Fl G
+        m Og T F St H S :
     WellFormed FType (to_LState_t m Og U T F) ->
     FLD (to_LState_t m Og U T F) ->
     Represents (hp m) H ->
@@ -4247,13 +4263,14 @@ Section transfer.
     HeapShape fs (hp m) ->
     rt m = root ->
     (forall g, FType g = RCUField -> In g fs) ->
-    EnvOK root t U FType fs Sm Ob C Fl G ->
+    (forall o e, St !! o = Some e -> Qc e -> F !! o = Some ∅) ->
+    EnvOK root t U Qc FType fs Sm Ob C Fl G ->
     hp_auth γh H -∗ stk_auth γs S -∗ tobs_auth γo Og -∗ lk_auth γl (lk m) -∗
-    fl_auth γf F -∗
+    fl_auth γf St -∗
     writer γo γs γh γl γf t Sm Ob C Fl -∗
     ⌜D_env FType (to_LState_t m Og U T F) t G⌝.
   Proof.
-    iIntros (Hwf HFLD HR HRS HS Hrt Hrcu Hok)
+    iIntros (Hwf HFLD HR HRS HS Hrt Hrcu HQ Hok)
             "Hh Hs Ho Hl Hfa (Hlkt & Hsm & Hob & Hc & Hfl)".
     iDestruct (lk_agree with "Hl Hlkt") as %Hlkm.
     iDestruct (cells_agree with "Hh Hc") as %Hcsub.
@@ -4261,7 +4278,7 @@ Section transfer.
     iDestruct (obs_own_agree with "Ho Hob") as %Hosub.
     iDestruct (fl_own_agree with "Hfa Hfl") as %Hflsub.
     iPureIntro.
-    assert (Hag : Agrees t S Og H F (lk m) Sm Ob C Fl)
+    assert (Hag : Agrees t S Og H St (lk m) Sm Ob C Fl)
       by (constructor; assumption).
     intros x ty Hin. destruct ty; simpl.
     - eapply tr_itr; eauto. exact (Hok x _ Hin).
@@ -4304,7 +4321,7 @@ Proof.
     exact (IH o1 Ho1 Hp).
 Qed.
 
-Lemma EnvOK_alloc root t U U2 FType fs Sm Sm' Ob Ob' C C' Fl G x n :
+Lemma EnvOK_alloc root t U U2 Qc FType fs Sm Sm' Ob Ob' C C' Fl G x n :
   (* the scope condition may only shrink: a variable that was in scope stays so *)
   (forall y t', ~ U y t' -> ~ U2 y t') ->
   (* the new location is mentioned nowhere the environment can see *)
@@ -4318,8 +4335,8 @@ Lemma EnvOK_alloc root t U U2 FType fs Sm Sm' Ob Ob' C C' Fl G x n :
   (forall k, k.1 <> n -> C' !! k = C !! k) ->
   (* no field map in the environment names the variable being rebound *)
   (forall y ty f, In (y, ty) G -> tyN ty f <> Some (FVar x)) ->
-  EnvOK root t U FType fs Sm Ob C Fl G ->
-  EnvOK root t U2 FType fs Sm' Ob' C' Fl
+  EnvOK root t U Qc FType fs Sm Ob C Fl G ->
+  EnvOK root t U2 Qc FType fs Sm' Ob' C' Fl
     (List.filter (fun p => negb (Nat.eqb (fst p) x)) G).
 Proof.
   intros HU2 HSn HOn HCn Hrn0 HS HO HC HNx Hok y ty Hin.
@@ -4466,10 +4483,10 @@ Definition ReadsObs (root : Loc) (C : gmap (Loc * FName) Val)
   /\ (forall x ty f z, In (x, ty) G -> tyN ty f = Some (FVar z) ->
         Sm !! (z, t) <> Some o).
 
-Lemma EnvOK_cell root t U FType fs Sm Ob C Fl G k v :
+Lemma EnvOK_cell root t U Qc FType fs Sm Ob C Fl G k v :
   ReadsCell root C Sm t G k ->
-  EnvOK root t U FType fs Sm Ob C Fl G ->
-  EnvOK root t U FType fs Sm Ob (<[k := v]> C) Fl G.
+  EnvOK root t U Qc FType fs Sm Ob C Fl G ->
+  EnvOK root t U Qc FType fs Sm Ob (<[k := v]> C) Fl G.
 Proof.
   intros (HP & HF & HN) Hok y ty Hin. pose proof (Hok y ty Hin) as Hty.
   (* a tracked field of this variable is never the written cell *)
@@ -4516,10 +4533,10 @@ Proof.
   - exact Hty.
 Qed.
 
-Lemma EnvOK_obs root t U FType fs Sm Ob C Fl G o sg' :
+Lemma EnvOK_obs root t U Qc FType fs Sm Ob C Fl G o sg' :
   ReadsObs root C Sm t G o ->
-  EnvOK root t U FType fs Sm Ob C Fl G ->
-  EnvOK root t U FType fs Sm (<[o := sg']> Ob) C Fl G.
+  EnvOK root t U Qc FType fs Sm Ob C Fl G ->
+  EnvOK root t U Qc FType fs Sm (<[o := sg']> Ob) C Fl G.
 Proof.
   intros (HV & HP & HR & HT) Hok y ty Hin. pose proof (Hok y ty Hin) as Hty.
   assert (Hne : forall o0, Sm !! (y, t) = Some o0 -> o <> o0).
@@ -4568,12 +4585,12 @@ Proof.
     intros ->. exact (HR y Hin eq_refl).
 Qed.
 
-Lemma EnvOK_stack root t U FType fs Sm Ob C Fl G k o :
+Lemma EnvOK_stack root t U Qc FType fs Sm Ob C Fl G k o :
   (forall x ty, In (x, ty) G -> k <> (x, t)) ->
   (* nor is the rebound variable the target of a tracked field *)
   (forall x ty f z, In (x, ty) G -> tyN ty f = Some (FVar z) -> k <> (z, t)) ->
-  EnvOK root t U FType fs Sm Ob C Fl G ->
-  EnvOK root t U FType fs (<[k := o]> Sm) Ob C Fl G.
+  EnvOK root t U Qc FType fs Sm Ob C Fl G ->
+  EnvOK root t U Qc FType fs (<[k := o]> Sm) Ob C Fl G.
 Proof.
   intros HK HT Hok y ty Hin. pose proof (Hok y ty Hin) as Hty.
   assert (Hne : <[k := o]> Sm !! (y, t) = Sm !! (y, t))
@@ -4613,9 +4630,9 @@ Qed.
     the claim is checkable rather than asserted.
 
     \textsc{T-UnlinkH} demotes the victim to [unlinked]. *)
-Lemma TyOK_demoted root t U FType fs Sm Ob C Fl x oz :
+Lemma TyOK_demoted root t U Qc FType fs Sm Ob C Fl x oz :
   Sm !! (x, t) = Some oz -> ~ U x t ->
-  TyOK root t U FType fs Sm (<[oz := {[Ounlk t]}]> Ob) C Fl x TUnlinked.
+  TyOK root t U Qc FType fs Sm (<[oz := {[Ounlk t]}]> Ob) C Fl x TUnlinked.
 Proof.
   intros Hstk Hundf. exists oz, {[Ounlk t]}. repeat apply conj;
     [exact Hstk | by rewrite lookup_insert_eq | by apply elem_of_singleton
@@ -4624,15 +4641,16 @@ Qed.
 
 (** \textsc{SyncStop} turns it into [freeable], which also needs the free-list
     entry the thread now holds. *)
-Lemma TyOK_freeable root t U FType fs Sm Ob C Fl x od :
-  Sm !! (x, t) = Some od -> ~ U x t -> Fl !! od = Some ∅ ->
-  TyOK root t U FType fs Sm (<[od := {[Ofree t]}]> Ob) C Fl x TFreeable.
+Lemma TyOK_freeable root t U Qc FType fs Sm Ob C Fl x od e :
+  Sm !! (x, t) = Some od -> ~ U x t -> Fl !! od = Some e -> Qc e ->
+  TyOK root t U Qc FType fs Sm (<[od := {[Ofree t]}]> Ob) C Fl x TFreeable.
 Proof.
-  intros Hstk Hundf Hfl. split.
+  intros Hstk Hundf Hfl Hq. split.
   - exists od, {[Ofree t]}. repeat apply conj;
       [exact Hstk | by rewrite lookup_insert_eq | by apply elem_of_singleton
        | exact Hundf].
-  - intros o' Hstk'. rewrite Hstk in Hstk'. by injection Hstk' as <-.
+  - intros o' Hstk'. rewrite Hstk in Hstk'. injection Hstk' as <-.
+    by exists e.
 Qed.
 
 (** \textsc{T-LinkF-Null} and \textsc{T-Insert} promote a fresh node to an
@@ -4649,7 +4667,7 @@ Proof.
     exact (IH o1 Hp Hc).
 Qed.
 
-Lemma TyOK_promoted root t U FType fs Sm Ob C Fl x on op f rho sg N :
+Lemma TyOK_promoted root t U Qc FType fs Sm Ob C Fl x on op f rho sg N :
   Sm !! (x, t) = Some on -> ~ U x t ->
   Ob !! on = Some sg -> Oiter t ∈ sg ->
   FieldOK t Sm Ob C on N ->
@@ -4657,7 +4675,7 @@ Lemma TyOK_promoted root t U FType fs Sm Ob C Fl x on op f rho sg N :
   (forall rho1 rho2, rho1 ++ rho2 = rho ++ [f] ->
      exists o' sg', hstarC C root rho1 = Some o'
                  /\ Ob !! o' = Some sg' /\ Oiter t ∈ sg') ->
-  TyOK root t U FType fs Sm Ob C Fl x (TItr (rho ++ [f]) N).
+  TyOK root t U Qc FType fs Sm Ob C Fl x (TItr (rho ++ [f]) N).
 Proof.
   intros Hstk Hundf Hob Hit Hfld Hpath Hcell Hpre.
   exists on, sg. repeat apply conj;
@@ -4698,10 +4716,10 @@ Qed.
     does not touch are framed, the ones it does are supplied.  Stating it once
     means each rule names its touched variables and discharges a [TyOK] for
     each, with no filtering. *)
-Lemma EnvOK_step root t U FType fs Sm Ob C Fl touched rest :
-  EnvOK root t U FType fs Sm Ob C Fl rest ->
-  (forall x ty, In (x, ty) touched -> TyOK root t U FType fs Sm Ob C Fl x ty) ->
-  EnvOK root t U FType fs Sm Ob C Fl (touched ++ rest).
+Lemma EnvOK_step root t U Qc FType fs Sm Ob C Fl touched rest :
+  EnvOK root t U Qc FType fs Sm Ob C Fl rest ->
+  (forall x ty, In (x, ty) touched -> TyOK root t U Qc FType fs Sm Ob C Fl x ty) ->
+  EnvOK root t U Qc FType fs Sm Ob C Fl (touched ++ rest).
 Proof.
   intros Hrest Htouched x ty Hin.
   apply in_app_or in Hin. destruct Hin as [Hin | Hin];
@@ -4736,10 +4754,10 @@ Qed.
 (** An environment reading holds of any sub-environment.  Chaining rules needs
     this constantly: a rule's framing hypothesis is about the variables it does
     not touch, which is a sublist of what the previous rule handed back. *)
-Lemma EnvOK_incl root t U FType fs Sm Ob C Fl G G' :
+Lemma EnvOK_incl root t U Qc FType fs Sm Ob C Fl G G' :
   (forall x ty, In (x, ty) G' -> In (x, ty) G) ->
-  EnvOK root t U FType fs Sm Ob C Fl G ->
-  EnvOK root t U FType fs Sm Ob C Fl G'.
+  EnvOK root t U Qc FType fs Sm Ob C Fl G ->
+  EnvOK root t U Qc FType fs Sm Ob C Fl G'.
 Proof. intros Hsub Hok x ty Hin. exact (Hok x ty (Hsub x ty Hin)). Qed.
 
 Print Assumptions EnvOK_incl.
@@ -4842,7 +4860,7 @@ Definition MirrorOK (root : Loc) (C : gmap (Loc * FName) Val)
   (* nor is any of them the node whose field the rule rewrites *)
   /\ (forall x ty, In (x, ty) G -> Sm !! (x, t) <> Some op).
 
-Lemma EnvOK_mirror root t U FType fs Sm Ob C Fl G op f oo on :
+Lemma EnvOK_mirror root t U Qc FType fs Sm Ob C Fl G op f oo on :
   C !! (op, f) = Some (VLoc oo) ->
   (forall g, In g fs -> C !! (on, g) = C !! (oo, g)) ->
   (forall b h, C !! (b, h) = Some (VLoc oo) -> (b, h) = (op, f)) ->
@@ -4851,8 +4869,8 @@ Lemma EnvOK_mirror root t U FType fs Sm Ob C Fl G op f oo on :
      one is fresh *)
   oo <> root -> on <> root ->
   MirrorOK root C Sm t G op f oo on fs ->
-  EnvOK root t U FType fs Sm Ob C Fl G ->
-  EnvOK root t U FType fs Sm
+  EnvOK root t U Qc FType fs Sm Ob C Fl G ->
+  EnvOK root t U Qc FType fs Sm
     (<[on := {[Oiter t]}]> (<[oo := {[Ounlk t]}]> Ob))
     (<[(op, f) := VLoc on]> C) Fl G.
 Proof.
@@ -4961,7 +4979,7 @@ Print Assumptions EnvOK_obs.
 Print Assumptions EnvOK_stack.
 
 Section atomic_alloc.
-  Context `{!rcuG Σ, !physG Σ, !readerG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ,
+  Context `{!rcuG Σ, !physG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ,
             !invGS_gen hlc Σ}.
   Context (FType : FName -> FieldKind).
   Context (root : Loc) (fs : list FName).
@@ -4973,15 +4991,15 @@ Section atomic_alloc.
       which is what allocation is.  The fresh-node environment comes back
       extended by the new node, which is exactly what the next \textsc{T-Replace}
       will consume: the two rules fit together as resources. *)
-  Lemma alloc_typed N γm γh γl γs γd γo γf γr E lw x o0 U Sm Ob C Fl Fr val G :
+  Lemma alloc_typed N γm γh γl γs γo γf γr γe γq E lw x o0 U Qc Sm Ob C Fl Fr val G :
     ↑N ⊆ E ->
     NoDup fs ->
     (forall g, FType g = RCUField -> In g fs) ->
     FrCells Fr fs C val ->
     Sm !! (x, lw) = Some o0 ->
     (forall y ty f, In (y, ty) G -> tyN ty f <> Some (FVar x)) ->
-    EnvOK root lw U FType fs Sm Ob C Fl G ->
-    rcu_invT FType (phys γm γh γl γs γd root fs) N γo γf γr -∗
+    EnvOK root lw U Qc FType fs Sm Ob C Fl G ->
+    rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr γe γq -∗
     writer γo γs γh γl γf lw Sm Ob C Fl -∗
     fr_frag γr Fr
     ={E}=∗ ∃ n,
@@ -4999,7 +5017,7 @@ Section atomic_alloc.
       ∗ ⌜forall k o, Sm !! k = Some o -> o <> n⌝
       ∗ ⌜FrCells (Fr ∪ {[n]}) fs (newcells fs n ∪ C)
            (fun q g => if decide (q = n) then VNull else val q g)⌝
-      ∗ ⌜EnvOK root lw (fun y t => U y t /\ (y, t) <> (x, lw)) FType fs
+      ∗ ⌜EnvOK root lw (fun y t => U y t /\ (y, t) <> (x, lw)) Qc FType fs
            (<[(x, lw) := n]> Sm) (<[n := {[Ofresh lw]}]> Ob)
            (newcells fs n ∪ C) Fl
            ((x, TFresh (fun _ => None))
@@ -5007,10 +5025,11 @@ Section atomic_alloc.
   Proof.
     iIntros (HN Hnd Hrcu HFrC Hstkx HNx Hok) "#Hinv Hw Hfrg".
     iDestruct "Hw" as "(Hlk & Hsm & Hob & Hcells & Hflo)".
-    iInv "Hinv" as (m Og U0 T F Fr0)
-      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf & %HWUW)" "Hclose".
+    iInv "Hinv" as (m Og U0 T F St Rg gg ww Fr0)
+      ">(Hp & Ho & Hf & Hreg & Hwm & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc
+         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm)" "Hclose".
     iDestruct (fr_agree with "Hfr Hfrg") as %->.
-    iDestruct "Hp" as "(Hm & Hlka & %Hrt & Hhp & Hst & Hrn & %Hbr)".
+    iDestruct "Hp" as "(Hm & Hlka & %Hrt & Hhp & Hst)".
     iDestruct (lk_agree with "Hlka Hlk") as %Hlkm.
     iDestruct "Hst" as (S) "[%HRS Hb]".
     iDestruct "Hhp" as (H) "(%HR & %HS & Ha)".
@@ -5055,11 +5074,10 @@ Section atomic_alloc.
                 HWF Hwf Hnone Hlkm Hdef Hundf Hun Hni Hnref Hnr Hfl Hrcu)
       as [HWF' Hwf'].
     (* the physical step, the ghost step, and the enumeration *)
-    iAssert (phys γm γh γl γs γd root fs m) with "[Hm Hlka Ha Hb Hrn]" as "Hp".
-    { rewrite /phys. iFrame "Hm Hlka Hrn". iSplitR; [by iPureIntro |].
-      iSplitL "Ha"; [iExists H; by iFrame |].
-      iSplitL "Hb"; [iExists S; by iFrame |]. by iPureIntro. }
-    iMod (phys_alloc_step _ _ _ _ _ _ _ _ n x lw o0 Hnd Hun with "Hp Hsv")
+    iAssert (phys γm γh γl γs root fs m) with "[Hm Hlka Ha Hb]" as "Hp".
+    { rewrite /phys. iFrame "Hm Hlka". iSplitR; [by iPureIntro |].
+      iSplitL "Ha"; [iExists H; by iFrame | iExists S; by iFrame]. }
+    iMod (phys_alloc_step _ _ _ _ _ _ _ n x lw o0 Hnd Hun with "Hp Hsv")
       as "(Hp & Hsv & Hnew)".
     iMod (tobs_alloc_at with "Ho") as "[Ho Hctl]"; [exact (Hnone lw) |].
     iMod (fr_update _ _ _ (Fr ∪ {[n]}) with "Hfr Hfrg") as "[Hfr Hfrg]".
@@ -5071,11 +5089,12 @@ Section atomic_alloc.
       apply (Hcn k v2 H2). destruct (decide (k.1 = n)) as [Heq | Hne].
       - exact Heq.
       - by rewrite (newcells_other fs n k Hne) in H1. }
-    iMod ("Hclose" with "[Hp Ho Hf Hfr]") as "_".
+    iMod ("Hclose" with "[Hp Ho Hf Hreg Hwm Hfr]") as "_".
     { iNext.
       iExists (alloc_ms m n fs x lw), (<[(n, lw) := {[Ofresh lw]}]> Og),
-              U', T, F, (Fr ∪ {[n]}).
-      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split; [| split]]]]].
+              U', T, F, St, Rg, gg, ww, (Fr ∪ {[n]}).
+      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split; [| split;
+        [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]]]]].
       - intros o Tr Hfl'. destruct (HFLD o Tr Hfl') as [t0 Hdet].
         exists t0. destruct Hdet as [Hd | Hd];
           [left | right];
@@ -5099,7 +5118,13 @@ Section atomic_alloc.
       - apply (WUNLKW_ins m _ _ _ _ _ _ _ _ lw);
           [ exact HWUW | reflexivity | exact Hlkm
           | intros t0 [Hz | Hz]; apply elem_of_singleton in Hz;
-            discriminate ]. }
+            discriminate ].
+      - exact HFeq.
+      - exact HEWF.
+      - exact HRR.
+      - exact HBnd.
+      - exact HLk.
+      - exact HWm. }
     (* the three freshness facts the environment's survival needs, read off the
        thread's own maps because they are submaps of the invariant's *)
     assert (HSn : forall k o, Sm !! k = Some o -> o <> n).
@@ -5130,11 +5155,11 @@ Section atomic_alloc.
         rewrite decide_True; [| reflexivity].
         apply lookup_union_Some_l. exact (newcells_at fs n g Hnd Hg).
     - assert (Hrest : EnvOK root lw
-                (fun y t => U y t /\ (y, t) <> (x, lw)) FType fs
+                (fun y t => U y t /\ (y, t) <> (x, lw)) Qc FType fs
                 (<[(x, lw) := n]> Sm) (<[n := {[Ofresh lw]}]> Ob)
                 (newcells fs n ∪ C) Fl
                 (List.filter (fun p => negb (Nat.eqb (fst p) x)) G)).
-      { apply (EnvOK_alloc root lw U _ _ fs Sm _ Ob _ C _ Fl G x n);
+      { apply (EnvOK_alloc root lw U _ Qc _ fs Sm _ Ob _ C _ Fl G x n);
           [| exact HSn | exact HOn | exact HCn | exact Hnr0 | | | |
            exact HNx | exact Hok].
         - intros y t' Hy [Hc _]. by apply Hy.
@@ -5160,7 +5185,7 @@ Print Assumptions alloc_typed.
 
 
 Section atomic_bind.
-  Context `{!rcuG Σ, !physG Σ, !readerG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ,
+  Context `{!rcuG Σ, !physG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ,
             !invGS_gen hlc Σ}.
   Context (FType : FName -> FieldKind).
   Context (root : Loc) (fs : list FName).
@@ -5174,10 +5199,10 @@ Section atomic_bind.
       [fresh], and FLD then excludes the free-list entry.  Nothing new is
       needed, which is the point of doing it here: with the write side's
       resources in place the binding rules fall out. *)
-  Lemma bind_atomic N γm γh γl γs γd γo γf γr E lw y o o0 sold :
+  Lemma bind_atomic N γm γh γl γs γo γf γr γe γq E lw y o o0 sold :
     ↑N ⊆ E ->
     Oiter lw ∈ sold ->
-    rcu_invT FType (phys γm γh γl γs γd root fs) N γo γf γr -∗
+    rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr γe γq -∗
     lk_tok γl lw -∗
     tobs_ctl γo o lw sold -∗
     sv γs y lw o0
@@ -5185,12 +5210,13 @@ Section atomic_bind.
            ∗ sv γs y lw o.
   Proof.
     iIntros (HN Hip) "#Hinv Hlk Hctl Hsv".
-    iInv "Hinv" as (m Og U0 T F Fr)
-      ">(Hp & Ho & Hf & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc & %Hwf & %HWUW)" "Hclose".
+    iInv "Hinv" as (m Og U0 T F St Rg gg ww Fr)
+      ">(Hp & Ho & Hf & Hreg & Hwm & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc
+         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm)" "Hclose".
     iDestruct (tobs_ctl_agree with "Ho Hctl") as %Hlook.
     assert (Hitr : obsv (to_LState_t m Og U0 T F) o (Oiter lw))
       by (by exists lw, sold).
-    iDestruct "Hp" as "(Hm & Hlka & %Hrt & Hhp & Hst & Hrn & %Hbr)".
+    iDestruct "Hp" as "(Hm & Hlka & %Hrt & Hhp & Hst)".
     iDestruct (lk_agree with "Hlka Hlk") as %Hlkm.
     (* nothing the thread holds an iterator on is detached *)
     assert (Hdet : ~ Detached (to_LState_t m Og U0 T F) o).
@@ -5214,15 +5240,17 @@ Section atomic_bind.
                 lw y o sold
                 HWF Hwf (or_introl Hlkm) Hundf Hdet Hfl Hlook)
       as [HWF' Hwf'].
-    iAssert (phys γm γh γl γs γd root fs m) with "[Hm Hlka Hhp Hst Hrn]" as "Hp".
-    { rewrite /phys. iFrame. by iPureIntro. }
-    iMod (phys_bind _ _ _ _ _ _ _ _ y lw o o0 with "Hp Hsv") as "[Hp Hsv]".
+    iAssert (phys γm γh γl γs root fs m) with "[Hm Hlka Hhp Hst]" as "Hp".
+    { rewrite /phys. by iFrame. }
+    iMod (phys_bind _ _ _ _ _ _ _ y lw o o0 with "Hp Hsv") as "[Hp Hsv]".
     iMod (tobs_set with "Ho Hctl") as "[Ho Hctl]".
-    iMod ("Hclose" with "[Hp Ho Hf Hfr]") as "_".
+    iMod ("Hclose" with "[Hp Ho Hf Hreg Hwm Hfr]") as "_".
     { iNext.
       iExists (bind_ms m y lw o),
-              (<[(o, lw) := sold ∪ {[Oiter lw]}]> Og), U', T, F, Fr.
-      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split; [| split]]]]].
+              (<[(o, lw) := sold ∪ {[Oiter lw]}]> Og), U', T, F, St,
+              Rg, gg, ww, Fr.
+      iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split; [| split;
+        [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]]]]].
       - intros q Tr Hfl'. destruct (HFLD q Tr Hfl') as [t0 Hdt].
         exists t0. destruct Hdt as [Hd | Hd]; [left | right];
           (destruct Hd as [t' [sg [Hl Hin']]];
@@ -5254,7 +5282,13 @@ Section atomic_bind.
             | apply elem_of_singleton in Hz; discriminate
             | apply (HWUW o t0); right; by exists lw, sold
             | apply elem_of_singleton in Hz; discriminate ]. }
-        rewrite Hlkm in Hz'. by injection Hz'. }
+        rewrite Hlkm in Hz'. by injection Hz'.
+      - exact HFeq.
+      - exact HEWF.
+      - exact HRR.
+      - exact HBnd.
+      - exact HLk.
+      - exact HWm. }
     iModIntro. iFrame.
   Qed.
 
@@ -5265,7 +5299,7 @@ Print Assumptions bind_atomic.
 
 
 Section typed_link.
-  Context `{!rcuG Σ, !physG Σ, !readerG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ,
+  Context `{!rcuG Σ, !physG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ,
             !invGS_gen hlc Σ}.
   Context (FType : FName -> FieldKind).
   Context (root : Loc) (fs : list FName).
@@ -5286,8 +5320,8 @@ Section typed_link.
       Nothing here is about RCU.  It is the bookkeeping that connects a rule's
       resources to a rule's types, and it is the same bookkeeping for all five
       mutations. *)
-  Lemma link_null_typed N γm γh γl γs γd γo γf γr E lw x xp op f on rho f0
-        U Sm Ob C Fl G sp v Np :
+  Lemma link_null_typed N γm γh γl γs γo γf γr γe γq E lw x xp op f on rho f0
+        U Qc Sm Ob C Fl G sp v Np :
     ↑N ⊆ E ->
     FType f = RCUField ->
     on <> root -> In f0 fs -> op <> on -> x <> xp ->
@@ -5304,14 +5338,14 @@ Section typed_link.
       (List.filter (fun p => negb (Nat.eqb (fst p) x)) G) on ->
     ReadsCell root C Sm lw
       (List.filter (fun p => negb (Nat.eqb (fst p) x)) G) (op, f) ->
-    EnvOK root lw U FType fs Sm Ob C Fl G ->
-    rcu_invT FType (phys γm γh γl γs γd root fs) N γo γf γr -∗
+    EnvOK root lw U Qc FType fs Sm Ob C Fl G ->
+    rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr γe γq -∗
     writer γo γs γh γl γf lw Sm Ob C Fl -∗
     sv γs x lw on
     ={E}=∗ writer γo γs γh γl γf lw Sm
              (<[on := {[Oiter lw]}]> Ob) (<[(op, f) := VLoc on]> C) Fl
            ∗ sv γs x lw on
-           ∗ ⌜EnvOK root lw U FType fs Sm
+           ∗ ⌜EnvOK root lw U Qc FType fs Sm
                 (<[on := {[Oiter lw]}]> Ob) (<[(op, f) := VLoc on]> C) Fl
                 ((x, TItr (rho ++ [f]) (fun _ => None))
                    :: List.filter (fun p => negb (Nat.eqb (fst p) x)) G)⌝.
@@ -5337,7 +5371,7 @@ Section typed_link.
               delete (op, f) C !! (on, g) = Some VNull).
     { intros g Hg. rewrite lookup_delete_ne; [exact (Hnull g Hg) |].
       intros Hc. injection Hc as Ha Hb. exact (Hpn Ha). }
-    iMod (link_null_atomic FType root fs N γm γh γl γs γd γo γf γr E lw op f on
+    iMod (link_null_atomic FType root fs N γm γh γl γs γo γf γr γe γq E lw op f on
             rho x f0 sp v (delete (op, f) C) HN Hfrcu Hnr Hf0 Hitp
             (hstarC_delete C (op, f) root rho op Hoff HpathC) Hnull'
             with "Hinv Hlk Hop Hon Hsv Hcells Hptf")
@@ -5362,7 +5396,7 @@ Section typed_link.
     iFrame. iPureIntro.
     (* frame the rest of the environment, then give the touched variable its
        new type *)
-    assert (Hframed : EnvOK root lw U FType fs Sm
+    assert (Hframed : EnvOK root lw U Qc FType fs Sm
               (<[on := {[Oiter lw]}]> Ob) (<[(op, f) := VLoc on]> C) Fl
               (List.filter (fun p => negb (Nat.eqb (fst p) x)) G)).
     { apply EnvOK_cell; [exact HRC |].
@@ -5376,7 +5410,7 @@ Section typed_link.
     destruct (Hok xp _ Hin)
       as (op' & sp' & Hstkp' & Hobp' & Hitp' & _ & _ & Hpp & Hprep).
     rewrite Hstkp in Hstkp'. injection Hstkp' as <-.
-    apply (TyOK_promoted root lw U FType fs Sm _ _ Fl x on op f rho
+    apply (TyOK_promoted root lw U Qc FType fs Sm _ _ Fl x on op f rho
              {[Oiter lw]} (fun _ => None)).
     - exact Hstkx.
     - exact Hundf.
@@ -5409,7 +5443,7 @@ End typed_link.
 Print Assumptions link_null_typed.
 
 Section typed_unlink.
-  Context `{!rcuG Σ, !physG Σ, !readerG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ,
+  Context `{!rcuG Σ, !physG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ,
             !invGS_gen hlc Σ}.
   Context (FType : FName -> FieldKind).
   Context (root : Loc) (fs : list FName).
@@ -5426,8 +5460,8 @@ Section typed_unlink.
 
       This is the second of five and it took no new ideas, which is what the
       toolkit was for. *)
-  Lemma unlink_typed N γm γh γl γs γd γo γf γr E lw xx xz xw ox f1 oz f2 ow rho
-        U Sm Ob C Fl Fr val sx sw rest :
+  Lemma unlink_typed N γm γh γl γs γo γf γr γe γq E lw xx xz xw ox f1 oz f2 ow rho
+        U Qc Sm Ob C Fl Fr val sx sw rest :
     ↑N ⊆ E ->
     ox <> oz -> ox <> ow -> oz <> ow ->
     (* what the environment says about the three *)
@@ -5451,14 +5485,14 @@ Section typed_unlink.
     (* the framing conditions for the rest *)
     ReadsObs root C Sm lw rest oz ->
     ReadsCell root C Sm lw rest (ox, f1) ->
-    EnvOK root lw U FType fs Sm Ob C Fl rest ->
-    rcu_invT FType (phys γm γh γl γs γd root fs) N γo γf γr -∗
+    EnvOK root lw U Qc FType fs Sm Ob C Fl rest ->
+    rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr γe γq -∗
     writer γo γs γh γl γf lw Sm Ob C Fl -∗
     fr_frag γr Fr
     ={E}=∗ writer γo γs γh γl γf lw Sm
              (<[oz := {[Ounlk lw]}]> Ob) (<[(ox, f1) := VLoc ow]> C) Fl
            ∗ fr_frag γr Fr
-           ∗ ⌜EnvOK root lw U FType fs Sm
+           ∗ ⌜EnvOK root lw U Qc FType fs Sm
                 (<[oz := {[Ounlk lw]}]> Ob) (<[(ox, f1) := VLoc ow]> C) Fl
                 ([(xx, TItr rho
                      (fun g => if decide (g = f1)
@@ -5492,7 +5526,7 @@ Section typed_unlink.
       pose proof (HFrC q g Hq Hg) as Hv.
       rewrite Ha Hb in Hc1. rewrite Hc1 in Hv.
       injection Hv as Hv. exact (Hnf q g (eq_sym Hv)). }
-    iMod (unlink_atomic FType root fs N γm γh γl γs γd γo γf γr E lw ox f1 oz f2
+    iMod (unlink_atomic FType root fs N γm γh γl γs γo γf γr γe γq E lw ox f1 oz f2
             ow rho sx sw Fr val (delete (ox, f1) C) HN Hitx Hitw HFrC'
             (hstarC_delete C (ox, f1) root rho ox Hoff HpathC) Hc2' Hnf
             with "Hinv Hlk Hox Hoz How Hcells Hpt1 Hfrg")
@@ -5527,10 +5561,10 @@ Section typed_unlink.
                intros Heq. rewrite -Heq in Hp'.
                exact (Hnoz rho1 rho2 Happ Hp').
             -- exact Hit'.
-        + exact (TyOK_demoted root lw U FType fs Sm Ob C Fl xz oz
+        + exact (TyOK_demoted root lw U Qc FType fs Sm Ob C Fl xz oz
                    Hstkz Hundz).
         + (* the node below, promoted to the parent's field *)
-          apply (TyOK_promoted root lw U FType fs Sm _ _ Fl xw ow ox f1 rho
+          apply (TyOK_promoted root lw U Qc FType fs Sm _ _ Fl xw ow ox f1 rho
                    sw (fun _ => None)).
           * exact Hstkw.
           * exact Hundw.
@@ -5582,7 +5616,7 @@ End typed_unlink.
 Print Assumptions unlink_typed.
 
 Section typed_rest.
-  Context `{!rcuG Σ, !physG Σ, !readerG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ,
+  Context `{!rcuG Σ, !physG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ,
             !invGS_gen hlc Σ}.
   Context (FType : FName -> FieldKind).
   Context (root : Loc) (fs : list FName).
@@ -5598,8 +5632,8 @@ Section typed_rest.
       \textsc{T-WriteFH} is the smallest: it changes no observation at all, so
       only the cell framing applies, and the one touched variable stays
       [rcuFresh] with a field added. *)
-  Lemma write_fresh_typed N γm γh γl γs γd γo γf γr E lw x xy on f oy g
-        U Sm Ob C Fl sn sy v vy N0 rest :
+  Lemma write_fresh_typed N γm γh γl γs γo γf γr γe γq E lw x xy on f oy g
+        U Qc Sm Ob C Fl sn sy v vy N0 rest :
     ↑N ⊆ E ->
     FType f = RCUField ->
     on <> root -> oy <> root -> on <> oy ->
@@ -5618,11 +5652,11 @@ Section typed_rest.
        (fun h' => if decide (h' = f) then Some (FVar xy) else N0 h') h = None ->
        C !! (on, h) = Some VNull) ->
     ReadsCell root C Sm lw rest (on, f) ->
-    EnvOK root lw U FType fs Sm Ob C Fl rest ->
-    rcu_invT FType (phys γm γh γl γs γd root fs) N γo γf γr -∗
+    EnvOK root lw U Qc FType fs Sm Ob C Fl rest ->
+    rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr γe γq -∗
     writer γo γs γh γl γf lw Sm Ob C Fl
     ={E}=∗ writer γo γs γh γl γf lw Sm Ob (<[(on, f) := VLoc oy]> C) Fl
-           ∗ ⌜EnvOK root lw U FType fs Sm Ob (<[(on, f) := VLoc oy]> C) Fl
+           ∗ ⌜EnvOK root lw U Qc FType fs Sm Ob (<[(on, f) := VLoc oy]> C) Fl
                 ([(x, TFresh (fun h => if decide (h = f)
                                        then Some (FVar xy) else N0 h))]
                  ++ rest)⌝.
@@ -5642,7 +5676,7 @@ Section typed_rest.
       intros Hcc. injection Hcc as Ha Hb. by apply Hny. }
     iDestruct (big_sepM_lookup_acc _ Sm (x, lw) on Hstk with "Hsm")
       as "[Hsv Hsmback]".
-    iMod (write_fresh_atomic FType root fs N γm γh γl γs γd γo γf γr E lw on f oy
+    iMod (write_fresh_atomic FType root fs N γm γh γl γs γo γf γr γe γq E lw on f oy
             x g sn sy v vy (delete (on, f) C) HN Hfrcu Hnr Hyr Hfr Hity Hcg'
             with "Hinv Hlk Hon Hoy Hsv Hcells Hptn")
       as "(Hlk & Hon & Hoy & Hsv & Hcells & Hptn)".
@@ -5691,8 +5725,8 @@ Section typed_rest.
       fresh node is promoted to the parent's field, and the displaced node
       moves one step further down -- which is the same promotion lemma applied
       to the cell the fresh node already held. *)
-  Lemma insert_typed N γm γh γl γs γd γo γf γr E lw xp x xo op f on oo f4 rho f0
-        U Sm Ob C Fl sp so rest :
+  Lemma insert_typed N γm γh γl γs γo γf γr γe γq E lw xp x xo op f on oo f4 rho f0
+        U Qc Sm Ob C Fl sp so rest :
     ↑N ⊆ E ->
     on <> root -> In f4 fs -> In f0 fs ->
     op <> on -> on <> oo -> op <> oo ->
@@ -5712,12 +5746,12 @@ Section typed_rest.
     (forall rho1 rho2, rho1 ++ rho2 = rho -> hstarC C root rho1 <> Some on) ->
     ReadsObs root C Sm lw rest on ->
     ReadsCell root C Sm lw rest (op, f) ->
-    EnvOK root lw U FType fs Sm Ob C Fl rest ->
-    rcu_invT FType (phys γm γh γl γs γd root fs) N γo γf γr -∗
+    EnvOK root lw U Qc FType fs Sm Ob C Fl rest ->
+    rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr γe γq -∗
     writer γo γs γh γl γf lw Sm Ob C Fl
     ={E}=∗ writer γo γs γh γl γf lw Sm
              (<[on := {[Oiter lw]}]> Ob) (<[(op, f) := VLoc on]> C) Fl
-           ∗ ⌜EnvOK root lw U FType fs Sm
+           ∗ ⌜EnvOK root lw U Qc FType fs Sm
                 (<[on := {[Oiter lw]}]> Ob) (<[(op, f) := VLoc on]> C) Fl
                 ([(xp, TItr rho (fun g => if decide (g = f)
                                           then Some (FVar x) else None));
@@ -5745,7 +5779,7 @@ Section typed_rest.
               = Some (if decide (g = f4) then VLoc oo else VNull)).
     { intros g Hg. rewrite lookup_delete_ne; [exact (Hcells0 g Hg) |].
       intros Hcc. injection Hcc as Ha Hb. by apply Hpn. }
-    iMod (insert_atomic FType root fs N γm γh γl γs γd γo γf γr E lw op f on oo
+    iMod (insert_atomic FType root fs N γm γh γl γs γo γf γr γe γq E lw op f on oo
             f4 rho x sp (delete (op, f) C) HN Hnr Hf4 Hitp
             (hstarC_delete C (op, f) root rho op Hoff HpathC) Hcells'
             with "Hinv Hlk Hop Hon Hsv Hcells Hptf")
@@ -5834,7 +5868,7 @@ Section typed_rest.
         * exact Hnewpath.
         * exact Hprefix'.
       + (* the displaced node, one step further down *)
-        apply (TyOK_promoted root lw U FType fs Sm _ _ Fl xo oo on f4
+        apply (TyOK_promoted root lw U Qc FType fs Sm _ _ Fl xo oo on f4
                  (rho ++ [f]) so (fun _ => None)).
         * exact Hstko.
         * exact Hundo.
@@ -5859,8 +5893,8 @@ Section typed_rest.
       at once: the fresh node is promoted to the parent's field and the node it
       replaces is demoted to \unlk{}.  Two observation entries change, so the
       observation framing applies twice. *)
-  Lemma replace_typed N γm γh γl γs γd γo γf γr E lw xp x xo op f oo on rho f0
-        U Sm Ob C Fl Fr val valo sp rest :
+  Lemma replace_typed N γm γh γl γs γo γf γr γe γq E lw xp x xo op f oo on rho f0
+        U Qc Sm Ob C Fl Fr val valo sp rest :
     ↑N ⊆ E ->
     on <> oo -> on <> root -> In f0 fs ->
     op <> on -> op <> oo ->
@@ -5888,15 +5922,15 @@ Section typed_rest.
     (forall b h, C !! (b, h) = Some (VLoc oo) -> (b, h) = (op, f)) ->
     oo <> root ->
     MirrorOK root C Sm lw rest op f oo on fs ->
-    EnvOK root lw U FType fs Sm Ob C Fl rest ->
-    rcu_invT FType (phys γm γh γl γs γd root fs) N γo γf γr -∗
+    EnvOK root lw U Qc FType fs Sm Ob C Fl rest ->
+    rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr γe γq -∗
     writer γo γs γh γl γf lw Sm Ob C Fl -∗
     fr_frag γr Fr
     ={E}=∗ writer γo γs γh γl γf lw Sm
              (<[on := {[Oiter lw]}]> (<[oo := {[Ounlk lw]}]> Ob))
              (<[(op, f) := VLoc on]> C) Fl
            ∗ fr_frag γr Fr
-           ∗ ⌜EnvOK root lw U FType fs Sm
+           ∗ ⌜EnvOK root lw U Qc FType fs Sm
                 (<[on := {[Oiter lw]}]> (<[oo := {[Ounlk lw]}]> Ob))
                 (<[(op, f) := VLoc on]> C) Fl
                 ([(xp, TItr rho (fun g => if decide (g = f)
@@ -5934,7 +5968,7 @@ Section typed_rest.
       intros Hcc. injection Hcc as Ha Hb.
       pose proof (HFrC q g Hq Hg) as Hv. rewrite Ha Hb in Hcf.
       rewrite Hcf in Hv. injection Hv as Hv. exact (Hnf q g (eq_sym Hv)). }
-    iMod (replace_atomic FType root fs N γm γh γl γs γd γo γf γr E lw op f oo on
+    iMod (replace_atomic FType root fs N γm γh γl γs γo γf γr γe γq E lw op f oo on
             rho x f0 sp Fr val valo (delete (op, f) C) HN Hno Hnr Hf0 Hitp
             HFrC' (hstarC_delete C (op, f) root rho op Hoff HpathC) Hcn' Hco'
             Hnf with "Hinv Hlk Hop Hon Hoo Hsv Hcells Hptf Hfrg")
@@ -5981,7 +6015,7 @@ Section typed_rest.
                         exact (Hnoo rho1 rho2 Happ Hp')].
       - exact Hit'. }
     apply EnvOK_step.
-    - apply (EnvOK_mirror root lw U FType fs Sm Ob C Fl rest op f oo on);
+    - apply (EnvOK_mirror root lw U Qc FType fs Sm Ob C Fl rest op f oo on);
         [exact Hcf | | exact Hsole | intros ->; by apply Hpn
          | exact Hpo | intros ->; by apply Hno
          | exact Hoor | exact Hnr | exact HMir | exact Hrest].
@@ -6001,7 +6035,7 @@ Section typed_rest.
              | by apply elem_of_singleton].
         * exact HpathC'.
         * exact Hprefix.
-      + apply (TyOK_promoted root lw U FType fs Sm _ _ Fl x on op f rho
+      + apply (TyOK_promoted root lw U Qc FType fs Sm _ _ Fl x on op f rho
                  {[Oiter lw]} (fun _ => None)).
         * exact Hstkx.
         * exact Hundx.

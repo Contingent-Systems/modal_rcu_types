@@ -105,7 +105,7 @@ Qed.
 
 (** The entry environment is what the rules will read.  Everything in it is a
     lookup in a concrete map, so the proof is computation. *)
-Lemma G0_ok FType : EnvOK Rt W U0 FType Fs Sm0 Ob0 C0 ∅ G0.
+Lemma G0_ok FType Qc : EnvOK Rt W U0 Qc FType Fs Sm0 Ob0 C0 ∅ G0.
 Proof.
   intros x ty Hin.
   destruct Hin as [Heq | [Heq | [Heq | [Heq | []]]]];
@@ -164,9 +164,10 @@ Print Assumptions G0_ok.
     stated over, and the next rule cannot start. *)
 
 Section bst.
-  Context `{!rcuG Σ, !physG Σ, !readerG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ,
+  Context `{!rcuG Σ, !physG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ,
             !invGS_gen hlc Σ}.
   Context (FType : FName -> FieldKind).
+  Context (Qc : nat -> Prop).
   Hypothesis HFs : forall g, FType g = RCUField -> In g Fs.
   (** The two declared fields are the RCU ones.  With the mutation rules no
       longer assuming that *every* field is an RCU field, this is consistent
@@ -177,9 +178,9 @@ Section bst.
   Definition U1 : Var -> TID -> Prop :=
     fun y t => U0 y t /\ (y, t) <> (vCurrentF, W).
 
-  Lemma bst_alloc N γm γh γl γs γd γo γf γr E :
+  Lemma bst_alloc N γm γh γl γs γo γf γr γe γq E :
     ↑N ⊆ E ->
-    rcu_invT FType (phys γm γh γl γs γd Rt Fs) N γo γf γr -∗
+    rcu_invT FType (phys γm γh γl γs Rt Fs) N γo γf γr γe γq -∗
     writer γo γs γh γl γf W Sm0 Ob0 C0 ∅ -∗
     fr_frag γr ∅
     ={E}=∗ ∃ n,
@@ -191,14 +192,14 @@ Section bst.
           (<[(vCurrentF, W) := n]> Sm0) (<[n := {[Ofresh W]}]> Ob0)
           (newcells Fs n ∪ C0) ∅
       ∗ fr_frag γr ({[n]} : gset Loc)
-      ∗ ⌜EnvOK Rt W U1 FType Fs
+      ∗ ⌜EnvOK Rt W U1 Qc FType Fs
            (<[(vCurrentF, W) := n]> Sm0) (<[n := {[Ofresh W]}]> Ob0)
            (newcells Fs n ∪ C0) ∅
            ((vCurrentF, TFresh (fun _ => None)) :: G0)⌝.
   Proof.
     iIntros (HN) "#Hinv Hw Hfr".
-    iMod (alloc_typed FType Rt Fs N γm γh γl γs γd γo γf γr E W vCurrentF Rt
-            U0 Sm0 Ob0 C0 ∅ ∅ (fun _ _ => VNull) G0 HN
+    iMod (alloc_typed FType Rt Fs N γm γh γl γs γo γf γr γe γq E W vCurrentF Rt
+            U0 Qc Sm0 Ob0 C0 ∅ ∅ (fun _ _ => VNull) G0 HN
             with "Hinv Hw Hfr")
       as (n) "(Hw & Hfr & %Hnr & %Hcn & %Hon & %Hsn & %HFrC & %Hok)".
     { (* the two RCU fields are distinct *)
@@ -211,7 +212,7 @@ Section bst.
     { intros y ty f Hin.
       destruct Hin as [Heq | [Heq | [Heq | [Heq | []]]]];
         injection Heq as Hv1 Hv2; rewrite -Hv2; discriminate. }
-    { exact (G0_ok FType). }
+    { exact (G0_ok FType Qc). }
     iModIntro. iExists n. iFrame.
     (* the empty set the allocation started from, and the filter it applied,
        are both identities here *)
@@ -249,23 +250,23 @@ Section bst.
     destruct Hc as [Hc | Hc]; [discriminate | by apply not_elem_of_nil in Hc].
   Qed.
 
-  Lemma bst_write_right N γm γh γl γs γd γo γf γr E n :
+  Lemma bst_write_right N γm γh γl γs γo γf γr γe γq E n :
     ↑N ⊆ E ->
     n <> Rt ->
     (forall k v, C0 !! k = Some v -> k.1 <> n) ->
     (forall o sg, Ob0 !! o = Some sg -> o <> n) ->
-    rcu_invT FType (phys γm γh γl γs γd Rt Fs) N γo γf γr -∗
+    rcu_invT FType (phys γm γh γl γs Rt Fs) N γo γf γr γe γq -∗
     writer γo γs γh γl γf W
       (<[(vCurrentF, W) := n]> Sm0) (<[n := {[Ofresh W]}]> Ob0)
       (newcells Fs n ∪ C0) ∅ -∗
-    ⌜EnvOK Rt W U1 FType Fs
+    ⌜EnvOK Rt W U1 Qc FType Fs
        (<[(vCurrentF, W) := n]> Sm0) (<[n := {[Ofresh W]}]> Ob0)
        (newcells Fs n ∪ C0) ∅
        ((vCurrentF, TFresh (fun _ => None)) :: G0)⌝
     ={E}=∗ writer γo γs γh γl γf W
              (<[(vCurrentF, W) := n]> Sm0) (<[n := {[Ofresh W]}]> Ob0)
              (<[(n, Rgt) := VLoc LmP]> (newcells Fs n ∪ C0)) ∅
-           ∗ ⌜EnvOK Rt W U1 FType Fs
+           ∗ ⌜EnvOK Rt W U1 Qc FType Fs
                 (<[(vCurrentF, W) := n]> Sm0) (<[n := {[Ofresh W]}]> Ob0)
                 (<[(n, Rgt) := VLoc LmP]> (newcells Fs n ∪ C0)) ∅
                 ([(vCurrentF, TFresh (fun h => if decide (h = Rgt)
@@ -275,8 +276,8 @@ Section bst.
     iIntros (HN Hnr Hcn Hon) "#Hinv Hw %Hok".
     assert (HnL : n <> LmP)
       by (intros ->; by apply (Hon LmP {[Oiter W]} eq_refl)).
-    iMod (write_fresh_typed FType Rt Fs N γm γh γl γs γd γo γf γr E W
-            vCurrentF vLmParent n Rgt LmP Lft U1
+    iMod (write_fresh_typed FType Rt Fs N γm γh γl γs γo γf γr γe γq E W
+            vCurrentF vLmParent n Rgt LmP Lft U1 Qc
             (<[(vCurrentF, W) := n]> Sm0) (<[n := {[Ofresh W]}]> Ob0)
             (newcells Fs n ∪ C0) ∅ {[Ofresh W]} {[Oiter W]} VNull VNull
             (fun _ => None) G0 HN (HFrcu Rgt (or_intror (or_introl eq_refl))) Hnr
@@ -328,7 +329,7 @@ Section bst.
       - intros y ty o Hin Hstk Hc. destruct Hin as
           [Heq | [Heq | [Heq | [Heq | []]]]];
           injection Heq as Hv1 Hv2; rewrite -Hv2; reflexivity. }
-    { apply (EnvOK_incl Rt W U1 FType Fs _ _ _ ∅
+    { apply (EnvOK_incl Rt W U1 Qc FType Fs _ _ _ ∅
                ((vCurrentF, TFresh (fun _ => None)) :: G0));
         [intros y ty Hin; by right | exact Hok]. }
     iModIntro. iFrame. by iPureIntro.
@@ -339,16 +340,16 @@ Section bst.
       [currentF.Left = currentL].  The same rule again, and this time its field
       map is not empty -- the entry written in step two has to be carried
       across, which is what the field-map condition is for. *)
-  Lemma bst_write_left N γm γh γl γs γd γo γf γr E n :
+  Lemma bst_write_left N γm γh γl γs γo γf γr γe γq E n :
     ↑N ⊆ E ->
     n <> Rt ->
     (forall k v, C0 !! k = Some v -> k.1 <> n) ->
     (forall o sg, Ob0 !! o = Some sg -> o <> n) ->
-    rcu_invT FType (phys γm γh γl γs γd Rt Fs) N γo γf γr -∗
+    rcu_invT FType (phys γm γh γl γs Rt Fs) N γo γf γr γe γq -∗
     writer γo γs γh γl γf W
       (<[(vCurrentF, W) := n]> Sm0) (<[n := {[Ofresh W]}]> Ob0)
       (<[(n, Rgt) := VLoc LmP]> (newcells Fs n ∪ C0)) ∅ -∗
-    ⌜EnvOK Rt W U1 FType Fs
+    ⌜EnvOK Rt W U1 Qc FType Fs
        (<[(vCurrentF, W) := n]> Sm0) (<[n := {[Ofresh W]}]> Ob0)
        (<[(n, Rgt) := VLoc LmP]> (newcells Fs n ∪ C0)) ∅
        ([(vCurrentF, TFresh (fun h => if decide (h = Rgt)
@@ -358,7 +359,7 @@ Section bst.
              (<[(vCurrentF, W) := n]> Sm0) (<[n := {[Ofresh W]}]> Ob0)
              (<[(n, Lft) := VLoc CurL]>
                 (<[(n, Rgt) := VLoc LmP]> (newcells Fs n ∪ C0))) ∅
-           ∗ ⌜EnvOK Rt W U1 FType Fs
+           ∗ ⌜EnvOK Rt W U1 Qc FType Fs
                 (<[(vCurrentF, W) := n]> Sm0) (<[n := {[Ofresh W]}]> Ob0)
                 (<[(n, Lft) := VLoc CurL]>
                    (<[(n, Rgt) := VLoc LmP]> (newcells Fs n ∪ C0))) ∅
@@ -374,8 +375,8 @@ Section bst.
     assert (HnL : n <> LmP) by (intros ->; by apply (Hon LmP {[Oiter W]} eq_refl)).
     assert (HnCL : n <> CurL)
       by (intros ->; by apply (Hon CurL {[Oiter W]} eq_refl)).
-    iMod (write_fresh_typed FType Rt Fs N γm γh γl γs γd γo γf γr E W
-            vCurrentF vCurrentL n Lft CurL Lft U1
+    iMod (write_fresh_typed FType Rt Fs N γm γh γl γs γo γf γr γe γq E W
+            vCurrentF vCurrentL n Lft CurL Lft U1 Qc
             (<[(vCurrentF, W) := n]> Sm0) (<[n := {[Ofresh W]}]> Ob0)
             (<[(n, Rgt) := VLoc LmP]> (newcells Fs n ∪ C0)) ∅
             {[Ofresh W]} {[Oiter W]} VNull VNull
@@ -447,7 +448,7 @@ Section bst.
       - intros y ty o Hin Hstk Hc.
         destruct Hin as [Heq | [Heq | [Heq | [Heq | []]]]];
           injection Heq as Hv1 Hv2; rewrite -Hv2; reflexivity. }
-    { apply (EnvOK_incl Rt W U1 FType Fs _ _ _ ∅
+    { apply (EnvOK_incl Rt W U1 Qc FType Fs _ _ _ ∅
                ([(vCurrentF, TFresh (fun h => if decide (h = Rgt)
                                               then Some (FVar vLmParent)
                                               else None))] ++ G0));
@@ -459,9 +460,9 @@ Section bst.
 
       This is what the exercise was for: one rule's postcondition handed
       directly to the next. *)
-  Lemma bst_build_replacement N γm γh γl γs γd γo γf γr E :
+  Lemma bst_build_replacement N γm γh γl γs γo γf γr γe γq E :
     ↑N ⊆ E ->
-    rcu_invT FType (phys γm γh γl γs γd Rt Fs) N γo γf γr -∗
+    rcu_invT FType (phys γm γh γl γs Rt Fs) N γo γf γr γe γq -∗
     writer γo γs γh γl γf W Sm0 Ob0 C0 ∅ -∗
     fr_frag γr ∅
     ={E}=∗ ∃ n,
@@ -472,7 +473,7 @@ Section bst.
         (<[(n, Lft) := VLoc CurL]>
            (<[(n, Rgt) := VLoc LmP]> (newcells Fs n ∪ C0))) ∅
       ∗ fr_frag γr ({[n]} : gset Loc)
-      ∗ ⌜EnvOK Rt W U1 FType Fs
+      ∗ ⌜EnvOK Rt W U1 Qc FType Fs
            (<[(vCurrentF, W) := n]> Sm0) (<[n := {[Ofresh W]}]> Ob0)
            (<[(n, Lft) := VLoc CurL]>
               (<[(n, Rgt) := VLoc LmP]> (newcells Fs n ∪ C0))) ∅
@@ -484,13 +485,13 @@ Section bst.
                                     else None))] ++ G0)⌝.
   Proof.
     iIntros (HN) "#Hinv Hw Hfr".
-    iMod (bst_alloc N γm γh γl γs γd γo γf γr E HN with "Hinv Hw Hfr")
+    iMod (bst_alloc N γm γh γl γs γo γf γr γe γq E HN with "Hinv Hw Hfr")
       as (n) "(%Hnr & %Hcn & %Hon & %Hsn & Hw & Hfr & %Hok)".
-    iMod (bst_write_right N γm γh γl γs γd γo γf γr E n HN Hnr Hcn Hon
+    iMod (bst_write_right N γm γh γl γs γo γf γr γe γq E n HN Hnr Hcn Hon
             with "Hinv Hw []") as "(Hw & %Hok2)".
     { iPureIntro. intros y ty Hin. apply Hok.
       destruct Hin as [Heq | Hin]; [by left | by right]. }
-    iMod (bst_write_left N γm γh γl γs γd γo γf γr E n HN Hnr Hcn Hon
+    iMod (bst_write_left N γm γh γl γs γo γf γr γe γq E n HN Hnr Hcn Hon
             with "Hinv Hw []") as "(Hw & %Hok3)".
     { by iPureIntro. }
     iModIntro. iExists n. iFrame. by iPureIntro.
@@ -570,9 +571,10 @@ Print Assumptions bst_build_replacement.
     here. *)
 
 Section bst4.
-  Context `{!rcuG Σ, !physG Σ, !readerG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ,
+  Context `{!rcuG Σ, !physG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ,
             !invGS_gen hlc Σ}.
   Context (FType : FName -> FieldKind).
+  Context (Qc : nat -> Prop).
 
   Definition Sm1 (n : Loc) : gmap (Var * TID) Loc :=
     <[(vCurrentF, W) := n]> Sm0.
@@ -781,19 +783,19 @@ Section bst4.
 
       [parent.Left = currentF].  Every side condition is a lookup in a concrete
       map or one of the three distinctness facts above. *)
-  Lemma bst_replace N γm γh γl γs γd γo γf γr E n :
+  Lemma bst_replace N γm γh γl γs γo γf γr γe γq E n :
     ↑N ⊆ E ->
     n <> Rt ->
     (forall k v, C0 !! k = Some v -> k.1 <> n) ->
-    EnvOK Rt W U1 FType Fs (Sm1 n) (Ob1 n) (C3 n) ∅ Grest ->
-    rcu_invT FType (phys γm γh γl γs γd Rt Fs) N γo γf γr -∗
+    EnvOK Rt W U1 Qc FType Fs (Sm1 n) (Ob1 n) (C3 n) ∅ Grest ->
+    rcu_invT FType (phys γm γh γl γs Rt Fs) N γo γf γr γe γq -∗
     writer γo γs γh γl γf W (Sm1 n) (Ob1 n) (C3 n) ∅ -∗
     fr_frag γr ({[n]} : gset Loc)
     ={E}=∗ writer γo γs γh γl γf W (Sm1 n)
              (<[n := {[Oiter W]}]> (<[Cur := {[Ounlk W]}]> (Ob1 n)))
              (<[(Rt, Lft) := VLoc n]> (C3 n)) ∅
            ∗ fr_frag γr ({[n]} : gset Loc)
-           ∗ ⌜EnvOK Rt W U1 FType Fs (Sm1 n)
+           ∗ ⌜EnvOK Rt W U1 Qc FType Fs (Sm1 n)
                 (<[n := {[Oiter W]}]> (<[Cur := {[Ounlk W]}]> (Ob1 n)))
                 (<[(Rt, Lft) := VLoc n]> (C3 n)) ∅
                 ([(vParent, TItr [] (fun g => if decide (g = Lft)
@@ -804,9 +806,9 @@ Section bst4.
   Proof.
     iIntros (HN Hr Hcn Hrest) "#Hinv Hw Hfr".
     destruct (n_fresh n Hcn) as (Hc & Hcl & Hlm).
-    iApply (replace_typed FType Rt Fs N γm γh γl γs γd γo γf γr E W
+    iApply (replace_typed FType Rt Fs N γm γh γl γs γo γf γr γe γq E W
               vParent vCurrentF vCurrent Rt Lft Cur n [] Lft
-              U1 (Sm1 n) (Ob1 n) (C3 n) ∅ {[n]} (Val3 n) Valo
+              U1 Qc (Sm1 n) (Ob1 n) (C3 n) ∅ {[n]} (Val3 n) Valo
               {[Oiter W]} Grest
               with "Hinv Hw Hfr").
     - exact HN.
@@ -861,11 +863,11 @@ Section bst4.
       triples could not be read off from -- each step's output is the next
       step's input, including the freshness facts the allocation has to export
       and the mirror condition the splice has to be handed. *)
-  Lemma bst_delete_two_child N γm γh γl γs γd γo γf γr E :
+  Lemma bst_delete_two_child N γm γh γl γs γo γf γr γe γq E :
     (forall g, FType g = RCUField -> In g Fs) ->
     (forall g, In g Fs -> FType g = RCUField) ->
     ↑N ⊆ E ->
-    rcu_invT FType (phys γm γh γl γs γd Rt Fs) N γo γf γr -∗
+    rcu_invT FType (phys γm γh γl γs Rt Fs) N γo γf γr γe γq -∗
     writer γo γs γh γl γf W Sm0 Ob0 C0 ∅ -∗
     fr_frag γr ∅
     ={E}=∗ ∃ n,
@@ -873,7 +875,7 @@ Section bst4.
         (<[n := {[Oiter W]}]> (<[Cur := {[Ounlk W]}]> (Ob1 n)))
         (<[(Rt, Lft) := VLoc n]> (C3 n)) ∅
       ∗ fr_frag γr ({[n]} : gset Loc)
-      ∗ ⌜EnvOK Rt W U1 FType Fs (Sm1 n)
+      ∗ ⌜EnvOK Rt W U1 Qc FType Fs (Sm1 n)
            (<[n := {[Oiter W]}]> (<[Cur := {[Ounlk W]}]> (Ob1 n)))
            (<[(Rt, Lft) := VLoc n]> (C3 n)) ∅
            ([(vParent, TItr [] (fun g => if decide (g = Lft)
@@ -883,14 +885,14 @@ Section bst4.
              (vCurrent, TUnlinked)] ++ Grest)⌝.
   Proof.
     iIntros (HFs HFrcu HN) "#Hinv Hw Hfr".
-    iMod (bst_build_replacement FType HFs HFrcu N γm γh γl γs γd γo γf γr E HN
+    iMod (bst_build_replacement FType Qc HFs HFrcu N γm γh γl γs γo γf γr γe γq E HN
             with "Hinv Hw Hfr") as (n) "(%Hr & %Hcn & Hw & Hfr & %Hok)".
-    assert (Hrest : EnvOK Rt W U1 FType Fs (Sm1 n) (Ob1 n) (C3 n) ∅ Grest).
+    assert (Hrest : EnvOK Rt W U1 Qc FType Fs (Sm1 n) (Ob1 n) (C3 n) ∅ Grest).
     { intros x ty Hin. apply Hok.
       destruct Hin as [Heq | [Heq | []]]; rewrite -Heq;
         [ by right; right; right; left
         | by right; right; right; right; left ]. }
-    iMod (bst_replace N γm γh γl γs γd γo γf γr E n HN Hr Hcn Hrest
+    iMod (bst_replace N γm γh γl γs γo γf γr γe γq E n HN Hr Hcn Hrest
             with "Hinv Hw Hfr") as "Hres".
     iModIntro. by iExists n.
   Qed.

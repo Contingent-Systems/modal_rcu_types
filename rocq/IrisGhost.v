@@ -41,6 +41,7 @@
 
     Checked with Rocq 9.2 against the Iris in the bluerock switch. *)
 
+From iris.algebra Require Import numbers.
 From iris.algebra Require Import auth excl gmap gset local_updates.
 From iris.base_logic.lib Require Import invariants own.
 From iris.proofmode Require Import proofmode.
@@ -127,7 +128,22 @@ Definition to_LState
     authority still holds the same logical map, so [to_LState] and everything
     stated over it are unaffected. *)
 Definition obsUR : ucmra := authUR (gmapUR Loc (exclR (leibnizO (gset obs)))).
-Definition flUR  : ucmra := authUR (gmapUR Loc (exclR (leibnizO (gset TID)))).
+(** The free list stores a *stamp*: the epoch at which the node's grace period
+    began.  Which threads that snapshot contains is derived from the
+    registrations rather than stored, which is what makes ReadEnd a write to
+    the departing reader's own state.  See [Epochs.v] for the argument. *)
+Definition flUR  : ucmra := authUR (gmapUR Loc (exclR (leibnizO nat))).
+
+(** A thread's registration: [None] outside a read-side critical section,
+    [Some e] inside one entered at epoch [e].  Owned by the thread, which is
+    the whole point. *)
+Definition regUR : ucmra :=
+  authUR (gmapUR TID (exclR (leibnizO (option nat)))).
+
+(** The watermark: a lower bound on every registration, which only grows.  A
+    fragment is persistent, so the result of a grace period is a fact the
+    writer may carry rather than a resource it must own. *)
+Definition wmUR  : ucmra := authUR max_natUR.
 
 (** Observations indexed by the observing thread; see the section on
     per-thread control at the end of the file for why this is the right unit. *)
@@ -138,10 +154,13 @@ Class rcuG (Σ : gFunctors) := RcuG {
   rcu_obsG  :: inG Σ obsUR;
   rcu_flG   :: inG Σ flUR;
   rcu_tobsG :: inG Σ tobsUR;
+  rcu_regG  :: inG Σ regUR;
+  rcu_wmG   :: inG Σ wmUR;
 }.
 
 Definition rcuΣ : gFunctors :=
-  #[ GFunctor obsUR; GFunctor flUR; GFunctor tobsUR ].
+  #[ GFunctor obsUR; GFunctor flUR; GFunctor tobsUR;
+     GFunctor regUR; GFunctor wmUR ].
 
 Global Instance subG_rcuΣ {Σ} : subG rcuΣ Σ → rcuG Σ.
 Proof. solve_inG. Qed.
@@ -159,10 +178,24 @@ Section ghost.
   Definition obs_ctl (γ : gname) (o : Loc) (s : gset obs) : iProp Σ :=
     own γ (◯ {[ o := Excl (s : leibnizO (gset obs)) ]}).
 
-  Definition fl_auth (γ : gname) (F : gmap Loc (gset TID)) : iProp Σ :=
-    own γ (● (Excl <$> F : gmap Loc (excl (leibnizO (gset TID))))).
-  Definition fl_ctl (γ : gname) (o : Loc) (s : gset TID) : iProp Σ :=
-    own γ (◯ {[ o := Excl (s : leibnizO (gset TID)) ]}).
+  Definition fl_auth (γ : gname) (F : gmap Loc nat) : iProp Σ :=
+    own γ (● (Excl <$> F : gmap Loc (excl (leibnizO nat)))).
+  Definition fl_ctl (γ : gname) (o : Loc) (s : nat) : iProp Σ :=
+    own γ (◯ {[ o := Excl (s : leibnizO nat) ]}).
+
+  (** The registration cell, and the watermark. *)
+  Definition reg_auth (γ : gname) (Rg : gmap TID (option nat)) : iProp Σ :=
+    own γ (● (Excl <$> Rg : gmap TID (excl (leibnizO (option nat))))).
+  Definition reg_cell (γ : gname) (t : TID) (v : option nat) : iProp Σ :=
+    own γ (◯ {[ t := Excl (v : leibnizO (option nat)) ]}).
+
+  Definition wm_auth (γ : gname) (w : nat) : iProp Σ :=
+    own γ (● MaxNat w : wmUR).
+  Definition wm_lb (γ : gname) (n : nat) : iProp Σ :=
+    own γ (◯ MaxNat n : wmUR).
+
+  Global Instance wm_lb_persistent γ n : Persistent (wm_lb γ n).
+  Proof. apply _. Qed.
 
   (** Control is exclusive: two threads cannot both hold a location's entry.
       That is the property [gsetUR] could not express. *)
@@ -184,9 +217,86 @@ Section ghost.
     iModIntro. iExists γ. unfold obs_auth. by rewrite fmap_empty.
   Qed.
 
+
+  (** Agreement and update for a registration cell, the same shape as the
+      stack's.  Both directions matter: a thread learns from its own cell
+      whether it is inside a critical section, which is what ReadBegin's
+      negative premise needs. *)
+  Lemma reg_cell_agree γ Rg t v :
+    reg_auth γ Rg -∗ reg_cell γ t v -∗ ⌜Rg !! t = Some v⌝.
+  Proof.
+    iIntros "Ha Hf".
+    iDestruct (own_valid_2 with "Ha Hf") as %Hv.
+    iPureIntro.
+    apply auth_both_valid_discrete in Hv as [Hincl _].
+    apply singleton_included_l in Hincl as [y [Hlk Hle]].
+    rewrite lookup_fmap in Hlk.
+    apply fmap_Some_equiv in Hlk as [v0 [Hv0 Hy]].
+    rewrite Hv0. f_equal.
+    rewrite Hy Excl_included in Hle. exact (eq_sym Hle).
+  Qed.
+
+  Lemma reg_cell_update γ Rg t v v' :
+    reg_auth γ Rg -∗ reg_cell γ t v ==∗
+    reg_auth γ (<[t := v']> Rg) ∗ reg_cell γ t v'.
+  Proof.
+    iIntros "Ha Hf". rewrite /reg_auth /reg_cell.
+    iMod (own_update_2 _ _ _ (● (Excl <$> (<[t := v']> Rg)
+                                 : gmap TID (excl (leibnizO (option nat))))
+                              ⋅ ◯ {[t := Excl (v' : leibnizO (option nat))]})
+           with "Ha Hf") as "[Ha Hf]".
+    { rewrite fmap_insert. apply auth_update.
+      apply singleton_local_update_any.
+      intros y _. by apply exclusive_local_update. }
+    iModIntro. iFrame.
+  Qed.
+
+  Lemma reg_alloc : ⊢ |==> ∃ γ, reg_auth γ ∅.
+  Proof.
+    iMod (own_alloc (● (∅ : gmap TID (excl (leibnizO (option nat))))))
+      as (γ) "H".
+    { by apply auth_auth_valid. }
+    iModIntro. iExists γ. unfold reg_auth. by rewrite fmap_empty.
+  Qed.
+
+  (** The watermark.  A fragment is persistent and bounds the authority from
+      below, which is how a completed grace period becomes a fact rather than a
+      resource. *)
+  Lemma wm_lb_le γ w n : wm_auth γ w -∗ wm_lb γ n -∗ ⌜n <= w⌝.
+  Proof.
+    iIntros "Ha Hf".
+    iDestruct (own_valid_2 with "Ha Hf") as %Hv.
+    iPureIntro.
+    apply auth_both_valid_discrete in Hv as [Hincl _].
+    by apply max_nat_included in Hincl.
+  Qed.
+
+  Lemma wm_snapshot γ w : wm_auth γ w ==∗ wm_auth γ w ∗ wm_lb γ w.
+  Proof.
+    iIntros "Ha". rewrite /wm_auth /wm_lb -own_op.
+    iApply (own_update with "Ha").
+    apply (auth_update_alloc _ (MaxNat w) (MaxNat w)).
+    apply max_nat_local_update. simpl. lia.
+  Qed.
+
+  Lemma wm_raise γ w w' : w <= w' -> wm_auth γ w ==∗ wm_auth γ w'.
+  Proof.
+    iIntros (Hle) "Ha". rewrite /wm_auth.
+    iApply (own_update with "Ha").
+    apply auth_update_auth with (b' := MaxNat w').
+    apply max_nat_local_update. simpl. exact Hle.
+  Qed.
+
+  Lemma wm_alloc : ⊢ |==> ∃ γ, wm_auth γ 0.
+  Proof.
+    iMod (own_alloc (● MaxNat 0 : wmUR)) as (γ) "H".
+    { by apply auth_auth_valid. }
+    by iModIntro; iExists γ.
+  Qed.
+
   Lemma fl_alloc : ⊢ |==> ∃ γ, fl_auth γ ∅.
   Proof.
-    iMod (own_alloc (● (∅ : gmap Loc (excl (leibnizO (gset TID))))))
+    iMod (own_alloc (● (∅ : gmap Loc (excl (leibnizO nat)))))
       as (γ) "H".
     { by apply auth_auth_valid. }
     iModIntro. iExists γ. unfold fl_auth. by rewrite fmap_empty.
@@ -265,8 +375,8 @@ Section ghost.
   Proof.
     iIntros "Ha Hf".
     iMod (own_update_2 _ _ _ (● (Excl <$> (<[o := s']> F)
-                                  : gmap Loc (excl (leibnizO (gset TID))))
-                              ⋅ ◯ {[o := Excl (s' : leibnizO (gset TID))]})
+                                  : gmap Loc (excl (leibnizO nat)))
+                              ⋅ ◯ {[o := Excl (s' : leibnizO nat)]})
            with "Ha Hf") as "[Ha Hf]".
     { rewrite fmap_insert. apply auth_update.
       apply singleton_local_update_any.
@@ -301,12 +411,18 @@ Section invariant.
   Context (FType : FName -> FieldKind).
   Context (phys : MState -> iProp Σ).
 
+  (** The free list is stamps now, and the logical [F] its snapshots are
+      derived from -- the derivation is in [Epochs.v], which sits above this
+      file, so what is recorded here is the part statable without it: the two
+      have the same domain, which is the property this invariant was ever
+      illustrating. *)
   Definition rcu_inv_inner (γo γf : gname) : iProp Σ :=
     ∃ (m : MState) (O : gmap Loc (gset obs)) (U : Var -> TID -> Prop)
-      (T : gset TID) (F : gmap Loc (gset TID)),
+      (T : gset TID) (F : gmap Loc (gset TID)) (St : gmap Loc nat),
       phys m
       ∗ obs_auth γo O
-      ∗ fl_auth γf F
+      ∗ fl_auth γf St
+      ∗ ⌜dom F = dom St⌝
       ∗ ⌜WellFormed FType (to_LState m O U T F)⌝.
 
   Definition rcu_inv (N : namespace) (γo γf : gname) : iProp Σ :=
@@ -320,11 +436,12 @@ Section invariant.
       milestone-1 and milestone-2 results apply to it directly. *)
   Lemma rcu_inv_wellformed γo γf :
     rcu_inv_inner γo γf -∗
-    ∃ m O U T F, ⌜WellFormed FType (to_LState m O U T F)⌝ ∗
-                 (phys m ∗ obs_auth γo O ∗ fl_auth γf F).
+    ∃ m O U T F St, ⌜WellFormed FType (to_LState m O U T F)⌝ ∗
+                    (phys m ∗ obs_auth γo O ∗ fl_auth γf St).
   Proof.
-    iIntros "H". iDestruct "H" as (m O U T F) "(Hp & Ho & Hf & %Hwf)".
-    iExists m, O, U, T, F. iFrame. done.
+    iIntros "H".
+    iDestruct "H" as (m O U T F St) "(Hp & Ho & Hf & %Hdom & %Hwf)".
+    iExists m, O, U, T, F, St. iFrame. done.
   Qed.
 
 End invariant.
