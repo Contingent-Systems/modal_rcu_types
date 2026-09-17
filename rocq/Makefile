@@ -81,7 +81,7 @@ Denotations.vo: WellFormed.vo HeapPaths.vo
 Actions.vo: WellFormed.vo HeapPaths.vo IrisGhost.vo Denotations.vo
 Compose.vo: WellFormed.vo
 Triples.vo: WellFormed.vo HeapPaths.vo IrisGhost.vo Denotations.vo Actions.vo
-Epochs.vo: WellFormed.vo
+Epochs.vo: WellFormed.vo HeapPaths.vo IrisGhost.vo Denotations.vo Actions.vo
 BST.vo: WellFormed.vo HeapPaths.vo IrisGhost.vo Denotations.vo Actions.vo \
         Triples.vo
 

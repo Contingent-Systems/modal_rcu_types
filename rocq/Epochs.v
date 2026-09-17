@@ -27,7 +27,7 @@
     snapshot against the current readers. *)
 
 From stdpp Require Import gmap sets.
-From RCU Require Import WellFormed.
+From RCU Require Import WellFormed Actions.
 
 (** ** The state
 
@@ -37,41 +37,51 @@ From RCU Require Import WellFormed.
     which its grace period began. *)
 Record EState := {
   egen   : nat;
-  ereg   : TID -> option nat;
-  estamp : Loc -> option nat
+  ereg   : gmap TID nat;    (* registered readers, and the epoch each entered at *)
+  estamp : gmap Loc nat     (* nodes awaiting reclamation, and their grace epoch *)
 }.
 
 Definition e_begin (s : EState) (t : TID) : EState :=
-  {| egen := egen s;
-     ereg := fun t' => if decide (t' = t) then Some (egen s) else ereg s t';
-     estamp := estamp s |}.
+  {| egen := egen s; ereg := <[t := egen s]> (ereg s); estamp := estamp s |}.
 
 Definition e_end (s : EState) (t : TID) : EState :=
-  {| egen := egen s;
-     ereg := fun t' => if decide (t' = t) then None else ereg s t';
-     estamp := estamp s |}.
+  {| egen := egen s; ereg := delete t (ereg s); estamp := estamp s |}.
 
 (** SyncStart stamps the detached nodes with the current epoch and then
     increments it.  The increment is the whole of the repair; see
     [reentry_safe] and [increment_is_what_makes_reentry_safe]. *)
 Definition e_sync_start (s : EState) (ds : gset Loc) : EState :=
-  {| egen := S (egen s);
-     ereg := ereg s;
-     estamp := fun o => if decide (o ∈ ds) then Some (egen s) else estamp s o |}.
+  {| egen := S (egen s); ereg := ereg s;
+     estamp := gset_to_gmap (egen s) ds ∪ estamp s |}.
 
 (** ** The readings
 
     The three components of the published model, recovered from the counters.
     A snapshot's members are the readers that registered no later than the
-    grace period began. *)
-Definition e_rds (s : EState) (t : TID) : Prop := ereg s t <> None.
+    grace period began: derived, not stored. *)
+Definition e_rds (s : EState) (t : TID) : Prop := is_Some (ereg s !! t).
 
 Definition e_bnd (s : EState) (t : TID) : Prop :=
-  exists e, ereg s t = Some e /\ e < egen s.
+  exists e, ereg s !! t = Some e /\ e < egen s.
+
+Definition e_snapshot (s : EState) (e : nat) : gset TID :=
+  dom (filter (fun kv => kv.2 <= e) (ereg s)).
+
+Definition e_F (s : EState) : gmap Loc (gset TID) := e_snapshot s <$> estamp s.
+
+Lemma e_snapshot_elem s e t :
+  t ∈ e_snapshot s e <-> exists e', ereg s !! t = Some e' /\ e' <= e.
+Proof.
+  unfold e_snapshot. rewrite elem_of_dom. split.
+  - intros [e' Hlk]. apply map_lookup_filter_Some in Hlk as [Hlk Hle].
+    by exists e'.
+  - intros [e' [Hlk Hle]]. exists e'.
+    apply map_lookup_filter_Some. by split.
+Qed.
 
 Definition e_flist (s : EState) (o : Loc) : option (TID -> Prop) :=
-  match estamp s o with
-  | Some e => Some (fun t => exists e', ereg s t = Some e' /\ e' <= e)
+  match estamp s !! o with
+  | Some e => Some (fun t => t ∈ e_snapshot s e)
   | None   => None
   end.
 
@@ -81,33 +91,37 @@ Definition e_flist (s : EState) (o : Loc) : option (TID -> Prop) :=
     by construction; the point of stating them is that [reentry_safe] is where
     they are used. *)
 Definition EWF (s : EState) : Prop :=
-  (forall o e, estamp s o = Some e -> e < egen s)
-  /\ (forall t e, ereg s t = Some e -> e <= egen s).
+  (forall o e, estamp s !! o = Some e -> e < egen s)
+  /\ (forall t e, ereg s !! t = Some e -> e <= egen s).
 
 Lemma EWF_begin s t : EWF s -> EWF (e_begin s t).
 Proof.
-  intros [Hs Hr]. split.
-  - intros o e H. exact (Hs o e H).
-  - intros t' e H. simpl in H. destruct (decide (t' = t)) as [-> | Hne].
-    + injection H as <-. reflexivity.
-    + exact (Hr t' e H).
+  intros [Hs Hr]. split; [exact Hs |].
+  intros t' e H. simpl in H.
+  destruct (decide (t' = t)) as [-> | Hne].
+  - rewrite lookup_insert_eq in H. injection H as <-. reflexivity.
+  - rewrite lookup_insert_ne in H; [| exact (fun Hc => Hne (eq_sym Hc))].
+    exact (Hr t' e H).
 Qed.
 
 Lemma EWF_end s t : EWF s -> EWF (e_end s t).
 Proof.
-  intros [Hs Hr]. split.
-  - intros o e H. exact (Hs o e H).
-  - intros t' e H. simpl in H. destruct (decide (t' = t)) as [-> | Hne];
-      [discriminate | exact (Hr t' e H)].
+  intros [Hs Hr]. split; [exact Hs |].
+  intros t' e H. simpl in H.
+  destruct (decide (t' = t)) as [-> | Hne].
+  - by rewrite lookup_delete_eq in H.
+  - rewrite lookup_delete_ne in H; [| exact (fun Hc => Hne (eq_sym Hc))].
+    exact (Hr t' e H).
 Qed.
 
 Lemma EWF_sync_start s ds : EWF s -> EWF (e_sync_start s ds).
 Proof.
   intros [Hs Hr]. split.
-  - intros o e H. simpl in H. destruct (decide (o ∈ ds)) as [Hin | Hni].
-    + injection H as <-. constructor.
+  - intros o e H. simpl in H.
+    apply lookup_union_Some_raw in H as [H | [_ H]].
+    + apply lookup_gset_to_gmap_Some in H as [_ <-]. constructor.
     + exact (Nat.lt_lt_succ_r _ _ (Hs o e H)).
-  - intros t e H. simpl in H. exact (Nat.le_le_succ_r _ _ (Hr t e H)).
+  - intros t e H. exact (Nat.le_le_succ_r _ _ (Hr t e H)).
 Qed.
 
 (** ** ReadEnd is local
@@ -115,84 +129,127 @@ Qed.
     It writes the departing thread's own registration and nothing else. *)
 Theorem e_end_writes_only_its_own s t :
   egen (e_end s t) = egen s
-  /\ (forall o, estamp (e_end s t) o = estamp s o)
-  /\ (forall t', t' <> t -> ereg (e_end s t) t' = ereg s t').
+  /\ estamp (e_end s t) = estamp s
+  /\ (forall t', t' <> t -> ereg (e_end s t) !! t' = ereg s !! t').
 Proof.
   repeat apply conj; [reflexivity | reflexivity |].
-  intros t' Hne. simpl. case_decide as Hd; [by destruct (Hne Hd) | reflexivity].
+  intros t' Hne. simpl. rewrite lookup_delete_ne;
+    [reflexivity | exact (fun Hc => Hne (eq_sym Hc))].
 Qed.
 
-(** And that single write is all three effects the published ReadEnd performs
-    as three separate updates. *)
-Theorem e_end_clears s t :
-  ~ e_rds (e_end s t) t
-  /\ ~ e_bnd (e_end s t) t
-  /\ (forall o Tr, e_flist (e_end s t) o = Some Tr -> ~ Tr t).
+(** And that one write is exactly the three updates the published ReadEnd
+    performs as three: the thread leaves [R], leaves [B], and leaves every
+    snapshot.  The third is the one it had no right to make. *)
+Lemma e_snapshot_end s t e :
+  e_snapshot (e_end s t) e = e_snapshot s e ∖ {[t]}.
 Proof.
-  assert (Hreg : ereg (e_end s t) t = None)
-    by (simpl; by case_decide).
-  repeat apply conj.
-  - intros H. exact (H Hreg).
-  - intros [e [H _]]. rewrite Hreg in H. discriminate H.
-  - intros o Tr Hfl. unfold e_flist in Hfl.
-    destruct (estamp (e_end s t) o) as [e|]; [| discriminate].
-    injection Hfl as <-. intros [e' [H _]].
-    destruct (decide (t = t)) as [_ | Hn];
-      [discriminate H | by destruct (Hn eq_refl)].
+  apply set_eq. intros t'.
+  rewrite elem_of_difference, elem_of_singleton.
+  repeat rewrite e_snapshot_elem. simpl.
+  destruct (decide (t' = t)) as [-> | Hne].
+  - rewrite lookup_delete_eq. split.
+    + by intros [e' [Hc _]].
+    + intros [_ Hc]. by destruct (Hc eq_refl).
+  - rewrite lookup_delete_ne; [| exact (fun Hc => Hne (eq_sym Hc))].
+    split; [intros H; by split | by intros [H _]].
 Qed.
 
-(** Nobody else is disturbed, which is the other half of locality. *)
-Theorem e_end_frames s t t' o Tr Tr' :
-  t' <> t ->
-  e_flist s o = Some Tr -> e_flist (e_end s t) o = Some Tr' ->
-  (Tr t' <-> Tr' t').
-Proof.
-  intros Hne H1 H2. unfold e_flist in H1, H2. simpl in H2.
-  destruct (estamp s o) as [e|]; [| discriminate].
-  injection H1 as <-. injection H2 as <-.
-  simpl. case_decide as Hd; [by destruct (Hne Hd) | reflexivity].
-Qed.
-
-(** One write, three updates.  The published ReadEnd performs three: the
-    departing thread leaves R, leaves B, and is removed from every snapshot.
-    Here the second and third are consequences of the first, which is why the
-    rule becomes thread-local -- there is nothing else to write. *)
-Theorem e_end_simulates s t :
+Theorem e_end_is_read_end s t :
   (forall t', e_rds (e_end s t) t' <-> (e_rds s t' /\ t' <> t))
   /\ (forall t', e_bnd (e_end s t) t' <-> (e_bnd s t' /\ t' <> t))
-  /\ (forall o Tr Tr',
-        e_flist s o = Some Tr -> e_flist (e_end s t) o = Some Tr' ->
-        forall t', Tr' t' <-> (Tr t' /\ t' <> t)).
+  /\ e_F (e_end s t) = read_end_F (e_F s) t.
 Proof.
   repeat apply conj.
-  - intros t'. unfold e_rds, e_end. simpl. case_decide as Hd.
-    + split; [by intros H | intros [_ H]; by destruct (H Hd)].
-    + split; [by intros H | by intros [H _]].
-  - intros t'. unfold e_bnd, e_end. simpl. case_decide as Hd.
-    + split; [by intros [e [H _]] | intros [_ H]; by destruct (H Hd)].
-    + split; [by intros H | by intros [H _]].
-  - intros o Tr Tr' H1 H2 t'. unfold e_flist in H1, H2. simpl in H2.
-    destruct (estamp s o) as [e|]; [| discriminate].
-    injection H1 as <-. injection H2 as <-. simpl. case_decide as Hd.
-    + split; [by intros [e' [H _]] | intros [_ H]; by destruct (H Hd)].
-    + split; [by intros H | by intros [H _]].
+  - intros t'. unfold e_rds. simpl.
+    destruct (decide (t' = t)) as [-> | Hne].
+    + rewrite lookup_delete_eq. split.
+      * by intros [e Hc].
+      * intros [_ Hc]. by destruct (Hc eq_refl).
+    + rewrite lookup_delete_ne; [| exact (fun Hc => Hne (eq_sym Hc))].
+      split; [intros H; by split | by intros [H _]].
+  - intros t'. unfold e_bnd. simpl.
+    destruct (decide (t' = t)) as [-> | Hne].
+    + rewrite lookup_delete_eq. split.
+      * by intros [e [Hc _]].
+      * intros [_ Hc]. by destruct (Hc eq_refl).
+    + rewrite lookup_delete_ne; [| exact (fun Hc => Hne (eq_sym Hc))].
+      split; [intros H; by split | by intros [H _]].
+  - unfold e_F, read_end_F. rewrite <- map_fmap_compose.
+    apply map_fmap_ext. intros o e _. exact (e_snapshot_end s t e).
 Qed.
 
-(** ReadBegin joins nothing.  A reader entering a critical section registers at
-    the current epoch, and every grace period already running was stamped
-    earlier, so it is in no snapshot.  This is the property the published model
-    has to arrange by removing threads from snapshots as they leave; here it is
-    a consequence of the counter never going backwards. *)
-Theorem e_begin_joins_nothing s t :
-  EWF s -> forall o Tr, e_flist (e_begin s t) o = Some Tr -> ~ Tr t.
+(** Said against the model's own step.  [read_end_ms] and [read_end_F] are what
+    the action theorem [read_end_preserves_WellFormed] is stated over; this says
+    that transition is exactly what deleting the departing thread's
+    registration produces.  So the epoch state is not a different system with
+    similar properties -- it is a representation of the same one in which
+    ReadEnd has nothing to write but its own. *)
+Corollary e_end_realises_read_end m s t :
+  (forall t', rds m t' <-> e_rds s t') ->
+  (forall t', bnd m t' <-> e_bnd s t') ->
+  (forall t', rds (read_end_ms m t) t' <-> e_rds (e_end s t) t')
+  /\ (forall t', bnd (read_end_ms m t) t' <-> e_bnd (e_end s t) t')
+  /\ read_end_F (e_F s) t = e_F (e_end s t).
 Proof.
-  intros [Hs _] o Tr Hfl. unfold e_flist in Hfl.
-  destruct (estamp (e_begin s t) o) as [e|] eqn:Hst; [| discriminate].
-  assert (Hst0 : estamp s o = Some e) by exact Hst.
-  injection Hfl as <-. intros [e' [H Hle]]. simpl in H.
-  destruct (decide (t = t)) as [_ | Hn]; [| by destruct (Hn eq_refl)].
-  injection H as <-.
-  exact (Nat.lt_irrefl (egen s) (Nat.le_lt_trans _ _ _ Hle (Hs o e Hst0))).
+  intros Hr Hb.
+  destruct (e_end_is_read_end s t) as (Hrds & Hbnd & HF).
+  repeat apply conj; [| | exact (eq_sym HF)].
+  - intros t'. rewrite Hrds. simpl. split.
+    + intros [H Hne]. split; [by apply Hr | exact Hne].
+    + intros [H Hne]. split; [by apply Hr | exact Hne].
+  - intros t'. rewrite Hbnd. simpl. split.
+    + intros [H Hne]. split; [by apply Hb | exact Hne].
+    + intros [H Hne]. split; [by apply Hb | exact Hne].
+Qed.
+
+(** ReadBegin joins nothing, and so leaves the free list alone -- which is what
+    the published rule does too.  A reader registers at the current epoch and
+    every running grace period was stamped earlier, so it is in no snapshot.
+    The published model has to arrange this by removing threads from snapshots
+    as they leave. *)
+Lemma e_snapshot_begin s t e :
+  ereg s !! t = None -> e < egen s ->
+  e_snapshot (e_begin s t) e = e_snapshot s e.
+Proof.
+  intros Hnone Hlt. apply set_eq. intros t'.
+  repeat rewrite e_snapshot_elem. simpl.
+  destruct (decide (t' = t)) as [-> | Hne].
+  - rewrite lookup_insert_eq. split.
+    + intros [e' [H Hle]]. injection H as <-.
+      exfalso. exact (Nat.lt_irrefl e (Nat.lt_le_trans _ _ _ Hlt Hle)).
+    + intros [e' [H _]]. by rewrite Hnone in H.
+  - rewrite lookup_insert_ne; [reflexivity | exact (fun Hc => Hne (eq_sym Hc))].
+Qed.
+
+Theorem e_begin_keeps_the_free_list s t :
+  EWF s -> ereg s !! t = None -> e_F (e_begin s t) = e_F s.
+Proof.
+  intros [Hs _] Hnone. unfold e_F.
+  apply map_fmap_ext. intros o e Hlk.
+  exact (e_snapshot_begin s t e Hnone (Hs o e Hlk)).
+Qed.
+
+Theorem e_begin_joins_nothing s t :
+  EWF s -> forall o e, estamp s !! o = Some e -> t ∉ e_snapshot (e_begin s t) e.
+Proof.
+  intros HWF o e Hlk Hin. apply e_snapshot_elem in Hin as [e' [H Hle]].
+  simpl in H. rewrite lookup_insert_eq in H. injection H as <-.
+  exact (Nat.lt_irrefl e (Nat.lt_le_trans _ _ _ (proj1 HWF o e Hlk) Hle)).
+Qed.
+
+(** SyncStart's entry is the current reader set, which is what the published
+    rule says it is.  So the three steps correspond exactly, and the only
+    difference is which of them has to write what. *)
+Theorem e_sync_start_snapshot s ds o :
+  EWF s -> o ∈ ds -> e_F (e_sync_start s ds) !! o = Some (dom (ereg s)).
+Proof.
+  intros [_ Hr] Hin. unfold e_F. rewrite lookup_fmap. simpl.
+  assert (Hst : (gset_to_gmap (egen s) ds ∪ estamp s) !! o = Some (egen s)).
+  { apply lookup_union_Some_l, lookup_gset_to_gmap_Some. by split. }
+  rewrite Hst. simpl. f_equal. apply set_eq. intros t.
+  rewrite e_snapshot_elem, elem_of_dom. simpl. split.
+  - by intros [e' [H _]].
+  - intros [e' H]. exists e'. split; [exact H | exact (Hr t e' H)].
 Qed.
 
 (** ** Re-entry is safe, and the increment is why
@@ -206,79 +263,58 @@ Qed.
     ever in, because a thread identity is reused and an epoch is not. *)
 Theorem reentry_safe s ds t o e :
   EWF s ->
-  estamp (e_sync_start s ds) o = Some e ->
-  forall Tr, e_flist (e_begin (e_end (e_sync_start s ds) t) t) o = Some Tr
-             -> ~ Tr t.
+  estamp (e_sync_start s ds) !! o = Some e ->
+  t ∉ e_snapshot (e_begin (e_end (e_sync_start s ds) t) t) e.
 Proof.
-  intros HWF Hst Tr Hfl.
-  (* the stamp is at or before the epoch the grace period started in *)
-  assert (Hle : e <= egen s).
-  { simpl in Hst. destruct (decide (o ∈ ds)) as [Hin | Hni].
-    - injection Hst as <-. constructor.
-    - exact (Nat.lt_le_incl _ _ (proj1 HWF o e Hst)). }
-  (* and the returning reader registers strictly after it *)
-  assert (Hreg : ereg (e_begin (e_end (e_sync_start s ds) t) t) t
-                   = Some (S (egen s)))
-    by (simpl; by case_decide).
-  assert (Hst' : estamp (e_begin (e_end (e_sync_start s ds) t) t) o = Some e)
-    by exact Hst.
-  unfold e_flist in Hfl; rewrite Hst' in Hfl. injection Hfl as <-.
-  intros [e' [H Hle']].
-  destruct (decide (t = t)) as [_ | Hn]; [| by destruct (Hn eq_refl)].
-  injection H as <-.
-  exact (Nat.nle_succ_diag_l (egen s) (Nat.le_trans _ _ _ Hle' Hle)).
+  intros HWF Hst.
+  apply (e_begin_joins_nothing _ t
+           (EWF_end _ t (EWF_sync_start s ds HWF)) o e Hst).
 Qed.
 
 (** Without the increment the same sequence rejoins, which is the defect the
     epoch is there to remove.  One concrete state suffices. *)
 Definition e_sync_start_nobump (s : EState) (ds : gset Loc) : EState :=
-  {| egen := egen s;
-     ereg := ereg s;
-     estamp := fun o => if decide (o ∈ ds) then Some (egen s) else estamp s o |}.
+  {| egen := egen s; ereg := ereg s;
+     estamp := gset_to_gmap (egen s) ds ∪ estamp s |}.
 
 Definition e0 : EState :=
-  {| egen := 0;
-     ereg := fun t => if decide (t = 9) then Some 0 else None;
-     estamp := fun _ => None |}.
+  {| egen := 0; ereg := {[ 9 := 0 ]}; estamp := ∅ |}.
 
 Lemma e0_EWF : EWF e0.
 Proof.
   split.
-  - intros o e H. discriminate H.
-  - intros t e H. simpl in H. destruct (decide (t = 9)) as [-> | Hne];
-      [injection H as <-; constructor | discriminate].
+  - intros o e H. simpl in H. by rewrite lookup_empty in H.
+  - intros t e H. simpl in H.
+    apply lookup_singleton_Some in H as [_ <-]. constructor.
 Qed.
 
 Theorem increment_is_what_makes_reentry_safe :
-  (exists Tr,
-     e_flist (e_begin (e_end (e_sync_start_nobump e0 {[1]}) 9) 9) 1
-       = Some Tr /\ Tr 9)
-  /\ (forall Tr,
-        e_flist (e_begin (e_end (e_sync_start e0 {[1]}) 9) 9) 1
-          = Some Tr -> ~ Tr 9).
+  9 ∈ e_snapshot (e_begin (e_end (e_sync_start_nobump e0 {[1]}) 9) 9) 0
+  /\ 9 ∉ e_snapshot (e_begin (e_end (e_sync_start e0 {[1]}) 9) 9) 0.
 Proof.
-  apply conj.
-  - eexists. split; [reflexivity |].
-    exists 0. split; [reflexivity | constructor].
-  - intros Tr Hfl.
-    exact (reentry_safe e0 {[1]} 9 1 0 e0_EWF eq_refl Tr Hfl).
+  split.
+  - apply e_snapshot_elem. exists 0.
+    split; [simpl; by rewrite lookup_insert_eq | constructor].
+  - apply (reentry_safe e0 {[1]} 9 1 0 e0_EWF).
+    simpl. apply lookup_union_Some_l, lookup_gset_to_gmap_Some.
+    split; [by apply elem_of_singleton | reflexivity].
 Qed.
 
 (** ** The wait, and what it licenses
 
     SyncStop's condition, and the conjunct [freeable]'s denotation asks for.
     Nothing here says the wait terminates -- that needs an operational
-    semantics, as it did before -- but what it establishes is now a one-line
-    consequence of the counters rather than an argument about set membership. *)
+    semantics, as it did before -- but what it establishes is now a consequence
+    of the counters rather than an argument about set membership. *)
 Definition e_quiescent (s : EState) (e : nat) : Prop :=
-  forall t e', ereg s t = Some e' -> e < e'.
+  forall t e', ereg s !! t = Some e' -> e < e'.
 
-Theorem e_quiescent_entry_empty s o e Tr :
-  estamp s o = Some e -> e_quiescent s e ->
-  e_flist s o = Some Tr -> forall t, ~ Tr t.
+Theorem e_quiescent_entry_empty s o e :
+  estamp s !! o = Some e -> e_quiescent s e -> e_snapshot s e = ∅.
 Proof.
-  intros Hst Hq Hfl t. unfold e_flist in Hfl; rewrite Hst in Hfl. injection Hfl as <-.
-  intros [e' [Hr Hle]].
+  intros Hst Hq. apply set_eq. intros t.
+  rewrite e_snapshot_elem, elem_of_empty. split; [| by intros []].
+  intros [e' [Hr Hle]]. exfalso.
   exact (Nat.lt_irrefl e (Nat.lt_le_trans _ _ _ (Hq t e' Hr) Hle)).
 Qed.
 
@@ -291,33 +327,31 @@ Qed.
     is immediate, where in the published model it is a missing invariant that
     only SyncStart establishes. *)
 Theorem e_RINFL s : EWF s ->
-  forall o Tr t, e_flist s o = Some Tr -> Tr t -> e_bnd s t.
+  forall o e t, estamp s !! o = Some e -> t ∈ e_snapshot s e -> e_bnd s t.
 Proof.
-  intros [Hs _] o Tr t Hfl Hin. unfold e_flist in Hfl.
-  destruct (estamp s o) as [e|] eqn:Hst; [| discriminate].
-  injection Hfl as <-. destruct Hin as [e' [Hr Hle]].
-  exists e'. split; [exact Hr |].
-  exact (Nat.le_lt_trans _ _ _ Hle (Hs o e Hst)).
+  intros [Hs _] o e t Hst Hin.
+  apply e_snapshot_elem in Hin as [e' [Hr Hle]].
+  exists e'. split; [exact Hr | exact (Nat.le_lt_trans _ _ _ Hle (Hs o e Hst))].
 Qed.
 
 Theorem e_BR s : forall t, e_bnd s t -> e_rds s t.
-Proof. intros t [e [Hr _]] Hc. by rewrite Hr in Hc. Qed.
+Proof. intros t [e [Hr _]]. by exists e. Qed.
 
 (** And the writer never bounds its own grace period for a better reason than
     before: the lock holder is not registered at all, so the question does not
-    arise.  Stated as the condition on the epoch state that makes it so. *)
+    arise. *)
 Theorem e_writer_not_bounding s t :
-  ereg s t = None -> ~ e_bnd s t.
-Proof. intros H [e [Hr _]]. by rewrite Hr in H. Qed.
+  ereg s !! t = None -> ~ e_bnd s t.
+Proof. intros H [e [Hr _]]. by rewrite H in Hr. Qed.
 
 Print Assumptions EWF_sync_start.
 Print Assumptions e_end_writes_only_its_own.
-Print Assumptions e_end_clears.
-Print Assumptions e_end_frames.
-Print Assumptions e_end_simulates.
+Print Assumptions e_end_is_read_end.
+Print Assumptions e_end_realises_read_end.
+Print Assumptions e_begin_keeps_the_free_list.
 Print Assumptions e_begin_joins_nothing.
+Print Assumptions e_sync_start_snapshot.
 Print Assumptions reentry_safe.
-Print Assumptions e0_EWF.
 Print Assumptions increment_is_what_makes_reentry_safe.
 Print Assumptions e_quiescent_entry_empty.
 Print Assumptions e_RINFL.

@@ -1889,15 +1889,27 @@ Three things, and each is a theorem.  \textsc{ReadEnd} becomes a write to the
 departing thread's own registration and nothing else
 (\texttt{e\_end\_writes\_only\_its\_own}), and that single write produces all
 three updates the published rule performs as separate ones --- the thread leaves
-$R$, leaves $B$, and leaves every snapshot
-(\texttt{e\_end\_simulates}).  Entering joins nothing
-(\texttt{e\_begin\_joins\_nothing}): a reader registers at the current epoch and
-every running grace period was stamped earlier, so it is in no snapshot, which
-is the property the published model has to arrange by removing threads as they
-leave.  And the bookkeeping still satisfies the invariants the snapshot model is
-stated over --- \textbf{RINFL} is \texttt{e\_RINFL}, and \textbf{BR}, which the
-published set is missing entirely (\S\ref{sec:defect-br}), is immediate --- so
-this is a refinement rather than a different system.
+$R$, leaves $B$, and leaves every snapshot (\texttt{e\_end\_is\_read\_end}).
+That last is an equation, not an analogy: the free list after the deletion is
+literally \texttt{read\_end\_F} applied to the free list before it, so
+\texttt{e\_end\_realises\_read\_end} says the transition
+\texttt{read\_end\_preserves\_WellFormed} is stated over is exactly what
+deleting a registration produces.  The epoch state is a representation of the
+same system, not a different one with similar properties.
+
+Entering joins nothing (\texttt{e\_begin\_joins\_nothing}): a reader registers
+at the current epoch and every running grace period was stamped earlier, so it
+is in no snapshot, and the free list is therefore untouched
+(\texttt{e\_begin\_keeps\_the\_free\_list}) --- which is the property the
+published model has to arrange by removing threads as they leave.  And
+\textsc{SyncStart}'s entry is the current reader set
+(\texttt{e\_sync\_start\_snapshot}), which is what the published rule says it
+is, so all three steps correspond and the only difference is which of them has
+to write what.
+
+The bookkeeping also still satisfies the invariants the snapshot model is stated
+over --- \textbf{RINFL} is \texttt{e\_RINFL}, and \textbf{BR}, which the
+published set is missing entirely (\S\ref{sec:defect-br}), is immediate.
 
 The re-entrancy failure is repaired, and the counters say exactly where the
 repair lives: \texttt{reentry\_safe} turns on the epoch being incremented when

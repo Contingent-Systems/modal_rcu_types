@@ -200,10 +200,17 @@ verification; the question was what it is worth as a model, and it is worth
 three things.  ReadEnd becomes a write to the departing thread's own
 registration and nothing else, and that single write produces all three updates
 the published rule performs separately: the thread leaves the readers, leaves
-the bounding threads, and leaves every snapshot.  Entering joins nothing, which
-is the property the published model has to arrange by removing threads as they
-leave.  And the bookkeeping still satisfies the invariants the snapshot model is
-stated over, so it is a refinement rather than a different system.
+the bounding threads, and leaves every snapshot.  The last of those is an
+equation rather than an analogy -- the free list afterwards is literally the
+published ReadEnd's free-list update applied to the free list before -- so the
+transition our action theorem is stated over is exactly what deleting a
+registration produces.  Entering joins nothing, and so leaves the free list
+alone, which is the property the published model has to arrange by removing
+threads as they leave; and SyncStart's entry is the current reader set, which is
+what the published rule says it is.  So all three steps correspond and the only
+difference is which of them has to write what.  The bookkeeping also still
+satisfies the invariants the snapshot model states about it, so this is a
+representation of the same system rather than a different one.
 
 The counters also say exactly where the re-entrancy repair lives: it turns on
 the epoch being incremented when the grace period starts, and we give the
