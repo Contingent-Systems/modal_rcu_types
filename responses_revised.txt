@@ -9,13 +9,22 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
-18,500 lines and 985 lemmas and theorems, axiom-free).  The build refuses to
+19,300 lines and 1,013 lemmas and theorems, axiom-free).  The build refuses to
 succeed if the development contains an admitted proof, or if any of its 226
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
 it looks.  This turned up more than we expected, and we think it materially
 strengthens the paper.
+
+That target had the bug it exists to catch, and we report it because the
+argument for having it is exactly what the bug illustrates.  A Print Assumptions
+inside a Section prints nothing at all.  Five of ours were inside one -- both
+read-side triples and the whole binary search tree chain -- so five results we
+claimed were checked were not being checked.  They were sound, which we
+confirmed by running the queries outside their sections, but the checking was
+not.  They are moved out and the build now refuses an indented one.  The count
+rose by five for that reason and no other.
 
 Ten of the WellFormed invariants are wrong or missing:
 
@@ -181,9 +190,10 @@ no detaching observation, were hypotheses of the action lemma; they are now
 proved, the first from the thread's own reader cell and the second from the two
 unguarded invariants.
 
-ReadEnd is the next rule and the one that does not close, for a reason worth
-reporting rather than deferring.  It is the one step in the system that writes
-state another thread owns: the free-list snapshots belong to the writer, which
+ReadEnd is the next rule, and it did not close for a long time.  The reason is
+worth reporting in full, because what repaired it was a change to the model
+rather than to the proof.  It is the one step in the system that writes state
+another thread owns: the free-list snapshots belong to the writer, which
 created them at SyncStart, and a departing reader rewrites every one it appears
 in.  The obvious economy is to leave them alone and read a snapshot against the
 threads still running, since a thread that has left its read section bounds
@@ -237,8 +247,28 @@ incrementing, where the returning reader rejoins.  So the increment in an
 implementation's counter is not an implementation detail.  It is what
 distinguishes a reader's new critical section from its old one, and without it
 the model cannot tell them apart.  The cost is a change to the state model,
-where the ticket costs only a camera; we report both and would take the
-counters.
+where the ticket costs only a camera; we took the counters, and the development
+is built on them.
+
+The ghost free list is stamps -- one epoch per node awaiting reclamation, owned
+by the writer -- and the threads a snapshot contains are derived from the
+registrations, owned one cell each by the readers.  With that, ReadEnd closes as
+a triple.  The departing reader hands in its registration and the observation
+entries its own cell enumerates and gets its registration back empty; its three
+premises are that the enumeration has no repeats, that every entry in it is the
+thread's, and that it covers the domain the cell records.  The free list is not
+mentioned at all.  The invariant supplies the converse -- that the domain covers
+every entry of the thread's carrying an observation of its own -- and ReadBegin
+establishes it empty on entry, from the iterator invariant we add and the two
+unguarded ones.  The three invariants this work adds are what make the read
+side's two rules closable, which is a better argument for them than any of the
+counterexamples.
+
+Free's side changes with it.  A stamp does not license freeing a node; the
+certificate that the grace period past that stamp is complete does.  That
+threads through the environment reading as a parameter beside the scope
+condition, and freeable now means "stamped at e, with a certificate for e",
+which is what the type meant all along, written where a rule can use it.
 
 That is eighteen in all: fourteen invariants, two rule defects, and two defects in
 the model.  Fourteen of the eighteen were found by attempting the proofs rather than by
@@ -651,11 +681,9 @@ where the protocol *tests* or *waits on* shared state rather than acting on
 state it owns.  Those are what an operational semantics is for, a compare-and-set
 and a wait loop, and they are the only two places in the system that need one.
 
-The tokens the control actions need are built, as described above, and
-ReadBegin closes.  What ReadEnd still needs is the change of representation the
-counters describe -- the free list ceasing to be the writer's resource -- which
-is a camera change under SyncStart, Free and one invariant.  We have proved the
-design sound rather than carried it out, and we say which of the two that is.
+Both read-side rules close, as described above.  What is left on the read side
+is the reader's read itself, which is the fractional-heap item; the protocol's
+two testing points are the other.
 
 One last thing worth saying about the infinite-heap defect, because it cuts the
 other way.  The checker never had it.  Fields there are a bitset over a declared
@@ -824,10 +852,10 @@ And the rest of the protocol is machine-checked as whole actions.  SyncStop is
 where the empty bounding set is spent: Readers-In-Free-List says every thread in
 an entry bounds a reclamation, and afterwards there are none, so every entry is
 empty -- which is exactly the conjunct the *freeable* denotation asks for,
-obtained rather than assumed.  ReadEnd is discussed above.  All four
-steps of the reclamation chain -- ReadBegin, ReadEnd, SyncStart and SyncStop --
-are now complete as actions, each preserving all nineteen invariants; what is
-not complete is the resource reading of ReadEnd, for the reason given there.
+obtained rather than assumed.  All four steps of the reclamation chain --
+ReadBegin, ReadEnd, SyncStart and SyncStop -- are complete as actions, each
+preserving all nineteen invariants, and ReadBegin and ReadEnd are also closed
+triples in the resource reading, for the reasons given above.
 
 We will expand Section 6 along these lines.
 

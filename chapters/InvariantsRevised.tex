@@ -97,6 +97,17 @@ scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
 the \texttt{Print Assumptions} reports: all 226 say \emph{closed under the
 global context}, and none reports an axiom.
 
+That target had the bug it exists to catch, and we report it because the
+argument for having it is exactly what the bug illustrates.  A
+\texttt{Print Assumptions} inside a \texttt{Section} prints nothing at all.
+Five of ours were inside one --- both read-side triples and the whole of the
+binary search tree chain --- so five results the development claimed were
+checked were not being checked.  The results were sound, which we confirmed by
+running the queries outside their sections; the checking was not.  They are
+moved out, and \texttt{make check} now fails if an indented one appears.  The
+count rose from 221 to 226 for that reason and no other: nothing new was proved,
+five things merely began to be verified that had been asserted.
+
 \paragraph{1.\ OW --- No Sharing.\hfill\textsc{minor}}
 \[
 \begin{array}{l}
@@ -1478,13 +1489,14 @@ closure is unchanged, and the allocation case gains one hypothesis, that the
 field list holds every RCU field, which is what makes it a declaration rather
 than an arbitrary subset and what the fresh node's denotation needs.
 
-\paragraph{Eight closed triples: the whole write side.}
+\paragraph{Ten closed triples: the whole write side, and the read side's two.}
 With a finite heap there are points-to assertions, and with them eight actions
 close completely: \textsc{Free}, all five heap mutations, \textsc{T-Alloc}, and
-the binding rules --- which is to say the entire write side.  Each is stated
-with no parameters and nothing assumed about shared state: the invariant is
-opened, every premise is \emph{derived}, the step is taken, the invariant is
-closed.
+the binding rules --- which is to say the entire write side.  \textsc{ReadBegin}
+and \textsc{ReadEnd} join them once the free list stops being anybody's
+exclusive property, which is \S\ref{sec:inv-readside}.  Each is stated with no
+parameters and nothing assumed about shared state: the invariant is opened,
+every premise is \emph{derived}, the step is taken, the invariant is closed.
 
 There are four kinds of premise, and each is discharged differently.
 \emph{Observational} ones come from the thread's own ghost fragment ---
@@ -1813,7 +1825,8 @@ free list at a node the thread no longer references, which is state it does not
 own.  That conjunct belongs in an invariant rather than in a type, and we report
 it rather than move it.
 
-\paragraph{What is left, and it is specific.}
+\paragraph{The read side, and what is left.}
+\label{sec:inv-readside}
 The read side and the protocol remain, and the two obstacles are particular
 rather than general.
 
@@ -1831,28 +1844,31 @@ owns, and neither is a fact any thread can hold.  They are what an operational
 semantics is for --- a compare-and-set and a wait loop --- and they are the only
 two places in the system that need one.
 
-The tokens the other four rules need are now built, and building them is what
-found \textbf{BR} (\S\ref{sec:defect-br}) and \textbf{WUNLKW}
-(\S\ref{sec:defect-wunlkw}).  The first attempt made a reader token a
-\emph{set} token --- the disjoint-union camera, one element per active reader
---- and it was not enough.  Such a token certifies membership and nothing else,
-and \textsc{ReadBegin}'s premise is that the thread is \emph{not} already a
-reader.  So the reader state is a per-thread two-valued cell instead, owned by
-the thread whether it is inside a critical section or outside one; entering
-trades \texttt{false} for \texttt{true} and leaving trades back, and both
-directions are derivable from what the thread holds.  That is a small thing
-about cameras with a general shape: a protocol whose rules have negative
-premises needs the state, not the membership.
+The state the other four rules need is now built, and building it is what found
+\textbf{BR} (\S\ref{sec:defect-br}) and \textbf{WUNLKW}
+(\S\ref{sec:defect-wunlkw}).  It took three attempts, and what each one failed
+at is more informative than the answer, because each failure is a premise the
+camera could not express.
+
+The first made a reader's state a \emph{set} token --- the disjoint-union
+camera, one element per active reader.  It certifies membership and nothing
+else, and \textsc{ReadBegin}'s premise is that the thread is \emph{not} already
+a reader.  A protocol whose rules have negative premises needs the state, not
+the membership.  The second made it a per-thread two-valued cell, owned by the
+thread whether it is inside a critical section or outside one, so that both
+directions follow from what the thread holds.  That is enough for
+\textsc{ReadBegin} and not for \textsc{ReadEnd}, for the reason the next
+subsection is about: a boolean cannot distinguish a reader's new critical
+section from its old one.  The third, which is what the development has, is a
+cell holding \emph{when} the thread registered and \emph{which nodes} it
+observes --- an epoch and a finite set.  The epoch is what re-entrancy needs and
+the set is what \textsc{ReadEnd}'s enumeration of its own observations needs.
 
 $R$ becomes a finite map in the process, for the same reason the heap and the
 stack did; the thread set was already finite, so this is the model catching up
 with itself.  The bounding set needs no camera of its own: it is pinned by
-\textbf{BR}, carried in the physical-state predicate alongside the reader
-authority, and \textsc{SyncStart} is the step that establishes it.  Four
-machine-state steps result --- \texttt{phys\_read\_begin},
-\texttt{phys\_read\_end}, \texttt{phys\_sync\_start} and
-\texttt{phys\_sync\_stop} --- and they are the only ones in the development that
-move $R$ or $B$, which before the cell was true of no step at all.
+\textbf{BR} and derived from the registrations, and \textsc{SyncStart} is the
+step that establishes it.
 
 \textsc{ReadBegin} is now a closed triple, \texttt{read\_begin\_atomic}, and it
 is the first on the read side.  What makes it closed is worth stating, because
@@ -1865,12 +1881,13 @@ all; the second from \textbf{WFreshW} and \textbf{WUNLKW} together with the
 first.  A rule whose premises are all discharged rather than assumed is the
 difference between mechanizing a lemma and mechanizing a rule.
 
-\textsc{ReadEnd} is the next rule, and it is the one that does not close, for a
-reason worth reporting rather than deferring.  It is the single step in the
-system that writes state another thread owns: the free-list snapshots are the
-writer's, created by \textsc{SyncStart}, and a departing reader rewrites every
-one it appears in.  The resource-level lemma has to hold all of them, which is
-the wrong resource for a per-thread act.
+\textsc{ReadEnd} is the next rule, and it did not close for a long time.  The
+reason is worth reporting in full, because the repair changed the model rather
+than the proof.  It is the single step in the system that writes state another
+thread owns: the free-list snapshots are the writer's, created by
+\textsc{SyncStart}, and a departing reader rewrites every one it appears in.
+The resource-level lemma has to hold all of them, which is the wrong resource
+for a per-thread act.
 
 The obvious economy is to leave the snapshots alone and read them against the
 threads still running --- a thread that has left its read section bounds
@@ -1950,7 +1967,37 @@ that distinguishes a reader's new critical section from its old one, and without
 it the model has no way to tell them apart.
 
 What it costs is a change to the state model, where the ticket costs only a
-camera.  We report both and would take the epochs.
+camera.  We took the epochs, and the development is now built on them.
+
+The ghost free list is stamps --- one epoch per node awaiting reclamation,
+owned by the writer --- and the threads a snapshot contains are derived from the
+registrations, owned one cell each by the readers.  The invariant binds the
+logical free list and ties it to the two.  With that,
+\texttt{read\_end\_atomic} closes.  The departing reader hands in its
+registration and the observation entries its own cell enumerates, and gets its
+registration back empty; its three premises are the enumeration having no
+repeats, every entry in it being the thread's, and its covering the domain the
+cell records, and the free list is not mentioned at all.  The invariant supplies
+the converse --- that the domain covers every entry of the thread's carrying an
+observation of its own --- and \textsc{ReadBegin} establishes it empty on entry,
+from \textbf{WITR} for the iterator case and \textbf{WFreshW} and \textbf{WUNLKW}
+for the three detaching ones.  The three invariants this work adds are what make
+the read side's two rules closable.
+
+One condition had to weaken on the way, and the reason is instructive.  The
+retirement's coverage condition is now over entries carrying an observation
+\emph{tagged with the departing thread}, not over all of the thread's entries.
+It has to be: \textsc{ReadEnd} leaves the root observation behind --- it is
+anonymous, and not the departing thread's to drop --- so a thread that has ended
+a read section has entries it owns nothing about, and demanding that it
+enumerate those would put the invariant's map straight back into its premises.
+
+\textsc{Free}'s side changes with it.  A stamp is not enough to free a node;
+what licenses the free is the certificate that the grace period past that stamp
+is complete.  That threads through the environment reading as a pure parameter
+beside the scope condition, and \frbl{} now means ``stamped at $e$, with a
+certificate for $e$'' --- which is what the type meant all along, written where
+a rule can use it.
 
 
 
@@ -1958,12 +2005,12 @@ That last point is not only ours.  The paper's own comparison with Tassarotti's
 QSBR verification observes that implementations are structured so each reader
 thread keeps its own \emph{fragment} of the shared state, updated only by that
 thread and read by the write-side primitives.  That is the ticket, described as
-an implementation technique.  The model abstracts it away, and \textsc{ReadEnd}
-is the one place where the abstraction costs something: it turns a thread's
-update to its own fragment into an update to a structure the writer owns.
+an implementation technique.  The model abstracted it away, and \textsc{ReadEnd}
+was the one place where the abstraction cost something: it turned a thread's
+update to its own fragment into an update to a structure the writer owns.  The
+model does not abstract it away any more.
 
-So the remainder is a fractional heap for the read side, a ticket-valued free
-list so that \textsc{ReadEnd} writes only its own membership, and a
+So the remainder is two things.  A fractional heap for the reader's read, and a
 compare-and-set and a wait loop for the two points where the protocol tests
 shared state.  The
 read-side denotation is now mechanized --- \texttt{D\_rcuItrR}, transcribed from
