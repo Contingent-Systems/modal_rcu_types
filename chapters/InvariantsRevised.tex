@@ -94,7 +94,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 226 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 229 say \emph{closed under the
 global context}, and none reports an axiom.
 
 That target had the bug it exists to catch, and we report it because the
@@ -1830,12 +1830,30 @@ it rather than move it.
 The read side and the protocol remain, and the two obstacles are particular
 rather than general.
 
-The reader's read cannot be stated at all, because the points-to assertion is
-exclusive: a reader must read cells the writer also holds, and exclusive
-ownership forbids it.  The repair is a fractional heap, which is standard and
-which changes the camera under everything above.  It is worth saying plainly
-that the write side needed no fractions and the read side cannot be done without
-them --- which is, after all, what read-copy-update is about.
+We said in an earlier draft that the reader's read could not be stated at all,
+because the points-to assertion is exclusive and a reader must read cells the
+writer also holds; and that the repair was a fractional heap.  That was wrong,
+and correcting it removes an item rather than adding one.
+
+A reader's iterator is not a claim about the heap.  \texttt{D\_rcuItrR} is a
+stack binding, an \itr{} observation of the reader's own, and the bounding
+conjunct --- no path, no cell.  So the reader's environment follows from
+fragments of the stack and the observation map and nothing else, which is what
+\texttt{reader\_env} says: there is no heap authority anywhere in its statement,
+and none in \texttt{reader\_acquire\_update} either.  What the read \emph{does}
+with the heap is consult the authority inside the invariant to find the
+successor and carry nothing out, and that needs no fragment, so it needs no
+fraction.
+
+What the read does need is \textbf{IFL}'s obligation: a reader acquiring a
+reference to a node already on the free list must be one of the threads its
+grace period waits for.  That is a real obligation, it is not discharged by
+owning anything, and it is what remains of the reader's read.  Under the epoch
+reading it has a sharp form --- the reader registered no later than the node was
+stamped --- and the argument for it is the one \textsc{RCU} rests on: a node is
+detached before its grace period begins, detached nodes are unreachable, and a
+reader that registers afterwards starts at the root.  Assembling that from
+\textbf{ULKR} and \textbf{UNQRT-b} is the work; it is not a camera change.
 
 \textsc{WriteBegin} asks that the lock is free, and \textsc{SyncStop} that no
 thread is still bounding.  Those are the two points where the protocol
@@ -2010,9 +2028,29 @@ was the one place where the abstraction cost something: it turned a thread's
 update to its own fragment into an update to a structure the writer owns.  The
 model does not abstract it away any more.
 
-So the remainder is two things.  A fractional heap for the reader's read, and a
-compare-and-set and a wait loop for the two points where the protocol tests
-shared state.  The
+The two testing points are mechanized as far as a development without a
+semantics can take them, and further than we expected.  Both tests are over
+finite data --- the lock is an option, the registrations are a finite map --- so
+the test is decidable inside the proof and the attempt needs no oracle.
+\texttt{sync\_stop\_attempt} is the wait's body: it decides whether every
+registration still standing is later than the node's stamp, and either takes the
+certificate or does not.  The certificate is a watermark fragment, which is
+persistent because quiescence past an epoch is stable, and
+\texttt{wm\_lb\_entry\_empty} is what it licenses --- the snapshot is empty,
+which is the conjunct \frbl{} asks for.  The disjunction \emph{is} the loop
+body.  Which branch is taken is the implementation's scan; that the left one is
+eventually taken is the part that needs a semantics, and it is now the only
+part.
+
+\textsc{WriteBegin}'s test is decidable in the same way, and is not the obstacle
+there.  What stops it being a triple of this shape is that it also takes an
+\itr{} observation on every reachable node, which \textbf{UNQRT-b} is the reason
+for; that is a bulk ghost update needing the reachable set enumerated, the same
+premise \texttt{sync\_start\_update} carries.  We record that rather than state
+a lemma that would claim more than it proves.
+
+So the remainder is two things, and neither is a camera.  \textbf{IFL}'s
+obligation for the reader's read, and termination for the two loops.  The
 read-side denotation is now mechanized --- \texttt{D\_rcuItrR}, transcribed from
 the figure --- together with the reader's acquisition
 (\texttt{reader\_post\_env}).  That one is worth a caution: the denotation's

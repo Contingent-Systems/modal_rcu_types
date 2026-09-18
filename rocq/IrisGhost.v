@@ -286,6 +286,12 @@ Section ghost.
     apply max_nat_local_update. simpl. lia.
   Qed.
 
+  Lemma wm_lb_weaken γ n n' : n <= n' -> wm_lb γ n' -∗ wm_lb γ n.
+  Proof.
+    iIntros (Hle) "H". rewrite /wm_lb. iApply (own_mono with "H").
+    apply auth_frag_mono, max_nat_included. simpl. exact Hle.
+  Qed.
+
   Lemma wm_raise γ w w' : w <= w' -> wm_auth γ w ==∗ wm_auth γ w'.
   Proof.
     iIntros (Hle) "Ha". rewrite /wm_auth.

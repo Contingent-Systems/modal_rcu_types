@@ -2888,6 +2888,27 @@ Proof.
   - rewrite elem_of_empty. split; [by intros [] | by intros [-> Hc]].
 Qed.
 
+(** ** The two points where the protocol tests shared state
+
+    \textsc{WriteBegin} asks whether the lock is free, \textsc{SyncStop}
+    whether every reader still running entered after the grace period began.
+    Neither is a fact any thread holds, so neither can be a premise; they are
+    what a compare-and-set and a wait loop are for.
+
+    What can be mechanized is the body of each, and the reason it can is that
+    both tests are over *finite* data -- the lock is an option and the
+    registrations are a finite map -- so the test is decidable inside the proof
+    and the attempt needs no oracle.  What is not mechanized, and needs a
+    semantics, is that the loop goes round again. *)
+
+Definition past (e : nat) (v : option (nat * gset Loc)) : Prop :=
+  match v with None => True | Some (e', _) => e < e' end.
+
+Global Instance past_dec e v : Decision (past e v).
+Proof.
+  destruct v as [[e' D]|]; simpl; [apply lt_dec | left; exact I].
+Defined.
+
 (** The domain clause across an observation insert.  Every rule that inserts
     is the writer's, and the writer holds no registration, so the inserted key
     belongs to no thread the clause speaks about. *)
@@ -3344,10 +3365,118 @@ Section atomic.
     iModIntro. iFrame.
   Qed.
 
+  (** ** SyncStop, one attempt
+
+      The grace period for a node stamped at [e] is complete when every
+      registration still standing is later than [e].  That is a [map_Forall]
+      over the registrations, so the attempt decides it and either takes the
+      certificate or does not.  The certificate is a watermark fragment, which
+      is persistent -- quiescence past an epoch is stable
+      (\texttt{quiescence\_is\_stable}), so once the wait has succeeded the
+      writer carries a fact rather than holding a resource.
+
+      The disjunction is the loop body.  Which branch is taken is the
+      implementation's scan; that the left one is eventually taken is the part
+      that needs a semantics, and it is the only part. *)
+  Lemma sync_stop_attempt N γm γh γl γs γo γf γr γe γq E d e :
+    ↑N ⊆ E ->
+    rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr γe γq -∗
+    fl_ctl γf d e
+    ={E}=∗ fl_ctl γf d e ∗ (wm_lb γq (S e) ∨ True).
+  Proof.
+    iIntros (HN) "#Hinv Hst".
+    iInv "Hinv" as (m Og U T F St Rg gg ww Fr)
+      ">(Hp & Ho & Hf & Hreg & Hwm & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc
+         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm & %Hdom)"
+      "Hclose".
+    iDestruct (fl_ctl_agree with "Hf Hst") as %Hstamp.
+    destruct (decide (map_Forall (fun _ v => past e v) Rg)) as [Hq | Hnq];
+      last first.
+    { (* some reader is still inside a section it entered no later than [e] *)
+      iMod ("Hclose" with "[Hp Ho Hf Hreg Hwm Hfr]") as "_";
+        [iNext; iExists m, Og, U, T, F, St, Rg, gg, ww, Fr; by iFrame |].
+      iModIntro. iFrame. by iRight. }
+    (* the wait has succeeded: raise the watermark and keep a fragment *)
+    assert (Hle : S e <= gg) by exact (proj1 HEWF d e Hstamp).
+    (* raise to the later of the two: the watermark never goes backwards, and
+       the certificate we want is the weaker of the two bounds *)
+    iMod (wm_raise _ _ (Nat.max ww (S e)) (Nat.le_max_l _ _) with "Hwm")
+      as "Hwm".
+    iMod (wm_snapshot with "Hwm") as "[Hwm Hlb0]".
+    iDestruct (wm_lb_weaken _ (S e) _ (Nat.le_max_r _ _) with "Hlb0") as "#Hlb".
+    iMod ("Hclose" with "[Hp Ho Hf Hreg Hwm Hfr]") as "_".
+    { iNext. iExists m, Og, U, T, F, St, Rg, gg, (Nat.max ww (S e)), Fr. iFrame.
+      iPureIntro.
+      split; [exact HWF | split; [| split; [| split; [| split; [| split;
+        [| split; [| split; [| split; [| split; [| split; [| split;
+        [| split]]]]]]]]]]]].
+      - exact HFLD.
+      - exact HWFW.
+      - exact HRefs.
+      - exact HFrc.
+      - exact Hwf.
+      - exact HWUW.
+      - exact HFeq.
+      - exact HEWF.
+      - exact HRR.
+      - exact HBnd.
+      - exact HLk.
+      - split; [apply Nat.max_lub; [exact (proj1 HWm) | exact Hle] |].
+        intros t0 e0 D0 H. apply Nat.max_lub;
+          [exact (proj2 HWm t0 e0 D0 H) | exact (Hq t0 _ H)].
+      - exact Hdom. }
+    iModIntro. iFrame. by iLeft.
+  Qed.
+
+  (** What the certificate licenses, read inside the invariant: a node stamped
+      no later than the watermark has an empty snapshot, which is the conjunct
+      \frbl{}'s denotation asks for.  The writer reads this off a fact it
+      carries rather than an entry it owns. *)
+  Lemma wm_lb_entry_empty N γm γh γl γs γo γf γr γe γq E d e n :
+    ↑N ⊆ E -> e < n ->
+    rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr γe γq -∗
+    fl_ctl γf d e -∗ wm_lb γq n
+    ={E}=∗ fl_ctl γf d e.
+  Proof.
+    iIntros (HN Hlt) "#Hinv Hst Hlb".
+    iInv "Hinv" as (m Og U T F St Rg gg ww Fr)
+      ">(Hp & Ho & Hf & Hreg & Hwm & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc
+         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm & %Hdom)"
+      "Hclose".
+    iDestruct (fl_ctl_agree with "Hf Hst") as %Hstamp.
+    iDestruct (wm_lb_le with "Hwm Hlb") as %Hn.
+    (* every registration is at least the watermark, which is past [e] *)
+    assert (Hquiet : e_quiescent (mkE gg Rg St) e).
+    { intros t0 e0 H0. apply mkE_reg in H0 as [D0 H0].
+      exact (Nat.lt_le_trans _ _ _ (Nat.lt_le_trans _ _ _ Hlt Hn)
+               (proj2 HWm t0 e0 D0 H0)). }
+    assert (Hempty : F !! d = Some ∅)
+      by (rewrite HFeq; exact (e_free_premise (mkE gg Rg St) d e Hstamp Hquiet)).
+    iMod ("Hclose" with "[Hp Ho Hf Hreg Hwm Hfr]") as "_";
+      [iNext; iExists m, Og, U, T, F, St, Rg, gg, ww, Fr; by iFrame |].
+    by iModIntro.
+  Qed.
+
+  (** ** WriteBegin's test, and why it is not here
+
+      The lock is an option, so its test is decidable in exactly the way
+      \textsc{SyncStop}'s is, and the acquisition is [lk_acquire].  What stops
+      it being a triple of the same shape is not the test at all:
+      \textsc{WriteBegin} also takes an \itr{} observation on *every reachable
+      node*, which \texttt{write\_begin\_preserves\_WellFormed} requires and
+      which \textbf{UNQRT-b} is the reason for.  That is a bulk ghost update
+      over the reachable set, and it needs the set enumerated -- the same
+      premise \texttt{sync\_start\_update} carries, for the same reason.  We
+      record that rather than state a lemma whose name would claim more than it
+      proves: the lock test is not the obstacle, and saying so is the useful
+      part. *)
+
 End atomic.
 
 Print Assumptions read_begin_atomic.
 Print Assumptions read_end_atomic.
+Print Assumptions sync_stop_attempt.
+Print Assumptions wm_lb_entry_empty.
 
 Print Assumptions free_atomic.
 Print Assumptions write_fresh_atomic.
@@ -4573,9 +4702,53 @@ Section transfer.
     - eapply tr_root; eauto. exact (Hok x _ Hin).
   Qed.
 
+  (** ** The reader's environment, and why it needs no fractions
+
+      We said in an earlier draft that the reader's read could not be stated
+      because the points-to assertion is exclusive.  That is wrong, and the
+      shape of this lemma is why.  A reader's iterator is not a claim about the
+      heap: [D_rcuItrR] is a stack binding, an \itr{} observation of the
+      reader's own, and the bounding conjunct.  No path, no cell.  So the
+      reader's environment follows from fragments of the stack and the
+      observation map and nothing else -- there is no heap authority in the
+      statement below, and none in [reader_acquire_update] either.
+
+      What the reader's *read* does with the heap is read the authority inside
+      the invariant to find the successor, and carry nothing out.  That needs no
+      fragment, so it needs no fraction.  What the read does need is IFL's
+      obligation, that a reader acquiring a reference to a node already on the
+      free list is one of the threads its grace period waits for; that is a real
+      obligation and it is not this one.
+
+      The bounding conjunct is a hypothesis here for the reason recorded with
+      [reader_post_env]: the reader's own rule does not establish it. *)
+  Lemma reader_env γo γs t Sm Ob G m Og U T F S :
+    RepresentsS (stk m) S ->
+    (forall x, In x G -> exists o sg, Sm !! (x, t) = Some o
+       /\ Ob !! o = Some sg /\ Oiter t ∈ sg /\ ~ U x t) ->
+    (forall x o, In x G -> Sm !! (x, t) = Some o -> bnd m t ->
+       exists Tr, flist (to_LState_t m Og U T F) o = Some Tr /\ Tr t
+               /\ (forall t', Tr t' -> bnd m t')) ->
+    stk_auth γs S -∗ tobs_auth γo Og -∗
+    stk_own γs Sm -∗ obs_own γo t Ob -∗
+    ⌜forall x, In x G -> D_rcuItrR (to_LState_t m Og U T F) t x⌝.
+  Proof.
+    iIntros (HRS Hitr Hbnd) "Hsa Hoa Hsm Hob".
+    iDestruct (stk_own_agree with "Hsa Hsm") as %Hssub.
+    iDestruct (obs_own_agree with "Hoa Hob") as %Hosub.
+    iPureIntro. intros x Hin.
+    destruct (Hitr x Hin) as (o & sg & Hstk & Hobk & Hit & Hundf).
+    exists o. repeat apply conj.
+    - simpl. rewrite HRS. exact (Hssub (x, t) o Hstk).
+    - exists t, sg. split; [exact (Hosub o sg Hobk) | exact Hit].
+    - simpl. exact Hundf.
+    - intros Hb. exact (Hbnd x o Hin Hstk Hb).
+  Qed.
+
 End transfer.
 
 Print Assumptions writer_env.
+Print Assumptions reader_env.
 
 (** ** The environment across a step
 

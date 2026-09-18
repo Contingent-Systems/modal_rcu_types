@@ -10,7 +10,7 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
 19,300 lines and 1,013 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 226
+succeed if the development contains an admitted proof, or if any of its 229
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -669,17 +669,36 @@ free list at a node the thread no longer references, which is state it does not
 own -- that conjunct belongs in an invariant rather than in a type, and we
 report it rather than move it.
 
-What is left is narrower than it was, and the remaining obstacles are particular
-rather than general.  The reader's read cannot be stated at all, because the
-points-to assertion is exclusive: a reader must read cells the writer also
-holds.  The repair is a fractional heap, which is standard and which changes the
-camera under everything above; it is worth saying plainly that the write side
-needed no fractions and the read side cannot be done without them, which is
-after all what read-copy-update is about.  And WriteBegin asks that the lock is
-free while SyncStop asks that no thread is still bounding -- the two points
-where the protocol *tests* or *waits on* shared state rather than acting on
-state it owns.  Those are what an operational semantics is for, a compare-and-set
-and a wait loop, and they are the only two places in the system that need one.
+What is left is narrower than it was, and one item we listed is not an item at
+all.  We said the reader's read could not be stated because the points-to
+assertion is exclusive and a reader must read cells the writer also holds, and
+that the repair was a fractional heap.  That was wrong.  A reader's iterator is
+not a claim about the heap: its denotation is a stack binding, an iterator
+observation of the reader's own, and the bounding conjunct -- no path, no cell.
+So the reader's environment follows from fragments of the stack and the
+observation map and nothing else, which we now state as a lemma with no heap
+authority anywhere in it.  What the read does with the heap is consult the
+authority inside the invariant to find the successor and carry nothing out,
+which needs no fragment and so needs no fraction.  What it does need is the
+iterators-in-free-list obligation -- a reader acquiring a reference to a node
+already on the free list must be one of the threads its grace period waits for
+-- and that is a real obligation, not a camera change.
+
+WriteBegin asks whether the lock is free and SyncStop whether any thread is
+still bounding: the two points where the protocol tests or waits on shared state
+rather than acting on state it owns.  Both tests are over finite data -- an
+option and a finite map -- so each is decidable inside the proof and the attempt
+needs no oracle.  We give SyncStop's loop body: it decides whether every
+registration still standing is later than the node's stamp, and either takes the
+certificate or does not.  The certificate is persistent, because quiescence past
+an epoch is stable, and we give what it licenses -- the snapshot is empty, which
+is the conjunct freeable asks for.  The disjunction is the loop body; which
+branch is taken is the implementation's scan, and that the succeeding branch is
+eventually taken is what needs a semantics.  WriteBegin's test is decidable the
+same way and is not the obstacle there: it also takes an iterator observation on
+every reachable node, which is a bulk update needing the reachable set
+enumerated, so we record that rather than state a lemma that would claim more
+than it proves.
 
 Both read-side rules close, as described above.  What is left on the read side
 is the reader's read itself, which is the fractional-heap item; the protocol's
