@@ -137,8 +137,12 @@ Definition flUR  : ucmra := authUR (gmapUR Loc (exclR (leibnizO nat))).
 (** A thread's registration: [None] outside a read-side critical section,
     [Some e] inside one entered at epoch [e].  Owned by the thread, which is
     the whole point. *)
+(** A thread's registration carries the epoch it entered at *and* the set of
+    nodes it observes.  The second half is what makes ReadEnd's enumeration of
+    its own observations a fact about what the thread holds rather than about
+    the invariant's map. *)
 Definition regUR : ucmra :=
-  authUR (gmapUR TID (exclR (leibnizO (option nat)))).
+  authUR (gmapUR TID (exclR (leibnizO (option (nat * gset Loc))))).
 
 (** The watermark: a lower bound on every registration, which only grows.  A
     fragment is persistent, so the result of a grace period is a fact the
@@ -184,10 +188,13 @@ Section ghost.
     own γ (◯ {[ o := Excl (s : leibnizO nat) ]}).
 
   (** The registration cell, and the watermark. *)
-  Definition reg_auth (γ : gname) (Rg : gmap TID (option nat)) : iProp Σ :=
-    own γ (● (Excl <$> Rg : gmap TID (excl (leibnizO (option nat))))).
-  Definition reg_cell (γ : gname) (t : TID) (v : option nat) : iProp Σ :=
-    own γ (◯ {[ t := Excl (v : leibnizO (option nat)) ]}).
+  Definition reg_auth (γ : gname) (Rg : gmap TID (option (nat * gset Loc)))
+    : iProp Σ :=
+    own γ (● (Excl <$> Rg
+              : gmap TID (excl (leibnizO (option (nat * gset Loc)))))).
+  Definition reg_cell (γ : gname) (t : TID) (v : option (nat * gset Loc))
+    : iProp Σ :=
+    own γ (◯ {[ t := Excl (v : leibnizO (option (nat * gset Loc))) ]}).
 
   Definition wm_auth (γ : gname) (w : nat) : iProp Σ :=
     own γ (● MaxNat w : wmUR).
@@ -242,8 +249,8 @@ Section ghost.
   Proof.
     iIntros "Ha Hf". rewrite /reg_auth /reg_cell.
     iMod (own_update_2 _ _ _ (● (Excl <$> (<[t := v']> Rg)
-                                 : gmap TID (excl (leibnizO (option nat))))
-                              ⋅ ◯ {[t := Excl (v' : leibnizO (option nat))]})
+                                 : gmap TID (excl (leibnizO (option (nat * gset Loc)))))
+                              ⋅ ◯ {[t := Excl (v' : leibnizO (option (nat * gset Loc)))]})
            with "Ha Hf") as "[Ha Hf]".
     { rewrite fmap_insert. apply auth_update.
       apply singleton_local_update_any.
@@ -253,7 +260,7 @@ Section ghost.
 
   Lemma reg_alloc : ⊢ |==> ∃ γ, reg_auth γ ∅.
   Proof.
-    iMod (own_alloc (● (∅ : gmap TID (excl (leibnizO (option nat))))))
+    iMod (own_alloc (● (∅ : gmap TID (excl (leibnizO (option (nat * gset Loc)))))))
       as (γ) "H".
     { by apply auth_auth_valid. }
     iModIntro. iExists γ. unfold reg_auth. by rewrite fmap_empty.

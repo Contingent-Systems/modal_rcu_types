@@ -254,6 +254,8 @@ Section list_delete.
     - exact (LGrest_ok FType Qc).
   Qed.
 
-  Print Assumptions list_delete.
 
 End list_delete.
+
+Print Assumptions list_delete.
+

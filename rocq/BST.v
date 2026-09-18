@@ -853,7 +853,6 @@ Section bst4.
     - exact Hrest.
   Qed.
 
-  Print Assumptions bst_replace.
 
   (** ** The chain
 
@@ -897,8 +896,10 @@ Section bst4.
     iModIntro. by iExists n.
   Qed.
 
-  Print Assumptions bst_delete_two_child.
 
 End bst4.
+
+Print Assumptions bst_replace.
+Print Assumptions bst_delete_two_child.
 
 Print Assumptions replace_cannot_frame.
