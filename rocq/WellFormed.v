@@ -1792,3 +1792,125 @@ Qed.
 
 Print Assumptions bnd_stray_WellFormed.
 Print Assumptions bounding_threads_need_not_be_readers.
+
+(** ** Defect 19: free-list entries need not agree
+
+    \textsc{SyncStart} takes one snapshot, so every entry it writes holds the
+    same set.  That is a hypothesis of [sync_start_FLR] -- it is what makes FLR
+    hold with equality rather than mere inclusion along a chain of detached
+    nodes -- and it is stated there as a condition on the step.  It is also what
+    the *reader's* read needs, and there it has to be an invariant.
+
+    The obligation IFL puts on a reader following an edge is that a reader
+    taking a reference to a node already on the free list is one of the threads
+    its grace period waits for.  The reader is at [o] and follows an edge to
+    [z].  If [z] is on the free list, FLR says its predecessor [o] is too, with
+    a set containing [z]'s; IFL applied to [o], which the reader observes as an
+    iterator, says the reader is in [o]'s set.  What is wanted is that it is in
+    [z]'s, and the inclusion runs the wrong way.  With the entries equal it
+    follows at once ([read_bound] below); without it, it does not follow at all.
+
+    Nothing in the nineteen forces the entries to agree.  [snap_split] is the
+    witness: a state satisfying all of them, and BR besides, with two entries
+    holding different sets. *)
+
+Definition SameSnap (s : LState) : Prop :=
+  forall a b Ta Tb, flist s a = Some Ta -> flist s b = Some Tb ->
+    forall x, Ta x <-> Tb x.
+
+(** The reader's read, discharged.  Four lines, given the entries agree. *)
+Lemma read_bound (s : LState) t o f z Tr :
+  IFL s -> FLR s -> SameSnap s ->
+  obsv s o (Oiter t) -> Edge s o f z -> flist s z = Some Tr -> Tr t.
+Proof.
+  intros HIFL HFLR Hsame Hit Hedge Hfl.
+  destruct (HFLR z o f Tr Hfl Hedge) as [Tr' [Hfl' _]].
+  apply (Hsame o z Tr' Tr Hfl' Hfl).
+  exact (HIFL t o Tr' Hit Hfl').
+Qed.
+
+Definition snap_ms : MState :=
+  {| stk := stk (ms initial); hp := hp (ms initial); lk := lk (ms initial);
+     rt  := rt (ms initial);
+     rds := fun t => t = 1 \/ t = 2;
+     bnd := fun t => t = 1 \/ t = 2 |}.
+
+Definition snap_split : LState :=
+  {| ms    := snap_ms;
+     obsv  := obsv initial;
+     undf  := undf initial;
+     thrd  := thrd initial;
+     flist := fun o => if Nat.eqb o 1 then Some (fun t => t = 1)
+                       else if Nat.eqb o 2 then Some (fun t => t = 2)
+                       else None |}.
+
+Lemma snap_entry_inv o Tr :
+  flist snap_split o = Some Tr ->
+  (Tr = (fun t => t = 1)) \/ (Tr = (fun t => t = 2)).
+Proof.
+  simpl. destruct (Nat.eqb o 1).
+  - intros H. injection H as <-. left; reflexivity.
+  - destruct (Nat.eqb o 2); [| discriminate].
+    intros H. injection H as <-. right; reflexivity.
+Qed.
+
+Lemma snap_RINFL : RINFL snap_split.
+Proof.
+  intros o Tr t Hfl Hin. destruct (snap_entry_inv o Tr Hfl) as [-> | ->];
+    simpl in Hin; simpl; [left; exact Hin | right; exact Hin].
+Qed.
+
+Lemma snap_split_WellFormed : forall FType, WellFormed FType snap_split.
+Proof.
+  intros FType. unfold WellFormed. repeat apply conj.
+  - intros o o' f f' x H1. exfalso. simpl in H1.
+    destruct (Nat.eqb o 0); discriminate H1.
+  - intros x t o H. simpl in H. discriminate H.
+  - intros y t H. simpl in H. discriminate H.
+  - (* IFL: no iterator observations at all *)
+    intros t o Tr H1 H2. exfalso. simpl in H1.
+    destruct H1 as [_ Hc]. discriminate Hc.
+  - intros o o' f' t H1. simpl in H1.
+    destruct H1 as [[_ H] | [_ H]]; discriminate H.
+  - intros o o' f' Tr H1 H2. exfalso.
+    unfold Edge in H2. simpl in H2. destruct (Nat.eqb o' 0); discriminate H2.
+  - intros lw o t H1 H2. simpl in H2. destruct H2 as [_ H]. discriminate H.
+  - intros t x o H1 H2. simpl in H1. discriminate H1.
+  - intros t x o H1 H2. simpl in H1. discriminate H1.
+  - intros o t t' H. simpl in H. destruct H as [_ H]. discriminate H.
+  - intros o f o' t lw H1 H2. exfalso.
+    unfold Edge in H2. simpl in H2. destruct (Nat.eqb o 0); discriminate H2.
+  - intros t H1 H2. simpl in H1. injection H1 as <-.
+    destruct H2 as [H | H]; discriminate H.
+  - intros o t H. repeat apply conj; intros [_ Hc]; discriminate Hc.
+  - exact snap_RINFL.
+  - intros o f o' H _. exfalso.
+    unfold Edge in H. simpl in H. destruct (Nat.eqb o 0); discriminate H.
+  - intros o f H. unfold Edge in H. simpl in H.
+    destruct (Nat.eqb o 0); discriminate H.
+  - intros p o lw H1 H2.
+    destruct (initial_reaches_only_root p o H2) as [_ ->].
+    right. split; reflexivity.
+  - intros o t lw H1 [H | H]; simpl in H;
+      destruct H as [_ H]; discriminate H.
+  - intros o t H. simpl in H. destruct H as [_ H]. discriminate H.
+  - intros p p' o H1 H2.
+    destruct (initial_reaches_only_root p o H1) as [-> _].
+    destruct (initial_reaches_only_root p' o H2) as [-> _]. reflexivity.
+Qed.
+
+Theorem free_list_entries_need_not_agree :
+  (forall FType, WellFormed FType snap_split)
+  /\ BR snap_split
+  /\ ~ SameSnap snap_split.
+Proof.
+  repeat apply conj; [exact snap_split_WellFormed | intros t H; exact H |].
+  intros H. assert (Hc : (1 : TID) = 2).
+  { apply (H 1 2 (fun t => t = 1) (fun t => t = 2) eq_refl eq_refl 1).
+    reflexivity. }
+  discriminate Hc.
+Qed.
+
+Print Assumptions read_bound.
+Print Assumptions snap_split_WellFormed.
+Print Assumptions free_list_entries_need_not_agree.

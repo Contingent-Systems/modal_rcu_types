@@ -9,8 +9,8 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
-19,300 lines and 1,013 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 229
+19,700 lines and 1,026 lemmas and theorems, axiom-free).  The build refuses to
+succeed if the development contains an admitted proof, or if any of its 235
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -270,9 +270,30 @@ threads through the environment reading as a parameter beside the scope
 condition, and freeable now means "stamped at e, with a certificate for e",
 which is what the type meant all along, written where a rule can use it.
 
-That is eighteen in all: fourteen invariants, two rule defects, and two defects in
-the model.  Fourteen of the eighteen were found by attempting the proofs rather than by
-reading, and seven of the fourteen are cases whose proof the technical report
+A fifteenth invariant defect came out of the reader's read, and it is the
+fourth of a kind worth naming.  SyncStart takes one snapshot, so every entry it
+writes holds the same set; that is a hypothesis of the snapshot step, and it is
+what makes free-list-reachability hold with equality rather than mere inclusion
+along a chain of detached nodes.  It is also what the reader's read needs, and
+there it has to be an invariant.  The obligation is that a reader taking a
+reference to a node already on the free list is one of the threads its grace
+period waits for.  The reader is at o and follows an edge to z; if z is on the
+free list then so is its predecessor o, with a set *containing* z's, and
+iterators-in-free-list applied to o says the reader is in o's set.  What is
+wanted is that it is in z's, and the inclusion runs the wrong way.  With the
+entries equal the two meet and the proof is four lines; nothing in the nineteen
+forces them to agree, and we give a state satisfying all of them, and BR
+besides, with two entries holding different sets.
+
+The kind is this: a condition the published proof carries as a hypothesis of
+one action, which some other rule needs as an invariant.  Three of the four we
+add are of it, and all three are SyncStart's or WriteEnd's.  An invariant set
+assembled by asking what each action needs locally will miss exactly these,
+because locally there is nothing to miss.
+
+That is nineteen in all: fifteen invariants, two rule defects, and two defects in
+the model.  Fifteen of the nineteen were found by attempting the proofs rather than by
+reading, and seven of the fifteen are cases whose proof the technical report
 calls trivial.  We think
 that is the most useful thing the exercise produced: the defects that mattered
 were not the ones that looked doubtful. Every defect has
@@ -682,7 +703,10 @@ authority inside the invariant to find the successor and carry nothing out,
 which needs no fragment and so needs no fraction.  What it does need is the
 iterators-in-free-list obligation -- a reader acquiring a reference to a node
 already on the free list must be one of the threads its grace period waits for
--- and that is a real obligation, not a camera change.
+-- and working out what discharges it is what turned up the fifteenth defect
+above.  With the entries agreeing it is four lines.  What remains of the
+reader's read is to carry that conjunct in the Iris invariant rather than as a
+hypothesis, which is the same mechanical pass the other added conjuncts took.
 
 WriteBegin asks whether the lock is free and SyncStop whether any thread is
 still bounding: the two points where the protocol tests or waits on shared state
@@ -692,9 +716,18 @@ needs no oracle.  We give SyncStop's loop body: it decides whether every
 registration still standing is later than the node's stamp, and either takes the
 certificate or does not.  The certificate is persistent, because quiescence past
 an epoch is stable, and we give what it licenses -- the snapshot is empty, which
-is the conjunct freeable asks for.  The disjunction is the loop body; which
-branch is taken is the implementation's scan, and that the succeeding branch is
-eventually taken is what needs a semantics.  WriteBegin's test is decidable the
+is the conjunct freeable asks for.
+
+Termination then reduces further than we expected, and to something that is not
+the type system's to prove.  The threads SyncStop waits for are exactly the
+snapshot at the node's stamp, a finite set, and each ReadEnd by a member removes
+that member and nothing else.  So the wait ends after at most as many ReadEnds
+as the snapshot has members, and once they have all ended, in any order, the
+test passes; we prove both, and that the last step gives what freeable asks for.
+What is left is fairness -- that a reader inside a critical section eventually
+leaves it -- which is a property of the client, not of the type system, and
+which no invariant of the shared state could supply.  The lock's loop is the
+same shape and shorter: it ends when the holder's critical section does.  WriteBegin's test is decidable the
 same way and is not the obstacle there: it also takes an iterator observation on
 every reachable node, which is a bulk update needing the reachable set
 enumerated, so we record that rather than state a lemma that would claim more

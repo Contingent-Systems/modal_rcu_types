@@ -94,7 +94,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 229 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 235 say \emph{closed under the
 global context}, and none reports an axiom.
 
 That target had the bug it exists to catch, and we report it because the
@@ -587,12 +587,14 @@ the published composition, so the framing the soundness argument needs does not
 hold; and allocation makes the heap infinite, so no points-to assertion exists
 over it.  Both are in \S\ref{sec:inv-mech}.
 
-Two further invariant defects are at the two ends of the read side:
+A further one is in \S\ref{sec:defect-samesnap}: free-list entries need not
+agree, which the reader's read needs and which \textsc{SyncStart} carries as a
+hypothesis.  Two more are at the two ends of the read side:
 \S\ref{sec:defect-br}, the bounding set is unconstrained, so nothing makes the
 grace period terminate; and \S\ref{sec:defect-wunlkw}, \textbf{WUNLK} is guarded
 by the lock, so it says nothing in the state a reader starts in.
 
-That is eighteen: fourteen invariants, two rule defects, two model defects.  The
+That is nineteen: fifteen invariants, two rule defects, two model defects.  The
 second rule defect is the one \S\ref{sec:inv-mech} reaches by chaining the rules
 into a program: the mutation rules assume every field is an RCU field, which no
 system with scalar fields satisfies and which a class declaration forbids.  The remaining
@@ -662,7 +664,7 @@ are the two obvious conjuncts.  Only the second is needed by any proof here, so
 only it is carried; the first is reported, because a reader of
 \textbf{UNQRT-b} will assume it.
 
-Fourteen of the eighteen were found by attempting a proof rather than by reading ---
+Fifteen of the nineteen were found by attempting a proof rather than by reading ---
 \textbf{ULKR}'s failure to chain, \textbf{FPI}'s failure to survive unlinking,
 \textbf{HD}'s failure to survive \texttt{Free}, \textbf{FNR}'s failure to
 support \textbf{ULKR} under linking, \textbf{WUNLK}'s absence, which is the same case
@@ -673,8 +675,9 @@ what choosing a physical-state predicate ran into, and the two unconstrained
 observations, which are what the last linking rule ran into, and the
 \textbf{ULKR}/\textbf{OW} disagreement, which is what chaining the rules into a
 program ran into, and the unconstrained bounding set and \textbf{WUNLK}'s guard,
-which are what giving the read side a resource reading ran into --- and seven of
-the fourteen are cases the report calls trivial.  That is now a pattern rather than a coincidence, and it is the
+which are what giving the read side a resource reading ran into, and the
+entries' having to agree, which is what the reader's read ran into --- and seven
+of the fifteen are cases the report calls trivial.  That is now a pattern rather than a coincidence, and it is the
 strongest thing the mechanization has to say about the original argument.
 
 The corrected invariants are also satisfiable
@@ -759,6 +762,39 @@ apart, and that the revision had already repaired the first without noticing the
 second, is the part worth reporting.  The guard is what makes each of them
 provable locally; it is also what makes them useless to any rule that runs
 outside a write critical section, which is every rule on the read side.
+
+\paragraph{An invariant defect: free-list entries need not agree.}
+\label{sec:defect-samesnap}
+\textsc{SyncStart} takes one snapshot, so every entry it writes holds the same
+set.  That is a hypothesis of the snapshot step --- it is what makes \textbf{FLR}
+hold with equality rather than mere inclusion along a chain of detached nodes
+--- and it is stated there as a condition on the action.  It is also what the
+\emph{reader's} read needs, and there it has to be an invariant, which is how we
+found it.
+
+\textbf{IFL}'s obligation on a reader following an edge is that a reader taking
+a reference to a node already on the free list is one of the threads its grace
+period waits for.  The reader is at $o$ and follows an edge to $z$.  If $z$ is
+on the free list, \textbf{FLR} says its predecessor $o$ is too, with a set
+\emph{containing} $z$'s; \textbf{IFL} applied to $o$, which the reader observes
+as an iterator, says the reader is in $o$'s set.  What is wanted is that it is in
+$z$'s, and the inclusion runs the wrong way.  The two facts do not meet.
+
+With the entries equal they meet at once, and \texttt{read\_bound} is four
+lines.  Nothing in the nineteen forces them to agree:
+\texttt{free\_list\_entries\_need\_not\_agree} is a state satisfying all of
+them, and \textbf{BR} besides, with two entries holding different sets.  The
+repair is the conjunct \textsc{SyncStart} already establishes --- in the epoch
+reading it is the statement that every stamp is the same epoch, which is exactly
+the fact \texttt{sync\_start\_update} proves on the way through.
+
+This is the fourth of the same kind, and by now the pattern is worth naming: a
+condition the published proof carries as a \emph{hypothesis of one action}, and
+which some other rule needs as an \emph{invariant}.  \textbf{WITR} was
+\textsc{SyncStart}'s, \textbf{FLD} was \textsc{SyncStart}'s other one,
+\textbf{WUNLKW} was \textsc{WriteEnd}'s, and this is \textsc{SyncStart}'s third.
+An invariant set assembled by asking what each action needs locally will miss
+exactly these, because locally there is nothing to miss.
 
 \subsection{Open questions}
 \label{sec:inv-open}
@@ -1847,13 +1883,13 @@ fraction.
 
 What the read does need is \textbf{IFL}'s obligation: a reader acquiring a
 reference to a node already on the free list must be one of the threads its
-grace period waits for.  That is a real obligation, it is not discharged by
-owning anything, and it is what remains of the reader's read.  Under the epoch
-reading it has a sharp form --- the reader registered no later than the node was
-stamped --- and the argument for it is the one \textsc{RCU} rests on: a node is
-detached before its grace period begins, detached nodes are unreachable, and a
-reader that registers afterwards starts at the root.  Assembling that from
-\textbf{ULKR} and \textbf{UNQRT-b} is the work; it is not a camera change.
+grace period waits for.  That is a real obligation and it is not discharged by
+owning anything --- and working out what discharges it is what turned up
+\S\ref{sec:defect-samesnap}.  With the entries agreeing it is
+\texttt{read\_bound}, four lines from \textbf{FLR} and \textbf{IFL}.  What
+remains of the reader's read is to carry that conjunct in the Iris invariant
+rather than as a hypothesis, which is the same mechanical pass the other added
+conjuncts took.
 
 \textsc{WriteBegin} asks that the lock is free, and \textsc{SyncStop} that no
 thread is still bounding.  Those are the two points where the protocol
@@ -2049,8 +2085,22 @@ for; that is a bulk ghost update needing the reachable set enumerated, the same
 premise \texttt{sync\_start\_update} carries.  We record that rather than state
 a lemma that would claim more than it proves.
 
-So the remainder is two things, and neither is a camera.  \textbf{IFL}'s
-obligation for the reader's read, and termination for the two loops.  The
+Termination reduces further than we expected, and to something that is not the
+type system's to prove.  The threads \textsc{SyncStop} waits for are exactly the
+snapshot at the node's stamp --- a finite set --- and each \textsc{ReadEnd} by a
+member removes that member and nothing else (\texttt{wait\_shrinks}).  So the
+wait ends after at most as many \textsc{ReadEnd}s as the snapshot has members,
+and once they have all ended, in any order, the test passes
+(\texttt{wait\_terminates}); \texttt{wait\_then\_free} carries that the last
+step to what \frbl{} asks for.  What is left is fairness --- that a reader
+inside a critical section eventually leaves it --- which is a property of the
+client and not of the type system, and which no invariant of the shared state
+could supply.  The lock's loop is the same shape and shorter: it ends when the
+holder's critical section does.
+
+So what remains is one mechanical pass, carrying the agreement conjunct into
+the invariant so the reader's read closes like the other rules, and one
+assumption about clients that no type system discharges.  The
 read-side denotation is now mechanized --- \texttt{D\_rcuItrR}, transcribed from
 the figure --- together with the reader's acquisition
 (\texttt{reader\_post\_env}).  That one is worth a caution: the denotation's

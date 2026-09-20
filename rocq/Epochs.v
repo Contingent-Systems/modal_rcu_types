@@ -402,6 +402,76 @@ Proof.
   by rewrite (e_quiescent_entry_empty s o e Hst Hq).
 Qed.
 
+(** ** What the wait's termination reduces to
+
+    \textsc{SyncStop} loops until the grace period for a node stamped at [e] is
+    complete, and whether the loop goes round again is the one thing a
+    development without an operational semantics cannot settle.  What it can
+    settle is what the loop's termination *reduces to*, and the answer is
+    pleasant: the threads the wait is waiting for are exactly [e_snapshot s e],
+    a finite set, and each ReadEnd by a member removes that member and nothing
+    else.  So the wait terminates after at most as many ReadEnds as the
+    snapshot has members, and the remaining obligation is fairness -- that a
+    reader inside a critical section eventually leaves it -- which is a property
+    of the client, not of the type system.
+
+    [e_ends] is any number of ReadEnds in any order. *)
+
+Fixpoint e_ends (s : EState) (ts : list TID) : EState :=
+  match ts with
+  | []       => s
+  | t :: ts' => e_ends (e_end s t) ts'
+  end.
+
+Lemma e_snapshot_ends s e ts :
+  e_snapshot (e_ends s ts) e = e_snapshot s e ∖ list_to_set ts.
+Proof.
+  revert s. induction ts as [|t ts IH]; intros s; simpl.
+  - set_solver.
+  - rewrite IH, e_snapshot_end. set_solver.
+Qed.
+
+(** Each ReadEnd by a thread the wait is waiting for strictly shrinks it. *)
+Theorem wait_shrinks s e t :
+  t ∈ e_snapshot s e ->
+  size (e_snapshot (e_end s t) e) < size (e_snapshot s e).
+Proof.
+  intros Hin. rewrite e_snapshot_end. apply subset_size. set_solver.
+Qed.
+
+(** And once every thread it is waiting for has ended its section, in any
+    order, the test passes. *)
+Theorem wait_terminates s e ts :
+  (forall t, t ∈ e_snapshot s e -> t ∈ ts) ->
+  e_snapshot (e_ends s ts) e = ∅.
+Proof.
+  intros Hsub. rewrite e_snapshot_ends.
+  apply set_eq. intros t. rewrite elem_of_difference, elem_of_empty.
+  split; [| by intros []].
+  intros [Hin Hni]. exfalso. apply Hni, elem_of_list_to_set, Hsub, Hin.
+Qed.
+
+(** Freeing is then licensed, which is the whole chain: the wait ends because
+    the readers do, and what it establishes is the conjunct [freeable] asks
+    for. *)
+Corollary wait_then_free s o e ts :
+  estamp s !! o = Some e ->
+  (forall t, t ∈ e_snapshot s e -> t ∈ ts) ->
+  e_F (e_ends s ts) !! o = Some ∅.
+Proof.
+  intros Hst Hsub. unfold e_F. rewrite lookup_fmap.
+  assert (Hstamp : forall s0 l, estamp s0 !! o = Some e ->
+            estamp (e_ends s0 l) !! o = Some e).
+  { intros s0 l. revert s0. induction l as [|t l IH]; intros s0 H; simpl;
+      [exact H | apply IH; exact H]. }
+  pose proof (Hstamp s ts Hst) as Hst'.
+  rewrite Hst'. simpl. by rewrite (wait_terminates s e ts Hsub).
+Qed.
+
+(** The lock's loop is the same shape and shorter: \textsc{WriteBegin} spins
+    until the holder releases, so its termination reduces to the writer's own
+    critical section ending, which is one step rather than a set. *)
+
 (** ** It is a refinement, not a replacement
 
     The two invariants the snapshot model states about this bookkeeping hold of
@@ -441,4 +511,7 @@ Print Assumptions e_quiescent_entry_empty.
 Print Assumptions e_F_free.
 Print Assumptions quiescence_is_stable.
 Print Assumptions e_free_premise.
+Print Assumptions wait_shrinks.
+Print Assumptions wait_terminates.
+Print Assumptions wait_then_free.
 Print Assumptions e_RINFL.
