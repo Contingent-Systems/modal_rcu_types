@@ -10,7 +10,7 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
 19,900 lines and 1,033 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 241
+succeed if the development contains an admitted proof, or if any of its 245
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -955,11 +955,31 @@ Without the second the guarantee is half of itself -- a reader could not be
 published correctness criterion turns out to need an invariant the published
 invariant set does not have is the sharpest form our finding takes.
 
-The remaining two requirements need no proof and we say why: the four
-non-blocking primitives are total functions on the machine state, so each is
-enabled everywhere, and the two blocking ones block rather than fail, which is
-what unconditional execution asks; read-to-write upgrade we do not provide, and
-it is a performance optimisation orthogonal to memory safety.
+The third requirement, that the primitives execute unconditionally rather than
+failing and retrying, we first wrote off as needing no proof, on the grounds
+that the primitives are total functions on the machine state.  That was wrong,
+and reading our own semantics again is what shows it.  Five of the six carry a
+side condition: ReadBegin is written with tid different from the lock holder and
+with the reader set extended by disjoint union, so it requires the thread to be
+neither the writer nor already a reader; ReadEnd is written with the disjoint
+union on the *left*, so it requires the thread to be a reader; SyncStart
+requires an empty bounding set; WriteBegin requires the lock free; SyncStop
+requires the bounding set empty.  Only WriteEnd is unguarded.
+
+So there is something to prove, and it is the right thing -- not that the guards
+are trivial but that a well-typed thread never finds one false.  For the
+reader's two it is a theorem, discharged by the thread's own registration
+together with the invariant clause that the lock holder holds none: a thread
+with an unregistered cell is neither the writer nor a reader, and a thread with
+a registered one is a reader and still not the writer.  The writer's three are
+not discharged and we prove they cannot be, by giving a state satisfying every
+invariant in which all three are false at once; two of them are the blocking
+ones, and blocking rather than failing is what the requirement asks, and
+SyncStart's is discharged by the protocol, since Sync is SyncStart followed by
+SyncStop.
+
+The fourth, read-to-write upgrade, we do not provide, and it is a performance
+optimisation orthogonal to memory safety.
 
 We will expand Section 6 along these lines.
 

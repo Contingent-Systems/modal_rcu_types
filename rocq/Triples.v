@@ -2893,6 +2893,57 @@ Proof.
   - rewrite elem_of_empty. split; [by intros [] | by intros [-> Hc]].
 Qed.
 
+(** ** The reader's two guards are discharged by what the reader holds
+
+    Alglave et al.'s third requirement is that the RCU primitives execute
+    unconditionally.  Five of the six carry a side condition (see the guards in
+    [WellFormed.v]), so the requirement is not that the guards are trivial but
+    that a well-typed thread never finds one false.
+
+    For the reader's two, that is a theorem, and what discharges them is the
+    thread's own registration together with the invariant's clause that the lock
+    holder has none.  A thread holding an unregistered cell is neither the
+    writer nor a reader, which is exactly \textsc{ReadBegin}'s side condition; a
+    thread holding a registered one is a reader and still not the writer, which
+    is \textsc{ReadEnd}'s.  Both are already proved inside the two triples; this
+    states them as what they are. *)
+
+Lemma read_begin_guard m Rg t :
+  RepresentsR (rds m) Rg ->
+  (forall t', lk m = Some t' -> Rg !! t' = None) ->
+  Rg !! t = Some None ->
+  guard_ReadBegin m t.
+Proof.
+  intros HRR HLk Hcell. split.
+  - intros Hlk. by rewrite (HLk t Hlk) in Hcell.
+  - intros Hrd. destruct (proj1 (HRR t) Hrd) as [e [D He]].
+    by rewrite Hcell in He.
+Qed.
+
+Lemma read_end_guard m Rg t e D :
+  RepresentsR (rds m) Rg ->
+  (forall t', lk m = Some t' -> Rg !! t' = None) ->
+  Rg !! t = Some (Some (e, D)) ->
+  guard_ReadEnd m t.
+Proof.
+  intros HRR HLk Hcell. split.
+  - intros Hlk. by rewrite (HLk t Hlk) in Hcell.
+  - apply HRR. by exists e, D.
+Qed.
+
+(** \textsc{SyncStart}'s guard is the third that is not blocking, and it is
+    discharged by the protocol rather than by a resource: the bounding set is
+    emptied by \textsc{SyncStop}, and \textsf{Sync} is \textsc{SyncStart}
+    followed by \textsc{SyncStop}, so a writer that has completed its previous
+    grace period finds it empty.  That is a property of the *rule* for
+    \textsf{Sync} rather than of any state, which is why it appears here as a
+    remark and not as a lemma: there is no state in which it holds
+    unconditionally, and [writer_guards_are_not_invariants] is the proof that
+    there is not. *)
+
+Print Assumptions read_begin_guard.
+Print Assumptions read_end_guard.
+
 (** ** Carrying FRW
 
     Fresh-reachability unguarded (\S the read side) is the one added conjunct

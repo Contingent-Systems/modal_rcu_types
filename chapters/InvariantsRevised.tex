@@ -94,7 +94,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 241 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 245 say \emph{closed under the
 global context}, and none reports an axiom.
 
 That target had the bug it exists to catch, and we report it because the
@@ -2178,10 +2178,35 @@ unpublished node, but nothing said it could not reach one.  That a published
 correctness criterion turns out to need an invariant the published invariant set
 does not have is the sharpest form the mechanization's finding takes.
 
-\emph{Unconditional execution.}  The four non-blocking primitives are total
-functions on the machine state, so each is enabled everywhere; the two blocking
-ones block rather than fail, which is what the requirement asks.  There is
-nothing to prove beyond their being functions.
+\emph{Unconditional execution.}  We first wrote that this one needed no proof,
+on the grounds that the primitives are total functions on the machine state.
+That was wrong, and reading the semantics of \S\ref{sec:semantics} again is what
+shows it.  Five of the six carry a side condition: \textsc{ReadBegin} is written
+with $\mathit{tid} \neq \ell$ and with $R \uplus \{\mathit{tid}\}$ on the right,
+so it requires the thread to be neither the writer nor already a reader;
+\textsc{ReadEnd} is written with $R \uplus \{\mathit{tid}\}$ on the \emph{left},
+so it requires the thread to be a reader; \textsc{SyncStart} requires an empty
+bounding set; \textsc{WriteBegin} requires the lock free; \textsc{SyncStop}
+requires the bounding set empty.  Only \textsc{WriteEnd} is unguarded.
+
+So there is something to prove, and it is the right thing: not that the guards
+are trivial but that a \emph{well-typed} thread never finds one false.  For the
+reader's two that is a theorem.  \texttt{read\_begin\_guard} and
+\texttt{read\_end\_guard} discharge them from the thread's own registration
+together with the invariant's clause that the lock holder holds none --- a
+thread with an unregistered cell is neither the writer nor a reader, which is
+\textsc{ReadBegin}'s condition, and a thread with a registered one is a reader
+and still not the writer, which is \textsc{ReadEnd}'s.
+\texttt{write\_end\_unconditional} is the one that really is nothing.
+
+The writer's three are not discharged, and \texttt{writer\_guards\_are\_not\_%
+invariants} is the proof that they cannot be: a state satisfying every invariant
+can have the lock held and a grace period running, and then all three are false
+at once.  Two of them are the blocking ones, and blocking rather than failing is
+what the requirement asks.  \textsc{SyncStart}'s is discharged by the protocol
+rather than by any state --- \textsf{Sync} is \textsc{SyncStart} followed by
+\textsc{SyncStop}, so a writer that has completed its previous grace period
+finds the bounding set empty.
 
 \emph{Read-to-write upgrade.}  Not provided, as \S\ref{sec:relatedwork} says: a
 performance optimisation, orthogonal to memory safety.

@@ -2104,3 +2104,65 @@ Qed.
     and is orthogonal to memory safety. *)
 
 Print Assumptions readers_cannot_see_unpublished.
+
+(** * Alglave et al.'s third requirement, which is not nothing
+
+    We said the third requirement -- that the RCU primitives execute
+    unconditionally, rather than failing and retrying -- needed no proof, on the
+    grounds that the primitives are total functions on the machine state.  That
+    was wrong, and reading the semantics again is what shows it.  Five of the
+    six primitives carry a side condition:
+
+      ReadBegin  is written with [tid <> l] and with [R uplus {tid}] on the
+                 right, so it requires the thread to be neither the writer nor
+                 already a reader;
+      ReadEnd    is written with [R uplus {tid}] on the *left*, so it requires
+                 the thread to be a reader, and with [tid <> l] again;
+      SyncStart  is written with an empty bounding set on the left, so it
+                 requires no grace period to be in progress;
+      WriteBegin requires the lock to be free;
+      SyncStop   requires the bounding set to be empty.
+
+    Only WriteEnd is unguarded.  So there is something to prove, and it is the
+    right thing to prove: the requirement is not that the guards are trivial but
+    that a *well-typed* thread never finds one false.  Below are the guards as
+    propositions; which of them are discharged, and by what, is in [Triples.v],
+    where a thread's own registration is a resource. *)
+
+Definition guard_ReadBegin (m : MState) (t : TID) : Prop :=
+  lk m <> Some t /\ ~ rds m t.
+
+Definition guard_ReadEnd (m : MState) (t : TID) : Prop :=
+  lk m <> Some t /\ rds m t.
+
+Definition guard_SyncStart (m : MState) : Prop := forall t, ~ bnd m t.
+
+Definition guard_SyncStop (m : MState) : Prop := forall t, ~ bnd m t.
+
+Definition guard_WriteBegin (m : MState) : Prop := lk m = None.
+
+(** The one that really is nothing. *)
+Definition guard_WriteEnd (m : MState) : Prop := True.
+
+Theorem write_end_unconditional : forall m, guard_WriteEnd m.
+Proof. intros m. exact I. Qed.
+
+(** The three the type system does not discharge are genuinely not discharged,
+    and not because we have failed to: a state can satisfy every invariant with
+    the lock held and a grace period running, and then all three are false at
+    once.  [initial] with a lock holder and a bounding thread is such a state;
+    [bnd_stray] above already is one. *)
+Theorem writer_guards_are_not_invariants :
+  (forall FType, WellFormed FType bnd_stray)
+  /\ ~ guard_SyncStart (ms bnd_stray)
+  /\ ~ guard_SyncStop (ms bnd_stray)
+  /\ ~ guard_WriteBegin (ms bnd_stray).
+Proof.
+  repeat apply conj; [exact bnd_stray_WellFormed | | |].
+  - intros H. exact (H 9 eq_refl).
+  - intros H. exact (H 9 eq_refl).
+  - intros H. discriminate H.
+Qed.
+
+Print Assumptions write_end_unconditional.
+Print Assumptions writer_guards_are_not_invariants.
