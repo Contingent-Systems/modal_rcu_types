@@ -332,7 +332,12 @@ Section invariantT.
          which is what makes ReadEnd's enumeration the thread's business *)
       ∗ ⌜forall t e D o sg ob,
            Rg !! t = Some (Some (e, D)) -> Og !! (o, t) = Some sg ->
-           ob ∈ sg -> obs_tid ob = Some t -> o ∈ D⌝.
+           ob ∈ sg -> obs_tid ob = Some t -> o ∈ D⌝
+      (* every stamp is the same epoch, which SyncStart establishes and which
+         is what makes the entries agree -- the reader's read needs it *)
+      ∗ ⌜forall o o' e e', St !! o = Some e -> St !! o' = Some e' -> e = e'⌝
+      (* and a fresh node has no incoming edge, unguarded *)
+      ∗ ⌜FRW (to_LState_t m Og U T F)⌝.
 
   Definition rcu_invT (N : namespace) (γo γf γr γe γq : gname) : iProp Σ :=
     inv N (rcu_invT_inner γo γf γr γe γq).
@@ -2888,6 +2893,73 @@ Proof.
   - rewrite elem_of_empty. split; [by intros [] | by intros [-> Hc]].
 Qed.
 
+(** ** Carrying FRW
+
+    Fresh-reachability unguarded (\S the read side) is the one added conjunct
+    that a field write has something to prove about, because a field write is
+    the only thing that creates an edge.  What it has to prove is that the
+    edge's new target is not fresh: the two linking rules get that from
+    promoting the target in the same step, and the others from FNR, since the
+    target is an iterator. *)
+
+Lemma FRW_obs m Og Og' U T F :
+  (forall o t, obsv (to_LState_t m Og' U T F) o (Ofresh t) ->
+     obsv (to_LState_t m Og U T F) o (Ofresh t)) ->
+  FRW (to_LState_t m Og U T F) -> FRW (to_LState_t m Og' U T F).
+Proof. intros Hshr HF o t Hfr o' f' He. exact (HF o t (Hshr o t Hfr) o' f' He). Qed.
+
+Lemma FRW_write m Og Og' U T F o0 f0 v :
+  FRW (to_LState_t m Og U T F) ->
+  (forall o t, obsv (to_LState_t m Og' U T F) o (Ofresh t) ->
+     obsv (to_LState_t m Og U T F) o (Ofresh t)) ->
+  (forall z t, v = VLoc z -> ~ obsv (to_LState_t m Og' U T F) z (Ofresh t)) ->
+  FRW (to_LState_t (write_ms m o0 f0 v) Og' U T F).
+Proof.
+  intros HF Hshr Hnf o t Hfr o' f' He.
+  unfold Edge in He. simpl in He.
+  destruct (decide ((o', f') = (o0, f0))) as [Heq | Hne].
+  - injection Heq as -> ->. rewrite upd_same in He.
+    injection He as He. exact (Hnf o t He Hfr).
+  - rewrite (upd_other (hp m) o0 f0 v o' f' Hne) in He.
+    exact (HF o t (Hshr o t Hfr) o' f' He).
+Qed.
+
+(** A node whose entry the writer has just replaced is not fresh: by ObsWF the
+    only entry that could say so is its own, and by WFreshW no other thread's
+    could.  This is what the two linking rules use, since they promote the node
+    they link in the same step. *)
+Lemma not_fresh_after_promote m Og U T F lw on s' :
+  ObsWF Og -> WFreshW (to_LState_t m Og U T F) -> lk m = Some lw ->
+  (forall t, Ofresh t ∉ s') ->
+  forall t, ~ obsv (to_LState_t m (<[(on, lw) := s']> Og) U T F) on (Ofresh t).
+Proof.
+  intros Hwf HW Hlk Hns t [t' [sg [Hlk' Hin]]].
+  destruct (decide ((on, t') = (on, lw))) as [Heq | Hne].
+  - injection Heq as ->. rewrite lookup_insert_eq in Hlk'.
+    injection Hlk' as <-. exact (Hns t Hin).
+  - rewrite lookup_insert_ne in Hlk'; [| exact (fun Hc => Hne (eq_sym Hc))].
+    assert (Ht : t = t').
+    { destruct (Hwf on t' sg (Ofresh t) Hlk' Hin) as [Hx | Hy];
+        [by injection Hx | discriminate Hy]. }
+    subst t'. apply Hne. f_equal.
+    pose proof (HW on t (ex_intro _ t (ex_intro _ sg (conj Hlk' Hin)))) as Hc.
+    rewrite Hlk in Hc. by injection Hc.
+Qed.
+
+(** And a fresh observation survives an insert only if it was there before. *)
+Lemma fresh_ins_back m Og U T F k s' :
+  (forall t, Ofresh t ∉ s') ->
+  forall q t, obsv (to_LState_t m (<[k := s']> Og) U T F) q (Ofresh t) ->
+    obsv (to_LState_t m Og U T F) q (Ofresh t).
+Proof.
+  intros Hns q t [t' [sg [Hlk Hin]]].
+  destruct (decide ((q, t') = k)) as [Heq | Hne].
+  - rewrite Heq lookup_insert_eq in Hlk. injection Hlk as <-.
+    by destruct (Hns t Hin).
+  - rewrite lookup_insert_ne in Hlk;
+      [| exact (fun Hc => Hne (eq_sym Hc))]. by exists t', sg.
+Qed.
+
 (** ** The two points where the protocol tests shared state
 
     \textsc{WriteBegin} asks whether the lock is free, \textsc{SyncStop}
@@ -2950,7 +3022,8 @@ Section atomic.
     iIntros (HN Hd Hfs) "#Hinv Hobs Hfl Hpts".
     iInv "Hinv" as (m Og U T F St Rg gg ww Fr)
       ">(Hp & Ho & Hf & Hreg & Hwm & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc
-         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm & %Hdom)" "Hclose".
+         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm & %Hdom
+         & %HSS & %HFRW)" "Hclose".
     iDestruct (tobs_ctl_agree with "Ho Hobs") as %Hlk.
     assert (Hfree : obsv (to_LState_t m Og U T F) d (Ofree t)).
     { exists t, {[Ofree t]}. split; [exact Hlk | by apply elem_of_singleton]. }
@@ -2965,7 +3038,7 @@ Section atomic.
               (delete d St), Rg, gg, ww, Fr. iFrame.
       iPureIntro. split; [exact HWF | split; [| split; [| split; [| split; [| split;
         [| split; [| split; [| split; [| split; [| split; [| split;
-        [| split]]]]]]]]]]]].
+        [| split; [| split; [| split]]]]]]]]]]]]]].
       - rewrite mkE_F_free. by apply FLD_free.
       - rewrite mkE_F_free. intros o0 t0 Hf0. exact (HWFW o0 t0 Hf0).
       - apply RefsRCU_free. exact HRefs.
@@ -2981,7 +3054,18 @@ Section atomic.
       - first [ exact Hdom
               | by apply (dom_ins Rg Og m _ lw _ Hlkm HLk Hdom)
               | by apply (dom_ins Rg _ m _ lw _ Hlkm HLk
-                            (dom_ins Rg Og m _ lw _ Hlkm HLk Hdom)) ]. }
+                            (dom_ins Rg Og m _ lw _ Hlkm HLk Hdom)) ].
+      - first [ exact HSS
+              | intros oa oB ea eb Ha Hb;
+                apply lookup_delete_Some in Ha as [_ Ha];
+                apply lookup_delete_Some in Hb as [_ Hb];
+                exact (HSS oa oB ea eb Ha Hb) ].
+      - intros oz tz Hfr o' f' He.
+        apply (HFRW oz tz Hfr o' f').
+        unfold Edge in He |- *. simpl in He.
+        destruct (Nat.eq_dec o' d) as [-> | Hne];
+          [ by rewrite free_same in He
+          | by rewrite (free_other (hp m) d o' f' Hne) in He ]. }
     by iModIntro.
   Qed.
 
@@ -3004,7 +3088,8 @@ Section atomic.
     iIntros (HN) "#Hinv Hcell".
     iInv "Hinv" as (m Og U T F St Rg gg ww Fr)
       ">(Hp & Ho & Hf & Hreg & Hwm & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc
-         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm & %Hdom)"
+         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm & %Hdom
+         & %HSS & %HFRW)"
       "Hclose".
     iDestruct (reg_cell_agree with "Hreg Hcell") as %Hcell.
     (* the thread is not the writer, because the lock holder has no cell *)
@@ -3047,7 +3132,7 @@ Section atomic.
       iPureIntro.
       split; [exact HWF | split; [| split; [| split; [| split; [| split;
         [| split; [| split; [| split; [| split; [| split; [| split;
-        [| split]]]]]]]]]]]].
+        [| split; [| split; [| split]]]]]]]]]]]]]].
       - exact HFLD.
       - exact HWFW.
       - exact HRefs.
@@ -3101,7 +3186,9 @@ Section atomic.
         + exfalso. apply (Hnoobs o0 ob0); [by exists t, sg0 | exact Htid0].
         + rewrite lookup_insert_ne in Hreg0;
             [| exact (fun Hc => Hne (eq_sym Hc))].
-          exact (Hdom t0 e0 D0 o0 sg0 ob0 Hreg0 Hlk0 Hin0 Htid0). }
+          exact (Hdom t0 e0 D0 o0 sg0 ob0 Hreg0 Hlk0 Hin0 Htid0).
+      - exact HSS.
+      - exact HFRW. }
     iModIntro. by iExists gg.
   Qed.
 
@@ -3134,7 +3221,8 @@ Section atomic.
     iIntros (HN Hnd Hkey HcovD) "#Hinv Hcell Hfrags".
     iInv "Hinv" as (m Og U T F St Rg gg ww Fr)
       ">(Hp & Ho & Hf & Hreg & Hwm & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc
-         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm & %Hdom)"
+         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm & %Hdom
+         & %HSS & %HFRW)"
       "Hclose".
     iDestruct (reg_cell_agree with "Hreg Hcell") as %Hcell.
     iDestruct (tobs_list_agree with "Ho Hfrags") as %Hag.
@@ -3185,7 +3273,7 @@ Section atomic.
                                     Hval H)).
       split; [exact HWF' | split; [| split; [| split; [| split; [| split;
         [| split; [| split; [| split; [| split; [| split; [| split;
-        [| split]]]]]]]]]]]].
+        [| split; [| split; [| split]]]]]]]]]]]]]].
       - (* FLD: the entries are the same, and a detached node stays detached
            because a reader holds no detaching observation *)
         destruct Hwf as (_ & _ & _ & _ & _ & _ & _ & _ & _ & _ & _ & _ & HRITR
@@ -3267,7 +3355,11 @@ Section atomic.
           apply (Hdom t0 e0 D0 o0 sg0 ob0 Hreg0); [| exact Hin0 | exact Htid0].
           destruct (ins_list_inv _ _ _ _ Hlk0) as [Hin | [_ Hold]];
             [| exact Hold].
-          exfalso. apply Hne. exact (Hkey' _ Hin). }
+          exfalso. apply Hne. exact (Hkey' _ Hin).
+      - exact HSS.
+      - (* the heap is untouched and observations only shrink *)
+        apply (FRW_obs m Og (ins_list Og l) _ _ _
+                 (fun q t0 H => Hshr q _ H) HFRW). }
     iModIntro. iFrame. subst l. by rewrite big_sepL_fmap.
   Qed.
 
@@ -3301,7 +3393,8 @@ Section atomic.
             "#Hinv Hlk Hon Hoy Hsv Hcells Hptn".
     iInv "Hinv" as (m Og U T F St Rg gg ww Fr)
       ">(Hp & Ho & Hf & Hreg & Hwm & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc
-         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm & %Hdom)" "Hclose".
+         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm & %Hdom
+         & %HSS & %HFRW)" "Hclose".
     (* the premises, one resource at a time *)
     iDestruct (tobs_ctl_agree with "Ho Hon") as %Hlon.
     iDestruct (tobs_ctl_agree with "Ho Hoy") as %Hloy.
@@ -3345,7 +3438,7 @@ Section atomic.
     { iNext. iExists (write_ms m on f (VLoc oy)), Og, U, T, F, St, Rg, gg, ww, Fr. iFrame.
       iPureIntro. split; [exact HWF | split; [| split; [| split; [| split; [| split;
         [| split; [| split; [| split; [| split; [| split; [| split;
-        [| split]]]]]]]]]]]].
+        [| split; [| split; [| split]]]]]]]]]]]]]].
       - by apply (FLD_same m).
       - intros o0 t0 Hf0. exact (HWFW o0 t0 Hf0).
       - apply RefsRCU_upd; [exact HRefs | exact Hfrcu].
@@ -3361,7 +3454,16 @@ Section atomic.
       - first [ exact Hdom
               | by apply (dom_ins Rg Og m _ lw _ Hlkm HLk Hdom)
               | by apply (dom_ins Rg _ m _ lw _ Hlkm HLk
-                            (dom_ins Rg Og m _ lw _ Hlkm HLk Hdom)) ]. }
+                            (dom_ins Rg Og m _ lw _ Hlkm HLk Hdom)) ].
+      - first [ exact HSS
+              | intros oa oB ea eb Ha Hb;
+                apply lookup_delete_Some in Ha as [_ Ha];
+                apply lookup_delete_Some in Hb as [_ Hb];
+                exact (HSS oa oB ea eb Ha Hb) ].
+      - destruct Hwf as (_ & _ & _ & _ & _ & _ & _ & _ & _ & HFNR & _).
+        apply (FRW_write m Og Og _ _ _ on f (VLoc oy) HFRW (fun q t H => H)).
+        intros zz t0 Hv Hbad. injection Hv as Hv. subst zz.
+        exact (proj1 (HFNR oy t0 lw Hbad) Hit). }
     iModIntro. iFrame.
   Qed.
 
@@ -3387,7 +3489,8 @@ Section atomic.
     iIntros (HN) "#Hinv Hst".
     iInv "Hinv" as (m Og U T F St Rg gg ww Fr)
       ">(Hp & Ho & Hf & Hreg & Hwm & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc
-         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm & %Hdom)"
+         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm & %Hdom
+         & %HSS & %HFRW)"
       "Hclose".
     iDestruct (fl_ctl_agree with "Hf Hst") as %Hstamp.
     destruct (decide (map_Forall (fun _ v => past e v) Rg)) as [Hq | Hnq];
@@ -3409,7 +3512,7 @@ Section atomic.
       iPureIntro.
       split; [exact HWF | split; [| split; [| split; [| split; [| split;
         [| split; [| split; [| split; [| split; [| split; [| split;
-        [| split]]]]]]]]]]]].
+        [| split; [| split; [| split]]]]]]]]]]]]]].
       - exact HFLD.
       - exact HWFW.
       - exact HRefs.
@@ -3424,7 +3527,13 @@ Section atomic.
       - split; [apply Nat.max_lub; [exact (proj1 HWm) | exact Hle] |].
         intros t0 e0 D0 H. apply Nat.max_lub;
           [exact (proj2 HWm t0 e0 D0 H) | exact (Hq t0 _ H)].
-      - exact Hdom. }
+      - exact Hdom.
+      - first [ exact HSS
+              | intros oa ob ea eb Ha Hb;
+                apply lookup_delete_Some in Ha as [_ Ha];
+                apply lookup_delete_Some in Hb as [_ Hb];
+                exact (HSS oa ob ea eb Ha Hb) ].
+      - exact HFRW. }
     iModIntro. iFrame. by iLeft.
   Qed.
 
@@ -3441,7 +3550,8 @@ Section atomic.
     iIntros (HN Hlt) "#Hinv Hst Hlb".
     iInv "Hinv" as (m Og U T F St Rg gg ww Fr)
       ">(Hp & Ho & Hf & Hreg & Hwm & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc
-         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm & %Hdom)"
+         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm & %Hdom
+         & %HSS & %HFRW)"
       "Hclose".
     iDestruct (fl_ctl_agree with "Hf Hst") as %Hstamp.
     iDestruct (wm_lb_le with "Hwm Hlb") as %Hn.
@@ -3512,7 +3622,8 @@ Section atomic_link.
             "#Hinv Hlk Hop Hon Hsv Hcells Hptf".
     iInv "Hinv" as (m Og U T F St Rg gg ww Fr)
       ">(Hp & Ho & Hf & Hreg & Hwm & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc
-         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm & %Hdom)" "Hclose".
+         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm & %Hdom
+         & %HSS & %HFRW)" "Hclose".
     iDestruct (tobs_ctl_agree with "Ho Hop") as %Hlop.
     iDestruct (tobs_ctl_agree with "Ho Hon") as %Hlon.
     assert (Hitr : obsv (to_LState_t m Og U T F) op (Oiter lw))
@@ -3584,7 +3695,7 @@ Section atomic_link.
               (<[(on, lw) := {[Oiter lw]}]> Og), U, T, F, St, Rg, gg, ww, Fr.
       iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split; [| split;
         [| split; [| split; [| split; [| split; [| split; [| split;
-        [| split]]]]]]]]]]]].
+        [| split; [| split; [| split]]]]]]]]]]]]]].
       - intros o Tr Hfl'. destruct (HFLD o Tr Hfl') as [t0 Hdet].
         exists t0. destruct Hdet as [Hd | Hd];
           [left | right];
@@ -3618,7 +3729,21 @@ Section atomic_link.
       - first [ exact Hdom
               | by apply (dom_ins Rg Og m _ lw _ Hlkm HLk Hdom)
               | by apply (dom_ins Rg _ m _ lw _ Hlkm HLk
-                            (dom_ins Rg Og m _ lw _ Hlkm HLk Hdom)) ]. }
+                            (dom_ins Rg Og m _ lw _ Hlkm HLk Hdom)) ].
+      - first [ exact HSS
+              | intros oa oB ea eb Ha Hb;
+                apply lookup_delete_Some in Ha as [_ Ha];
+                apply lookup_delete_Some in Hb as [_ Hb];
+                exact (HSS oa oB ea eb Ha Hb) ].
+      - apply (FRW_write m Og _ _ _ _ op f (VLoc on) HFRW
+                 (fresh_ins_back m Og U T F (on, lw) {[Oiter lw]}
+                    (fun t0 Hc => ltac:(apply elem_of_singleton in Hc;
+                                        discriminate Hc)))).
+        intros zz t0 Hv. injection Hv as Hv. subst zz.
+        exact (not_fresh_after_promote m Og U T F lw on {[Oiter lw]}
+                 HWF HWFW Hlkm
+                 (fun t1 Hc => ltac:(apply elem_of_singleton in Hc;
+                                     discriminate Hc)) t0). }
     iModIntro. iFrame.
   Qed.
 
@@ -3652,7 +3777,8 @@ Section atomic_link.
             "#Hinv Hlk Hop Hon Hsv Hcells Hptf".
     iInv "Hinv" as (m Og U T F St Rg gg ww Fr)
       ">(Hp & Ho & Hf & Hreg & Hwm & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc
-         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm & %Hdom)" "Hclose".
+         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm & %Hdom
+         & %HSS & %HFRW)" "Hclose".
     iDestruct (tobs_ctl_agree with "Ho Hop") as %Hlop.
     iDestruct (tobs_ctl_agree with "Ho Hon") as %Hlon.
     assert (Hitr : obsv (to_LState_t m Og U T F) op (Oiter lw))
@@ -3726,7 +3852,7 @@ Section atomic_link.
               (<[(on, lw) := {[Oiter lw]}]> Og), U, T, F, St, Rg, gg, ww, Fr.
       iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split; [| split;
         [| split; [| split; [| split; [| split; [| split; [| split;
-        [| split]]]]]]]]]]]].
+        [| split; [| split; [| split]]]]]]]]]]]]]].
       - intros o Tr Hfl'. destruct (HFLD o Tr Hfl') as [t0 Hdet].
         exists t0. destruct Hdet as [Hd | Hd];
           [left | right];
@@ -3760,7 +3886,21 @@ Section atomic_link.
       - first [ exact Hdom
               | by apply (dom_ins Rg Og m _ lw _ Hlkm HLk Hdom)
               | by apply (dom_ins Rg _ m _ lw _ Hlkm HLk
-                            (dom_ins Rg Og m _ lw _ Hlkm HLk Hdom)) ]. }
+                            (dom_ins Rg Og m _ lw _ Hlkm HLk Hdom)) ].
+      - first [ exact HSS
+              | intros oa oB ea eb Ha Hb;
+                apply lookup_delete_Some in Ha as [_ Ha];
+                apply lookup_delete_Some in Hb as [_ Hb];
+                exact (HSS oa oB ea eb Ha Hb) ].
+      - apply (FRW_write m Og _ _ _ _ op f (VLoc on) HFRW
+                 (fresh_ins_back m Og U T F (on, lw) {[Oiter lw]}
+                    (fun t0 Hc => ltac:(apply elem_of_singleton in Hc;
+                                        discriminate Hc)))).
+        intros zz t0 Hv. injection Hv as Hv. subst zz.
+        exact (not_fresh_after_promote m Og U T F lw on {[Oiter lw]}
+                 HWF HWFW Hlkm
+                 (fun t1 Hc => ltac:(apply elem_of_singleton in Hc;
+                                     discriminate Hc)) t0). }
     iModIntro. iFrame.
   Qed.
 
@@ -3905,7 +4045,8 @@ Section atomic_unlink.
             "#Hinv Hlk Hox Hoz How Hcells Hpt1 Hfrg".
     iInv "Hinv" as (m Og U T F St Rg gg ww Fr0)
       ">(Hp & Ho & Hf & Hreg & Hwm & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc
-         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm & %Hdom)" "Hclose".
+         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm & %Hdom
+         & %HSS & %HFRW)" "Hclose".
     iDestruct (fr_agree with "Hfr Hfrg") as %->.
     iDestruct (tobs_ctl_agree with "Ho Hox") as %Hlox.
     iDestruct (tobs_ctl_agree with "Ho Hoz") as %Hloz.
@@ -3965,7 +4106,7 @@ Section atomic_unlink.
               (<[(oz, lw) := {[Ounlk lw]}]> Og), U, T, F, St, Rg, gg, ww, Fr.
       iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split; [| split;
         [| split; [| split; [| split; [| split; [| split; [| split;
-        [| split]]]]]]]]]]]].
+        [| split; [| split; [| split]]]]]]]]]]]]]].
       - intros o Tr Hfl'. destruct (HFLD o Tr Hfl') as [t0 Hdet].
         exists t0. destruct Hdet as [Hd | Hd];
           [left | right];
@@ -3999,7 +4140,22 @@ Section atomic_unlink.
       - first [ exact Hdom
               | by apply (dom_ins Rg Og m _ lw _ Hlkm HLk Hdom)
               | by apply (dom_ins Rg _ m _ lw _ Hlkm HLk
-                            (dom_ins Rg Og m _ lw _ Hlkm HLk Hdom)) ]. }
+                            (dom_ins Rg Og m _ lw _ Hlkm HLk Hdom)) ].
+      - first [ exact HSS
+              | intros oa oB ea eb Ha Hb;
+                apply lookup_delete_Some in Ha as [_ Ha];
+                apply lookup_delete_Some in Hb as [_ Hb];
+                exact (HSS oa oB ea eb Ha Hb) ].
+      - destruct Hwf as (_ & _ & _ & _ & _ & _ & _ & _ & _ & HFNR & _).
+        apply (FRW_write m Og _ _ _ _ ox f1 (VLoc ow) HFRW
+                 (fresh_ins_back m Og U T F (oz, lw) {[Ounlk lw]}
+                    (fun t0 Hc => ltac:(apply elem_of_singleton in Hc;
+                                        discriminate Hc)))).
+        intros zz t0 Hv Hbad. injection Hv as Hv. subst zz.
+        exact (proj1 (HFNR ow t0 lw
+                 (fresh_ins_back m Og U T F (oz, lw) {[Ounlk lw]}
+                    (fun t1 Hc => ltac:(apply elem_of_singleton in Hc;
+                                        discriminate Hc)) ow t0 Hbad)) Hitw). }
     iModIntro. iFrame.
   Qed.
 
@@ -4043,7 +4199,8 @@ Section atomic_unlink.
             "#Hinv Hlk Hop Hon Hoo Hsv Hcells Hptf Hfrg".
     iInv "Hinv" as (m Og U T F St Rg gg ww Fr0)
       ">(Hp & Ho & Hf & Hreg & Hwm & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc
-         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm & %Hdom)" "Hclose".
+         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm & %Hdom
+         & %HSS & %HFRW)" "Hclose".
     iDestruct (fr_agree with "Hfr Hfrg") as %->.
     iDestruct (tobs_ctl_agree with "Ho Hop") as %Hlop.
     iDestruct (tobs_ctl_agree with "Ho Hon") as %Hlon.
@@ -4142,7 +4299,7 @@ Section atomic_unlink.
               U, T, F, St, Rg, gg, ww, Fr.
       iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split; [| split;
         [| split; [| split; [| split; [| split; [| split; [| split;
-        [| split]]]]]]]]]]]].
+        [| split; [| split; [| split]]]]]]]]]]]]]].
       - intros o Tr Hfl'. destruct (HFLD o Tr Hfl') as [t0 Hdet].
         exists t0. destruct Hdet as [Hd | Hd];
           [left | right];
@@ -4198,7 +4355,32 @@ Section atomic_unlink.
       - first [ exact Hdom
               | by apply (dom_ins Rg Og m _ lw _ Hlkm HLk Hdom)
               | by apply (dom_ins Rg _ m _ lw _ Hlkm HLk
-                            (dom_ins Rg Og m _ lw _ Hlkm HLk Hdom)) ]. }
+                            (dom_ins Rg Og m _ lw _ Hlkm HLk Hdom)) ].
+      - first [ exact HSS
+              | intros oa oB ea eb Ha Hb;
+                apply lookup_delete_Some in Ha as [_ Ha];
+                apply lookup_delete_Some in Hb as [_ Hb];
+                exact (HSS oa oB ea eb Ha Hb) ].
+      - set (Og1 := <[(oo, lw) := {[Ounlk lw]}]> Og).
+        assert (Hb1 : forall q t0,
+                  obsv (to_LState_t m Og1 U T F) q (Ofresh t0) ->
+                  obsv (to_LState_t m Og U T F) q (Ofresh t0))
+          by (apply (fresh_ins_back m Og U T F (oo, lw) {[Ounlk lw]});
+              intros t0 Hc; apply elem_of_singleton in Hc; discriminate Hc).
+        assert (Hb2 : forall q t0,
+                  obsv (to_LState_t m (<[(on, lw) := {[Oiter lw]}]> Og1) U T F)
+                       q (Ofresh t0) ->
+                  obsv (to_LState_t m Og1 U T F) q (Ofresh t0))
+          by (apply (fresh_ins_back m Og1 U T F (on, lw) {[Oiter lw]});
+              intros t0 Hc; apply elem_of_singleton in Hc; discriminate Hc).
+        apply (FRW_write m Og1 _ _ _ _ op f (VLoc on)
+                 (FRW_obs m Og Og1 U T F Hb1 HFRW) Hb2).
+        intros zz t0 Hv. injection Hv as Hv. subst zz.
+        apply (not_fresh_after_promote m Og1 U T F lw on {[Oiter lw]}).
+        + exact (ObsWF_unlink Og oo lw HWF).
+        + intros q t1 Hq. exact (HWFW q t1 (Hb1 q t1 Hq)).
+        + exact Hlkm.
+        + intros t1 Hc. apply elem_of_singleton in Hc. discriminate Hc. }
     iModIntro. iFrame.
   Qed.
 
@@ -5484,7 +5666,8 @@ Section atomic_alloc.
     iDestruct "Hw" as "(Hlk & Hsm & Hob & Hcells & Hflo)".
     iInv "Hinv" as (m Og U0 T F St Rg gg ww Fr0)
       ">(Hp & Ho & Hf & Hreg & Hwm & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc
-         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm & %Hdom)" "Hclose".
+         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm & %Hdom
+         & %HSS & %HFRW)" "Hclose".
     iDestruct (fr_agree with "Hfr Hfrg") as %->.
     iDestruct "Hp" as "(Hm & Hlka & %Hrt & Hhp & Hst)".
     iDestruct (lk_agree with "Hlka Hlk") as %Hlkm.
@@ -5552,7 +5735,7 @@ Section atomic_alloc.
               U', T, F, St, Rg, gg, ww, (Fr ∪ {[n]}).
       iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split; [| split;
         [| split; [| split; [| split; [| split; [| split; [| split;
-        [| split]]]]]]]]]]]].
+        [| split; [| split; [| split]]]]]]]]]]]]]].
       - intros o Tr Hfl'. destruct (HFLD o Tr Hfl') as [t0 Hdet].
         exists t0. destruct Hdet as [Hd | Hd];
           [left | right];
@@ -5586,7 +5769,24 @@ Section atomic_alloc.
       - first [ exact Hdom
               | by apply (dom_ins Rg Og m _ lw _ Hlkm HLk Hdom)
               | by apply (dom_ins Rg _ m _ lw _ Hlkm HLk
-                            (dom_ins Rg Og m _ lw _ Hlkm HLk Hdom)) ]. }
+                            (dom_ins Rg Og m _ lw _ Hlkm HLk Hdom)) ].
+      - first [ exact HSS
+              | intros oa oB ea eb Ha Hb;
+                apply lookup_delete_Some in Ha as [_ Ha];
+                apply lookup_delete_Some in Hb as [_ Hb];
+                exact (HSS oa oB ea eb Ha Hb) ].
+      - intros oq t0 Hfr o' f' He.
+        assert (Hedge0 : hp m o' f' = Some (VLoc oq)).
+        { unfold Edge in He. simpl in He.
+          destruct (Nat.eq_dec o' n) as [-> | Hne].
+          - destruct (in_dec Nat.eq_dec f' fs) as [Hin | Hni'].
+            + rewrite (alloc_same (hp m) n fs f' Hin) in He. discriminate He.
+            + by rewrite (alloc_miss (hp m) n fs f' Hni') in He.
+          - by rewrite (alloc_other (hp m) n fs o' f' Hne) in He. }
+        destruct (tobs_ins_new m Og U0 T F n lw _ oq (Ofresh t0) Hfr)
+          as [[-> _] | Hy].
+        + exact (Hni o' f' Hedge0).
+        + exact (HFRW oq t0 Hy o' f' Hedge0). }
     (* the three freshness facts the environment's survival needs, read off the
        thread's own maps because they are submaps of the invariant's *)
     assert (HSn : forall k o, Sm !! k = Some o -> o <> n).
@@ -5674,7 +5874,8 @@ Section atomic_bind.
     iIntros (HN Hip) "#Hinv Hlk Hctl Hsv".
     iInv "Hinv" as (m Og U0 T F St Rg gg ww Fr)
       ">(Hp & Ho & Hf & Hreg & Hwm & Hfr & %HWF & %HFLD & %HWFW & %HRefs & %HFrc
-         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm & %Hdom)" "Hclose".
+         & %Hwf & %HWUW & %HFeq & %HEWF & %HRR & %HBnd & %HLk & %HWm & %Hdom
+         & %HSS & %HFRW)" "Hclose".
     iDestruct (tobs_ctl_agree with "Ho Hctl") as %Hlook.
     assert (Hitr : obsv (to_LState_t m Og U0 T F) o (Oiter lw))
       by (by exists lw, sold).
@@ -5713,7 +5914,7 @@ Section atomic_bind.
               Rg, gg, ww, Fr.
       iFrame. iPureIntro. split; [exact HWF' | split; [| split; [| split; [| split; [| split;
         [| split; [| split; [| split; [| split; [| split; [| split;
-        [| split]]]]]]]]]]]].
+        [| split; [| split; [| split]]]]]]]]]]]]]].
       - intros q Tr Hfl'. destruct (HFLD q Tr Hfl') as [t0 Hdt].
         exists t0. destruct Hdt as [Hd | Hd]; [left | right];
           (destruct Hd as [t' [sg [Hl Hin']]];
@@ -5755,7 +5956,20 @@ Section atomic_bind.
       - first [ exact Hdom
               | by apply (dom_ins Rg Og m _ lw _ Hlkm HLk Hdom)
               | by apply (dom_ins Rg _ m _ lw _ Hlkm HLk
-                            (dom_ins Rg Og m _ lw _ Hlkm HLk Hdom)) ]. }
+                            (dom_ins Rg Og m _ lw _ Hlkm HLk Hdom)) ].
+      - first [ exact HSS
+              | intros oa oB ea eb Ha Hb;
+                apply lookup_delete_Some in Ha as [_ Ha];
+                apply lookup_delete_Some in Hb as [_ Hb];
+                exact (HSS oa oB ea eb Ha Hb) ].
+      - apply (FRW_obs (bind_ms m y lw o) Og
+                 (<[(o, lw) := sold ∪ {[Oiter lw]}]> Og) U' T F); [| exact HFRW].
+        intros q t0 Hq.
+        destruct (tobs_ins_new m Og U0 T F o lw _ q (Ofresh t0) Hq)
+          as [[-> Hin'] | Hy]; [| exact Hy].
+        apply elem_of_union in Hin' as [Hin' | Hin'].
+        + by exists lw, sold.
+        + apply elem_of_singleton in Hin'. discriminate. }
     iModIntro. iFrame.
   Qed.
 
