@@ -9,8 +9,8 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
-19,700 lines and 1,026 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 235
+20,000 lines and 1,036 lemmas and theorems, axiom-free).  The build refuses to
+succeed if the development contains an admitted proof, or if any of its 238
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -291,9 +291,27 @@ add are of it, and all three are SyncStart's or WriteEnd's.  An invariant set
 assembled by asking what each action needs locally will miss exactly these,
 because locally there is nothing to miss.
 
-That is nineteen in all: fifteen invariants, two rule defects, and two defects in
-the model.  Fifteen of the nineteen were found by attempting the proofs rather than by
-reading, and seven of the fifteen are cases whose proof the technical report
+A sixteenth came out of the same read, and it is the fifth of the kind.
+T-ReadH gives a reader an iterator observation on the node it has just reached,
+and if that node were fresh the fresh-not-reader invariant would fail at once.
+So the read must know the node it reaches is not fresh, and what ought to supply
+that is fresh-reachability: a fresh node has no incoming edge.  It does not
+supply it, because it is stated with a stack reference in its hypothesis -- a
+thread that *names* a fresh node -- exactly as WriterFresh was before we
+unguarded it, and it is unusable for the same reason, since the observation
+outlives the variable.  We give a state satisfying all nineteen in which a
+detached node points at a fresh one.  The repair is WriterFresh's, and it is
+true of every reachable state because a node stops being fresh the moment it is
+published.
+
+That we unguarded WriterFresh, then had to unguard the unlinking invariant, and
+now fresh-reachability, is the same pattern three times: each was provable
+locally because of its guard and useless outside the critical section because of
+it.
+
+That is twenty in all: sixteen invariants, two rule defects, and two defects in
+the model.  Sixteen of the twenty were found by attempting the proofs rather than by
+reading, and seven of the sixteen are cases whose proof the technical report
 calls trivial.  We think
 that is the most useful thing the exercise produced: the defects that mattered
 were not the ones that looked doubtful. Every defect has

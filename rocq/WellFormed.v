@@ -1914,3 +1914,149 @@ Qed.
 Print Assumptions read_bound.
 Print Assumptions snap_split_WellFormed.
 Print Assumptions free_list_entries_need_not_agree.
+
+(** ** Defect 20: fresh-reachability is guarded by the stack
+
+    The fifth of the family, and the reader's read found it the way the reader's
+    read found the fourth.
+
+    \textsc{T-ReadH} gives a reader an [iterator] observation on the node it has
+    just reached.  If that node were [fresh], FNR would fail at once -- a fresh
+    node holds no iterator observation.  So the read needs to know that the node
+    it reaches is not fresh, and what ought to supply that is FR: a fresh node
+    has no incoming edge, so a node reached by following one is not fresh.
+
+    FR does not supply it.  It is stated with a stack reference in its
+    hypothesis -- a thread that *names* a fresh node -- exactly as WFresh was
+    before the revision unguarded it, and for the same reason it is unusable:
+    the observation outlives the variable.  A fresh node whose variable has been
+    rebound constrains nobody, and nothing then stops an edge pointing at it.
+
+    [fresh_may_be_pointed_at] is the witness: a state satisfying all nineteen in
+    which a detached node points at a fresh one.  The repair is the one WFresh
+    got -- state it unguarded -- and it is true of every reachable state because
+    a node stops being fresh at the moment it is published. *)
+
+Definition FRW (s : LState) : Prop :=
+  forall o t, obsv s o (Ofresh t) -> forall o' f', ~ Edge s o' f' o.
+
+Definition fr_stray : LState :=
+  {| ms := {| stk := fun _ _ => None;
+              hp  := fun o f => if Nat.eqb o 1
+                                then (if Nat.eqb f 0 then Some (VLoc 2) else None)
+                                else if Nat.eqb o 0 then Some VNull
+                                else if Nat.eqb o 2 then Some VNull
+                                else None;
+              lk  := Some 0;
+              rt  := 0;
+              rds := fun _ => False;
+              bnd := fun _ => False |};
+     obsv  := fun o ob => (o = 0 /\ ob = Oroot)
+                          \/ (o = 1 /\ ob = Ounlk 0)
+                          \/ (o = 2 /\ ob = Ofresh 0);
+     undf  := fun _ _ => False;
+     thrd  := fun t => t = 0;
+     flist := fun _ => None |}.
+
+Lemma fr_stray_edge : Edge fr_stray 1 0 2.
+Proof. reflexivity. Qed.
+
+Lemma fr_stray_edge_inv o f o' :
+  Edge fr_stray o f o' -> o = 1 /\ f = 0 /\ o' = 2.
+Proof.
+  unfold Edge. simpl. destruct (Nat.eqb o 1) eqn:E1.
+  - destruct (Nat.eqb f 0) eqn:E0; [| discriminate].
+    intros H. injection H as <-.
+    apply Nat.eqb_eq in E1. apply Nat.eqb_eq in E0.
+    repeat apply conj; [exact E1 | exact E0 | reflexivity].
+  - destruct (Nat.eqb o 0); [discriminate |].
+    destruct (Nat.eqb o 2); discriminate.
+Qed.
+
+Lemma fr_stray_reaches q o : Reaches fr_stray q o -> q = [] /\ o = 0.
+Proof.
+  destruct q as [|f q]; intros H; unfold Reaches in H; simpl in H.
+  - injection H as <-. split; reflexivity.
+  - exfalso. simpl in H. destruct (Nat.eqb f 0); discriminate H.
+Qed.
+
+Lemma fr_stray_detached_1 : Detached fr_stray 1.
+Proof. exists 0. left. simpl. right; left. split; reflexivity. Qed.
+
+Lemma fr_stray_WellFormed : forall FType, WellFormed FType fr_stray.
+Proof.
+  intros FType. unfold WellFormed. repeat apply conj.
+  - (* OW: the only edge has a detached source, which is the exemption *)
+    intros o o' f f' x H1 H2 H3 H4.
+    destruct (fr_stray_edge_inv o f x H1) as (-> & _ & _).
+    right. left. exact fr_stray_detached_1.
+  - intros x t o H. simpl in H. discriminate H.
+  - intros y t H. simpl in H. discriminate H.
+  - intros t o Tr H1 H2. simpl in H2. discriminate H2.
+  - (* ULKR: nothing points at the unlinked node *)
+    intros o o' f' t H1 H2.
+    destruct (fr_stray_edge_inv o' f' o H2) as (_ & _ & ->).
+    exfalso. destruct H1 as [Hc | Hc]; simpl in Hc;
+      destruct Hc as [[Hd _] | [[Hd _] | [_ Hd]]]; discriminate Hd.
+  - intros o o' f' Tr H1 H2. simpl in H1. discriminate H1.
+  - (* WULK: there is no iterator observation to conflict with *)
+    intros lw o t H1 H2. exfalso. simpl in H2.
+    destruct H2 as [[_ Hd] | [[_ Hd] | [_ Hd]]]; discriminate Hd.
+  - intros t x o H1 H2. simpl in H1. discriminate H1.
+  - intros t x o H1 H2. simpl in H1. discriminate H1.
+  - (* FNR: the fresh node holds no other observation *)
+    intros o t t' H. simpl in H.
+    destruct H as [[_ Hd] | [[_ Hd] | [-> Hd]]]; try discriminate Hd.
+    repeat apply conj; intros Hbad; simpl in Hbad;
+      destruct Hbad as [[Hc _] | [[Hc _] | [_ Hc]]]; discriminate Hc.
+  - (* FPI: the edge's source is the unlinked node, not a fresh one *)
+    intros o f o' t lw H1 H2 H3 H4.
+    destruct (fr_stray_edge_inv o f o' H2) as (-> & _ & _).
+    exfalso. simpl in H1.
+    destruct H1 as [[Hd _] | [[_ Hd] | [Hd _]]]; discriminate Hd.
+  - intros t H1 H2. exact H2.
+  - intros o t H. destruct H.
+  - intros o Tr t H1 H2. simpl in H1. discriminate H1.
+  - (* HD: the only edge's source is detached, so it is exempt *)
+    intros o f o' H1 H2. exfalso.
+    destruct (fr_stray_edge_inv o f o' H1) as (-> & _ & _).
+    exact (H2 fr_stray_detached_1).
+  - intros o f H. destruct (fr_stray_edge_inv o f 0 H) as (_ & _ & Hc).
+    discriminate Hc.
+  - intros p o lw H1 H2.
+    destruct (fr_stray_reaches p o H2) as [_ ->].
+    right. simpl. left. split; reflexivity.
+  - (* WUNLK: the same, unguarded in the thread *)
+    intros o t lw H1 H2. simpl in H1. injection H1 as <-.
+    destruct H2 as [Hc | Hc]; simpl in Hc;
+      destruct Hc as [[_ Hd] | [[_ Hd] | [_ Hd]]]; try discriminate Hd;
+      injection Hd as <-; reflexivity.
+  - intros o t H. simpl in H.
+    destruct H as [[_ Hc] | [[_ Hc] | [_ Hc]]]; discriminate Hc.
+  - intros p p' o H1 H2.
+    destruct (fr_stray_reaches p o H1) as [-> _].
+    destruct (fr_stray_reaches p' o H2) as [-> _]. reflexivity.
+Qed.
+
+Theorem fresh_may_be_pointed_at :
+  (forall FType, WellFormed FType fr_stray)
+  /\ obsv fr_stray 2 (Ofresh 0)
+  /\ Edge fr_stray 1 0 2
+  /\ ~ FRW fr_stray.
+Proof.
+  repeat apply conj;
+    [exact fr_stray_WellFormed
+     | simpl; right; right; split; reflexivity
+     | exact fr_stray_edge |].
+  intros H. exact (H 2 0 (or_intror (or_intror (conj eq_refl eq_refl)))
+                     1 0 fr_stray_edge).
+Qed.
+
+(** And with it, the node a reader reaches by following an edge is not fresh. *)
+Lemma read_not_fresh (s : LState) o f z :
+  FRW s -> Edge s o f z -> forall t, ~ obsv s z (Ofresh t).
+Proof. intros HF He t Hbad. exact (HF z t Hbad o f He). Qed.
+
+Print Assumptions fr_stray_WellFormed.
+Print Assumptions fresh_may_be_pointed_at.
+Print Assumptions read_not_fresh.

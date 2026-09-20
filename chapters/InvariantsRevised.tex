@@ -94,7 +94,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 235 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 238 say \emph{closed under the
 global context}, and none reports an axiom.
 
 That target had the bug it exists to catch, and we report it because the
@@ -587,14 +587,16 @@ the published composition, so the framing the soundness argument needs does not
 hold; and allocation makes the heap infinite, so no points-to assertion exists
 over it.  Both are in \S\ref{sec:inv-mech}.
 
-A further one is in \S\ref{sec:defect-samesnap}: free-list entries need not
-agree, which the reader's read needs and which \textsc{SyncStart} carries as a
-hypothesis.  Two more are at the two ends of the read side:
+Two further ones came out of the reader's read: \S\ref{sec:defect-samesnap},
+free-list entries need not agree, which \textsc{SyncStart} carries as a
+hypothesis; and \S\ref{sec:defect-frw}, fresh-reachability is guarded by the
+stack, which is \textbf{WFresh}'s defect one invariant along.  Two more are at
+the two ends of the read side:
 \S\ref{sec:defect-br}, the bounding set is unconstrained, so nothing makes the
 grace period terminate; and \S\ref{sec:defect-wunlkw}, \textbf{WUNLK} is guarded
 by the lock, so it says nothing in the state a reader starts in.
 
-That is nineteen: fifteen invariants, two rule defects, two model defects.  The
+That is twenty: sixteen invariants, two rule defects, two model defects.  The
 second rule defect is the one \S\ref{sec:inv-mech} reaches by chaining the rules
 into a program: the mutation rules assume every field is an RCU field, which no
 system with scalar fields satisfies and which a class declaration forbids.  The remaining
@@ -664,7 +666,7 @@ are the two obvious conjuncts.  Only the second is needed by any proof here, so
 only it is carried; the first is reported, because a reader of
 \textbf{UNQRT-b} will assume it.
 
-Fifteen of the nineteen were found by attempting a proof rather than by reading ---
+Sixteen of the twenty were found by attempting a proof rather than by reading ---
 \textbf{ULKR}'s failure to chain, \textbf{FPI}'s failure to survive unlinking,
 \textbf{HD}'s failure to survive \texttt{Free}, \textbf{FNR}'s failure to
 support \textbf{ULKR} under linking, \textbf{WUNLK}'s absence, which is the same case
@@ -676,8 +678,9 @@ observations, which are what the last linking rule ran into, and the
 \textbf{ULKR}/\textbf{OW} disagreement, which is what chaining the rules into a
 program ran into, and the unconstrained bounding set and \textbf{WUNLK}'s guard,
 which are what giving the read side a resource reading ran into, and the
-entries' having to agree, which is what the reader's read ran into --- and seven
-of the fifteen are cases the report calls trivial.  That is now a pattern rather than a coincidence, and it is the
+entries' having to agree and fresh-reachability's guard, which are what the
+reader's read ran into --- and seven of the sixteen are cases the report calls
+trivial.  That is now a pattern rather than a coincidence, and it is the
 strongest thing the mechanization has to say about the original argument.
 
 The corrected invariants are also satisfiable
@@ -795,6 +798,33 @@ which some other rule needs as an \emph{invariant}.  \textbf{WITR} was
 \textbf{WUNLKW} was \textsc{WriteEnd}'s, and this is \textsc{SyncStart}'s third.
 An invariant set assembled by asking what each action needs locally will miss
 exactly these, because locally there is nothing to miss.
+
+\paragraph{An invariant defect: fresh-reachability is guarded by the stack.}
+\label{sec:defect-frw}
+The fifth of the family, and the reader's read found it the way it found the
+fourth --- by needing, as an invariant, something the published proof carries as
+a hypothesis of one action.
+
+\textsc{T-ReadH} gives a reader an \itr{} observation on the node it has just
+reached.  If that node were \frsh{}, \textbf{FNR} would fail at once, since a
+fresh node holds no iterator observation.  So the read needs to know the node it
+reaches is not fresh, and what ought to supply that is \textbf{FR}: a fresh node
+has no incoming edge, so a node reached by following one is not fresh.
+
+\textbf{FR} does not supply it.  It is stated with a stack reference in its
+hypothesis --- a thread that \emph{names} a fresh node --- exactly as
+\textbf{WFresh} was before the revision unguarded it (\S\ref{sec:defect-obs}),
+and it is unusable for the same reason: the observation outlives the variable.
+A fresh node whose variable has been rebound constrains nobody, and nothing then
+stops an edge pointing at it.  \texttt{fresh\_may\_be\_pointed\_at} is the
+witness --- a state satisfying all nineteen in which a detached node points at a
+fresh one.  The repair is \textbf{WFresh}'s, and it is true of every reachable
+state because a node stops being fresh at the moment it is published.
+
+That the revision unguarded \textbf{WFresh}, and then had to unguard
+\textbf{WUNLK} (\S\ref{sec:defect-wunlkw}), and now \textbf{FR}, is the pattern
+stated three times.  Each was provable locally \emph{because} of its guard, and
+useless outside the critical section \emph{because} of it.
 
 \subsection{Open questions}
 \label{sec:inv-open}
@@ -1886,10 +1916,17 @@ reference to a node already on the free list must be one of the threads its
 grace period waits for.  That is a real obligation and it is not discharged by
 owning anything --- and working out what discharges it is what turned up
 \S\ref{sec:defect-samesnap}.  With the entries agreeing it is
-\texttt{read\_bound}, four lines from \textbf{FLR} and \textbf{IFL}.  What
-remains of the reader's read is to carry that conjunct in the Iris invariant
-rather than as a hypothesis, which is the same mechanical pass the other added
-conjuncts took.
+\texttt{read\_bound}, four lines from \textbf{FLR} and \textbf{IFL}.  The read
+needs one thing more, that the node it reaches is not \frsh{}, and that is
+\S\ref{sec:defect-frw}; with \textbf{FRW} it is \texttt{read\_not\_fresh}, one
+line.
+
+What remains of the reader's read is to carry both conjuncts in the Iris
+invariant rather than as hypotheses.  \textbf{SameSnap} is the mechanical pass
+the other added conjuncts took; \textbf{FRW} is not, because a field write
+creates an edge and so has something to prove at each of the five mutations ---
+in each case that the edge's new target is not fresh, which the two linking
+rules get from promoting it in the same step and the others from \textbf{FNR}.
 
 \textsc{WriteBegin} asks that the lock is free, and \textsc{SyncStop} that no
 thread is still bounding.  Those are the two points where the protocol
