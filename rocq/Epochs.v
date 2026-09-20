@@ -515,3 +515,40 @@ Print Assumptions wait_shrinks.
 Print Assumptions wait_terminates.
 Print Assumptions wait_then_free.
 Print Assumptions e_RINFL.
+
+(** * The first of Alglave et al.'s requirements
+
+    Alglave et al. give the first formalisation of what it means for an RCU
+    implementation to be correct, and the essential clause is that *reader
+    critical sections do not span grace periods*.  The paper argues in prose
+    that this model meets their requirements; this is that clause as a theorem.
+
+    A section spans a grace period if it began before the grace period began and
+    was still running when the grace period completed.  The grace period for a
+    node stamped at [e] completes when [e_quiescent s e], so the clause is that
+    no registration still standing at that moment began at or before [e].  That
+    is what [e_quiescent] says, so the content is not in the statement but in
+    what establishes it: [wait_terminates] says the condition is reached, and
+    [wait_then_free] says reaching it is what licenses the reclamation. *)
+
+Theorem no_section_spans_a_grace_period s e t e' :
+  e_quiescent s e ->
+  ereg s !! t = Some e' ->
+  (* a section still standing began strictly after the grace period did *)
+  e < e'.
+Proof. intros Hq Hr. exact (Hq t e' Hr). Qed.
+
+(** The same thing said about the reclamation rather than the wait: at the
+    moment a node stamped at [e] may be freed, no thread that was reading when
+    its grace period began is still reading. *)
+Corollary reclamation_waits_for_overlapping_readers s o e t e' :
+  estamp s !! o = Some e ->
+  e_quiescent s e ->
+  ereg s !! t = Some e' -> e' <= e -> False.
+Proof.
+  intros _ Hq Hr Hle.
+  exact (Nat.lt_irrefl e (Nat.lt_le_trans _ _ _ (Hq t e' Hr) Hle)).
+Qed.
+
+Print Assumptions no_section_spans_a_grace_period.
+Print Assumptions reclamation_waits_for_overlapping_readers.

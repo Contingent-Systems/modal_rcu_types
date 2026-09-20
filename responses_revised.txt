@@ -10,7 +10,7 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
 19,900 lines and 1,033 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 238
+succeed if the development contains an admitted proof, or if any of its 241
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -722,9 +722,17 @@ which needs no fragment and so needs no fraction.  What it does need is the
 iterators-in-free-list obligation -- a reader acquiring a reference to a node
 already on the free list must be one of the threads its grace period waits for
 -- and working out what discharges it is what turned up the fifteenth defect
-above.  With the entries agreeing it is four lines.  What remains of the
-reader's read is to carry that conjunct in the Iris invariant rather than as a
-hypothesis, which is the same mechanical pass the other added conjuncts took.
+above.  With the entries agreeing it is four lines.  Both conjuncts are
+carried in the invariant now.  What the read still wants is not an invariant but
+a decision: the rule gives the reader an observation at a node it may never have
+observed, and to grant one it must hold that node's entry or know the entry
+absent.  The reader's cell records which nodes it observes, so the first is
+available for those; the second is not, because ReadEnd leaves the root
+observation behind, and that observation is deliberately anonymous, so it can
+sit in a departed reader's entry.  Deciding that the root observation belongs to
+the lock holder would let ReadEnd clear its keys outright and close the read.
+It is the same question as the two unconstrained observations above, one
+observation further, and we raise it rather than settle it.
 
 WriteBegin asks whether the lock is free and SyncStop whether any thread is
 still bounding: the two points where the protocol tests or waits on shared state
@@ -926,6 +934,32 @@ obtained rather than assumed.  All four steps of the reclamation chain --
 ReadBegin, ReadEnd, SyncStart and SyncStop -- are complete as actions, each
 preserving all nineteen invariants, and ReadBegin and ReadEnd are also closed
 triples in the resource reading, for the reasons given above.
+
+Two of Alglave et al.'s four fundamental requirements are now theorems about
+our model rather than arguments in prose, and which invariants they need is the
+point.  The essential clause of their correctness criterion is that reader
+critical sections do not span grace periods; a section spans one if it began
+before the grace period began and was still running when it completed, and the
+grace period for a node completes exactly when every registration still standing
+began later than the node's stamp.  So the clause is immediate from that
+condition, and the content is in what establishes it -- that the wait ends
+because the readers do -- and in what it licenses, which is the reclamation.
+
+The publish-subscribe requirement is the sharper one.  A freshly allocated node
+cannot be observed by a reader until it is published, and proving it needs two
+invariants: fresh-not-reader, so that a fresh node carries no iterator
+observation and no reader observes it, and the unguarded fresh-reachability we
+had to add, so that it has no incoming edge and no reader can walk to one.
+Without the second the guarantee is half of itself -- a reader could not be
+*holding* an unpublished node, but nothing said it could not reach one.  That a
+published correctness criterion turns out to need an invariant the published
+invariant set does not have is the sharpest form our finding takes.
+
+The remaining two requirements need no proof and we say why: the four
+non-blocking primitives are total functions on the machine state, so each is
+enabled everywhere, and the two blocking ones block rather than fail, which is
+what unconditional execution asks; read-to-write upgrade we do not provide, and
+it is a performance optimisation orthogonal to memory safety.
 
 We will expand Section 6 along these lines.
 

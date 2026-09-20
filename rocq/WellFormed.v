@@ -2060,3 +2060,47 @@ Proof. intros HF He t Hbad. exact (HF z t Hbad o f He). Qed.
 Print Assumptions fr_stray_WellFormed.
 Print Assumptions fresh_may_be_pointed_at.
 Print Assumptions read_not_fresh.
+
+(** * Alglave et al.'s publish-subscribe requirement
+
+    The second of the fundamental requirements: a freshly allocated node cannot
+    be observed by a reader until it is published.  The paper argues this in
+    prose from the shape of the type rules -- a new location can only be
+    referenced by a variable of type [fresh], and becomes [rcuItr] on being
+    published.  Here it is as a property of the state, and what is worth
+    reporting is which invariants it needs.
+
+    It needs two, and one of them is the invariant the reader's read forced
+    (\S the FR defect above).  FNR gives that a fresh node carries no iterator
+    observation, so no reader observes it; FRW gives that a fresh node has no
+    incoming edge, so no reader can reach it by traversing.  Without the second
+    the guarantee is half of itself: a reader could not be *holding* an
+    unpublished node, but nothing said it could not walk to one. *)
+
+Theorem readers_cannot_see_unpublished (s : LState) o t :
+  FNR s -> FRW s ->
+  obsv s o (Ofresh t) ->
+  (* no thread observes it as an iterator ... *)
+  (forall t', ~ obsv s o (Oiter t'))
+  (* ... and nothing points at it, so none can reach it *)
+  /\ (forall o' f', ~ Edge s o' f' o).
+Proof.
+  intros HFNR HFRW Hfr. split.
+  - intros t'. exact (proj1 (HFNR o t t' Hfr)).
+  - exact (HFRW o t Hfr).
+Qed.
+
+(** And the third requirement, that the RCU primitives execute unconditionally
+    rather than failing and retrying, is a property of the *shape* of the
+    semantics rather than of any state: the four primitives that are not
+    blocking are total functions on the machine state, so each is enabled
+    everywhere.  The two that are blocking -- WriteBegin and SyncStop -- block
+    rather than fail, which is what the requirement asks.  There is nothing to
+    prove about the four beyond their being functions, which is how they are
+    defined; we record the observation rather than dress it as a theorem.
+
+    The fourth requirement, read-to-write upgrade, this system does not provide,
+    and we say so rather than argue about it: it is a performance optimisation
+    and is orthogonal to memory safety. *)
+
+Print Assumptions readers_cannot_see_unpublished.

@@ -94,7 +94,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 238 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 241 say \emph{closed under the
 global context}, and none reports an axiom.
 
 That target had the bug it exists to catch, and we report it because the
@@ -2135,9 +2135,60 @@ client and not of the type system, and which no invariant of the shared state
 could supply.  The lock's loop is the same shape and shorter: it ends when the
 holder's critical section does.
 
-So what remains is one mechanical pass, carrying the agreement conjunct into
-the invariant so the reader's read closes like the other rules, and one
-assumption about clients that no type system discharges.  The
+Both conjuncts are carried in the invariant now.  \textbf{SameSnap} was the
+mechanical pass; \textbf{FRW} was not, and the five mutations are where the work
+is, a field write being the only thing that creates an edge.
+
+What the reader's read still wants is not an invariant but a decision.  The rule
+gives the reader an observation at a node it may never have observed, and to
+grant one it must hold that node's entry or know the entry absent.  Its cell
+records which nodes it observes, so the first is available for those; the second
+is not, because \textsc{ReadEnd} leaves the \rt{} observation behind --- that
+observation is anonymous, deliberately, and so can sit in a departed reader's
+entry.  Deciding that \rt{} belongs to the lock holder would let
+\textsc{ReadEnd} clear its keys outright and close the read; it is the same
+question as \S\ref{sec:defect-obs}'s, one observation further, and we raise it
+rather than settle it.
+
+\paragraph{Against Alglave et al.'s requirements.}
+\label{sec:alglave}
+The prose above argues that this model meets the fundamental requirements for an
+RCU implementation.  Two of the four are now theorems rather than arguments, and
+it is worth saying which invariants they need.
+
+\emph{Grace period and memory barrier.}  The essential clause of Alglave et
+al.'s correctness criterion is that reader critical sections do not span grace
+periods.  A section spans one if it began before the grace period began and was
+still running when it completed; the grace period for a node stamped at $e$
+completes exactly when every registration still standing began later than $e$,
+so \texttt{no\_section\_spans\_a\_grace\_period} is immediate from that
+condition and \texttt{reclamation\_waits\_for\_overlapping\_readers} states it
+about the reclamation.  The content is not in those statements but in what
+establishes the condition, which is \texttt{wait\_terminates}, and in what it
+licenses, which is \texttt{wait\_then\_free}.
+
+\emph{Publish-subscribe.}  A freshly allocated node cannot be observed by a
+reader until it is published.  \texttt{readers\_cannot\_see\_unpublished} needs
+two invariants, and one of them is the one the reader's read forced
+(\S\ref{sec:defect-frw}): \textbf{FNR} gives that a fresh node carries no
+iterator observation, so no reader observes it, and \textbf{FRW} gives that it
+has no incoming edge, so no reader can walk to one.  Without the second the
+guarantee is half of itself --- a reader could not be \emph{holding} an
+unpublished node, but nothing said it could not reach one.  That a published
+correctness criterion turns out to need an invariant the published invariant set
+does not have is the sharpest form the mechanization's finding takes.
+
+\emph{Unconditional execution.}  The four non-blocking primitives are total
+functions on the machine state, so each is enabled everywhere; the two blocking
+ones block rather than fail, which is what the requirement asks.  There is
+nothing to prove beyond their being functions.
+
+\emph{Read-to-write upgrade.}  Not provided, as \S\ref{sec:relatedwork} says: a
+performance optimisation, orthogonal to memory safety.
+
+\paragraph{What is left.}
+One assumption about clients that no type system discharges, and one decision
+about who owns the root observation.  The
 read-side denotation is now mechanized --- \texttt{D\_rcuItrR}, transcribed from
 the figure --- together with the reader's acquisition
 (\texttt{reader\_post\_env}).  That one is worth a caution: the denotation's
