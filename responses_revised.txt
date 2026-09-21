@@ -10,7 +10,7 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
 19,900 lines and 1,033 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 253
+succeed if the development contains an admitted proof, or if any of its 257
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -963,6 +963,17 @@ own.
 Both of those are invariants the published set already has, which is the right
 outcome: the sixteen we add are not there to prove this, they are there to make
 the fifteen actions preserve the set that does.
+
+Said over a state that is weaker than memory safety asserts, which is about
+runs, and the gap is one induction.  We close it: the invariants are inductive
+along executions, so at no point in any run from a well-formed start does a
+thread other than the writer hold a live reference to a node the writer is about
+to reclaim.  The step relation is a parameter, deliberately -- its obligation is
+exactly the fifteen preservation theorems, so any relation assembled from them
+discharges it by case analysis, and we instantiate it at Free so the
+parameterisation is not vacuous.  Writing the fifteen out as one inductive
+relation, and a progress theorem with it, is what remains of that part; it adds
+nothing to the argument and a good deal to the file.
 
 Two of Alglave et al.'s four fundamental requirements are now theorems about
 our model rather than arguments in prose, and which invariants they need is the

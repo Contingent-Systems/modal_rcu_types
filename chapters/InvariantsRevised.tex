@@ -94,7 +94,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 253 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 257 say \emph{closed under the
 global context}, and none reports an axiom.
 
 That target had the bug it exists to catch, and we report it because the
@@ -2189,6 +2189,19 @@ Two invariants, and both are ones the published set has --- which is the right
 outcome.  The sixteen we add are not there to prove this; they are there to make
 the fifteen actions preserve the set that proves it, which is the division of
 labour a global invariant set is supposed to have.
+
+Said over a state, that is weaker than memory safety asserts, which is about
+runs.  The gap is one induction, and \texttt{reachable\_WellFormed} and
+\texttt{safety} close it: the invariants are inductive along executions, so at
+\emph{no point} in any run from a well-formed start does a thread other than the
+writer hold a live reference to a node the writer is about to reclaim.  The step
+relation is a parameter there, and deliberately: its obligation is exactly the
+fifteen preservation theorems, so any relation assembled from them discharges it
+by case analysis, and assembling it is transcription rather than proof.
+\texttt{free\_runs\_are\_safe} instantiates it at \textsc{Free} so the
+parameterisation is not vacuous.  Writing the fifteen out as one inductive
+relation, and with it a progress theorem, is what is left of this part; it adds
+nothing to the argument and a good deal to the file.
 
 \paragraph{Against Alglave et al.'s requirements.}
 \label{sec:alglave}

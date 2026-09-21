@@ -6160,3 +6160,89 @@ End linking.
 Print Assumptions link_null_preserves_WellFormed.
 Print Assumptions link_null_post_env.
 Print Assumptions link_null_post_env_parent.
+
+(** * Executions
+
+    Everything above is about a single step: fifteen theorems, each saying an
+    action carries \textsf{WellFormed} across.  What a client cares about is a
+    whole run, and the gap between the two is one induction -- but stating it
+    is worth the space, because it is what turns ``no well-formed state has a
+    dangling live reference'' into ``no \emph{reachable} state has one'', which
+    is the property memory safety actually asserts.
+
+    The step relation is a parameter here, and deliberately.  Its obligation is
+    exactly the fifteen theorems above: any relation assembled from them
+    discharges it by case analysis, and assembling it is transcription rather
+    than proof.  What the section adds is that the invariants are inductive
+    along executions and that safety then holds at every reachable state.
+    [free_step] below is a concrete instance, so the parameterisation is not
+    vacuous. *)
+
+Section executions.
+  Variable FType : FName -> FieldKind.
+  Variable step : LState -> LState -> Prop.
+  Hypothesis step_preserves :
+    forall s s', step s s' -> WellFormed FType s -> WellFormed FType s'.
+
+  Inductive reachable (s0 : LState) : LState -> Prop :=
+  | reach_refl : reachable s0 s0
+  | reach_step s s' : reachable s0 s -> step s s' -> reachable s0 s'.
+
+  Theorem reachable_WellFormed s0 s :
+    WellFormed FType s0 -> reachable s0 s -> WellFormed FType s.
+  Proof.
+    intros H0 Hr. induction Hr as [| s s' _ IH Hst];
+      [exact H0 | exact (step_preserves s s' Hst IH)].
+  Qed.
+
+  (** And the property the whole development is for, over runs rather than
+      states: at no point in any execution from a well-formed start does a
+      thread other than the writer hold a live reference to a node the writer is
+      about to reclaim. *)
+  Theorem safety s0 s tw x o y t' :
+    WellFormed FType s0 -> reachable s0 s ->
+    D_freeable s tw x ->
+    stk (ms s) x tw = Some o ->
+    stk (ms s) y t' = Some o -> ~ undf s y t' ->
+    t' = tw.
+  Proof.
+    intros H0 Hr Hfree Hd Hy Hnu.
+    destruct (reachable_WellFormed s0 s H0 Hr)
+      as (_ & HRWOW & _ & HIFL & _).
+    exact (free_invalidates_nobody s tw x o y t'
+             HIFL HRWOW Hfree Hd Hy Hnu).
+  Qed.
+
+End executions.
+
+(** A concrete step relation, so that the section above is not vacuous.  Its
+    obligation is [free_preserves_WellFormed] and nothing else. *)
+Definition free_step (s s' : LState) : Prop :=
+  exists m Og U T F d t,
+    s = to_LState_t m Og U T F
+    /\ s' = to_LState_t (free_ms m d) Og U T (delete d F)
+    /\ obsv s d (Ofree t).
+
+Lemma free_step_preserves FType s s' :
+  free_step s s' -> WellFormed FType s -> WellFormed FType s'.
+Proof.
+  intros (m & Og & U & T & F & d & t & -> & -> & Hfree) Hwf.
+  exact (free_preserves_WellFormed FType m Og U T F d t Hwf Hfree).
+Qed.
+
+(** So the safety theorem applies to it, and to any relation the other fourteen
+    actions are assembled into in the same way. *)
+Corollary free_runs_are_safe FType s0 s tw x o y t' :
+  WellFormed FType s0 -> reachable free_step s0 s ->
+  D_freeable s tw x ->
+  stk (ms s) x tw = Some o ->
+  stk (ms s) y t' = Some o -> ~ undf s y t' ->
+  t' = tw.
+Proof.
+  exact (safety FType free_step (free_step_preserves FType) s0 s tw x o y t').
+Qed.
+
+Print Assumptions reachable_WellFormed.
+Print Assumptions safety.
+Print Assumptions free_step_preserves.
+Print Assumptions free_runs_are_safe.
