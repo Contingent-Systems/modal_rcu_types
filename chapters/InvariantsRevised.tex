@@ -94,7 +94,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 260 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 265 say \emph{closed under the
 global context}, and none reports an axiom.
 
 That target had the bug it exists to catch, and we report it because the
@@ -664,10 +664,36 @@ the weak one.
 One witness does for both (\texttt{root\_observation\_is\_unpinned} and
 \texttt{fresh\_observations\_need\_not\_be\_the\_writers}): a state satisfying
 all nineteen in which the root observation sits at a non-root location and a
-fresh observation belongs to a thread that does not hold the lock.  The repairs
-are the two obvious conjuncts.  Only the second is needed by any proof here, so
-only it is carried; the first is reported, because a reader of
-\textbf{UNQRT-b} will assume it.
+fresh observation belongs to a thread that does not hold the lock.
+
+The second repair is the obvious conjunct, and it is carried.  The first began
+as one --- \textbf{RTO}, ``the root observation is at \rt{}'' --- and it is the
+only one of the twenty that was later \emph{removed} rather than kept, which is
+worth a paragraph because the reason generalizes.
+
+The root observation is anonymous by design: being the root is a property of
+the structure, not of anyone looking.  The encoding nonetheless filed every
+observation under an observing thread, so the root observation had to be filed
+under \emph{some} thread, and then three things followed.  \textbf{RTO} had to
+be added, because nothing tied the filed observation to \rt{}.  \textsc{ReadEnd}
+could not simply drop the departing thread's entries, because the root
+observation might be in one --- there is a state where it is, and dropping them
+breaks \textbf{UNQRT-b}; so \textsc{ReadEnd} carried an extra hypothesis about
+what it preserved.  And the invariant's clause relating a reader's entries to
+its registration had to be stated about \emph{tagged} observations rather than
+about entries, which made it too weak to decide whether a reader has an entry at
+a given node --- which is exactly what the reader's read has to know.
+
+Reading the root observation off \rt{} instead removes all three at once.
+\textbf{RTO} becomes true by computation (\texttt{to\_LState\_t\_RTO}, whose
+proof is the identity function); the state that used to be the counterexample is
+no longer well formed as an encoding (\texttt{root\_has\_no\_owner}), and
+\textsc{ReadEnd} deletes its keys outright; and the domain clause becomes a
+statement about entries, which is what \texttt{read\_update} needs.  The witness
+above still stands --- the published nineteen really do not imply \textbf{RTO},
+so the defect was real --- but no action has to preserve it.  The pattern is
+that an invariant can be an artefact of an encoding choice, and that the cheaper
+repair at the time (add a conjunct) was the wrong half of the choice.
 
 Sixteen of the twenty were found by attempting a proof rather than by reading ---
 \textbf{ULKR}'s failure to chain, \textbf{FPI}'s failure to survive unlinking,
@@ -1924,12 +1950,34 @@ needs one thing more, that the node it reaches is not \frsh{}, and that is
 \S\ref{sec:defect-frw}; with \textbf{FRW} it is \texttt{read\_not\_fresh}, one
 line.
 
-What remains of the reader's read is to carry both conjuncts in the Iris
-invariant rather than as hypotheses.  \textbf{SameSnap} is the mechanical pass
-the other added conjuncts took; \textbf{FRW} is not, because a field write
-creates an edge and so has something to prove at each of the five mutations ---
-in each case that the edge's new target is not fresh, which the two linking
-rules get from promoting it in the same step and the others from \textbf{FNR}.
+Both conjuncts are now in the Iris invariant rather than hypotheses, and with
+them the reader's read is a step on the invariant's contents,
+\texttt{read\_update}.  \textbf{SameSnap} did not need the mechanical pass the
+other added conjuncts took: it is a consequence of the epoch representation,
+since the free-list entries are derived from the stamps and every stamp is at
+one epoch (\texttt{HSS\_SameSnap}).  \textbf{FRW} did need the pass, because a
+field write creates an edge and so has something to prove at each of the five
+mutations --- in each case that the edge's new target is not fresh, which the
+two linking rules get from promoting it in the same step and the others from
+\textbf{FNR}.
+
+What \texttt{read\_update} establishes is everything observational about the
+read.  The bounding obligation is discharged, as above.  So is the one that
+looks smaller and was not: the reader has to grant itself an observation at a
+node it has not observed, and the ghost update for that has to know whether it
+already has an entry there.  Nothing decided that while the root observation
+lived in a thread's entry --- ``this thread observes nothing here'' did not
+imply ``this thread has no entry here'' --- and it is decided now by the
+reader's own registration cell.  That is the second half of removing
+\textbf{RTO}, and it is why that removal is reported as a repair rather than as
+tidying.
+
+What is left between \texttt{read\_update} and a Hoare triple for $y := x.f$ is
+one thing, and it is not observational: a reader must \emph{learn} what the
+field holds, and the points-to assertion is exclusive.  The correction above
+stands --- the reader's environment needs no fraction, and neither does the
+step --- but the cell read does, and that is a fractional or snapshot heap.  It
+is the only obstacle left on the read side, and it is standard.
 
 \textsc{WriteBegin} asks that the lock is free, and \textsc{SyncStop} that no
 thread is still bounding.  Those are the two points where the protocol
@@ -2155,20 +2203,21 @@ client and not of the type system, and which no invariant of the shared state
 could supply.  The lock's loop is the same shape and shorter: it ends when the
 holder's critical section does.
 
-Both conjuncts are carried in the invariant now.  \textbf{SameSnap} was the
-mechanical pass; \textbf{FRW} was not, and the five mutations are where the work
-is, a field write being the only thing that creates an edge.
+Both conjuncts are carried in the invariant now.  \textbf{FRW} took the
+mechanical pass and the five mutations are where that work is, a field write
+being the only thing that creates an edge; \textbf{SameSnap} took none, because
+the epoch representation gives it (\texttt{HSS\_SameSnap}).
 
-What the reader's read still wants is not an invariant but a decision.  The rule
-gives the reader an observation at a node it may never have observed, and to
-grant one it must hold that node's entry or know the entry absent.  Its cell
-records which nodes it observes, so the first is available for those; the second
-is not, because \textsc{ReadEnd} leaves the \rt{} observation behind --- that
-observation is anonymous, deliberately, and so can sit in a departed reader's
-entry.  Deciding that \rt{} belongs to the lock holder would let
-\textsc{ReadEnd} clear its keys outright and close the read; it is the same
-question as \S\ref{sec:defect-obs}'s, one observation further, and we raise it
-rather than settle it.
+The decision the reader's read wanted has been taken, and it went the way
+\S\ref{sec:defect-obs} says.  The rule gives the reader an observation at a node
+it may never have observed, and to grant one it must hold that node's entry or
+know the entry absent.  Its cell records which nodes it observes, so the first
+was always available for those; the second was not, because \textsc{ReadEnd}
+left the \rt{} observation behind.  Reading \rt{} off the structure instead lets
+\textsc{ReadEnd} delete its keys outright, makes the invariant's domain clause a
+statement about entries rather than about tagged observations, and closes the
+question: a node outside the cell's domain has no entry of the reader's.  That
+is \texttt{read\_update}.
 
 \paragraph{What the machinery is for.}
 Everything above is machinery, and it is worth stating the property it exists
@@ -2280,13 +2329,15 @@ performance optimisation, orthogonal to memory safety.
 The wait's termination reduces to it and no further --- it is a property of the
 client, and no invariant of the shared state could supply it.
 
-\emph{A decision about the root observation.}  \rt{} is deliberately anonymous,
-and that is what stops \textsc{ReadEnd} from clearing its own keys, which is
-what stops the reader's read from closing like the other nine rules.  Deriving
-it from the structure rather than storing it in a thread's entry would settle
-both at once and would be more faithful to what the published text says it is;
-we have not made that change, because it is a change to the model and the
-model is the paper's.
+\emph{A fractional heap for the reader's read.}  This is what is left of the
+read after the root observation was moved into the structure.  A reader must
+learn what a field holds, and the points-to assertion is exclusive.  Nothing
+else about the read is open: \texttt{read\_update} discharges the bounding
+obligation and grants the observation, and neither it nor the reader's
+environment uses a heap fragment at all.  The repair is a fractional or
+discardable-fraction points-to, which is standard, and which changes the camera
+under the write side as well --- which is why it is named here rather than done
+in passing.
 
 \emph{Axiom soundness proper.}  Every action preserves \textsf{WellFormed}, and
 that is fifteen theorems and now an induction over runs.  Axiom soundness asks

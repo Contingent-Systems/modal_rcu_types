@@ -374,11 +374,14 @@ Section readers.
     let s  := to_LState_t m Og U T F in
     let s' := to_LState_t m (<[(z, t) := sz ∪ {[Oiter t]}]> Og) U T F in
     IFL s ->
-    Og !! (z, t) = Some sz ->
+    (forall ob, ob ∈ sz -> exists S, Og !! (z, t) = Some S /\ ob ∈ S) ->
     (forall Tr, flist s z = Some Tr -> Tr t) ->
     IFL s'.
   Proof.
-    intros s s' HIFL Hlk Hbound t' o Tr Hiter Hfl.
+    intros s s' HIFL Hprev Hbound t' o Tr Hiter Hfl.
+    assert (Hlk : forall ob, ob ∈ sz ->
+             exists t0 S, Og !! (z, t0) = Some S /\ ob ∈ S).
+    { intros ob Hob. destruct (Hprev ob Hob) as [S [HS Hin]]. by exists t, S. }
     (* the free list is untouched *)
     assert (Hfl0 : flist s o = Some Tr) by exact Hfl.
     destruct Hiter as [t'' [s'' [Hlk'' Hin]]].
@@ -387,7 +390,9 @@ Section readers.
       rewrite lookup_insert_eq in Hlk''. injection Hlk'' as <-.
       apply elem_of_union in Hin as [Hin | Hin].
       + (* an observation that was already there *)
-        exact (HIFL t' z Tr (ex_intro _ t (ex_intro _ sz (conj Hlk Hin))) Hfl0).
+        destruct (Hlk _ Hin) as [t0 [S0 [HS0 Hin0]]].
+        exact (HIFL t' z Tr (ex_intro _ t0 (ex_intro _ S0 (conj HS0 Hin0)))
+                 Hfl0).
       + (* the one just acquired *)
         apply elem_of_singleton in Hin. injection Hin as <-.
         exact (Hbound Tr Hfl0).
@@ -401,23 +406,31 @@ Section readers.
     let s  := to_LState_t m Og U T F in
     let s' := to_LState_t m (<[(z, t) := sz ∪ {[Oiter t]}]> Og) U T F in
     RITR s ->
-    Og !! (z, t) = Some sz ->
+    (forall ob, ob ∈ sz -> exists S, Og !! (z, t) = Some S /\ ob ∈ S) ->
     RITR s'.
   Proof.
-    intros s s' HR Hlk o t' Hrd.
+    intros s s' HR Hprev o t' Hrd.
+    (* what the entry held before, read back as an observation.  The acquired
+       set may be the union with a prior entry or with nothing, and the two
+       cases differ only here *)
+    assert (Hlk : forall ob, ob <> Oroot -> ob ∈ sz -> obsv s z ob).
+    { intros ob Hnr Hob. destruct (Hprev ob Hob) as [S [HS Hin]].
+      exact (to_LState_t_obs Og m U T F z t S ob Hnr HS Hin). }
     (* readers are unchanged by the update *)
     assert (Hrd0 : rds (ms s) t') by exact Hrd.
     destruct (HR o t' Hrd0) as (Hu & Hf & Hfr).
     (* an observation in the post-state is either old, or the acquired iterator *)
     assert (Hback : forall ob, obsv s' o ob -> obsv s o ob \/ ob = Oiter t).
-    { intros ob [t'' [s'' [Hlk'' Hin]]].
-      destruct (decide ((o, t'') = (z, t))) as [Heq|Hne].
-      - injection Heq as -> ->.
-        rewrite lookup_insert_eq in Hlk''. injection Hlk'' as <-.
-        apply elem_of_union in Hin as [Hin | Hin].
-        + left. by exists t, sz.
-        + right. by apply elem_of_singleton in Hin.
-      - rewrite lookup_insert_ne // in Hlk''. left. by exists t'', s''. }
+    { intros ob Hob. destruct ob; [.. | by left].
+      all: destruct Hob as [t'' [s'' [Hlk'' Hin]]].
+      all: destruct (decide ((o, t'') = (z, t))) as [Heq|Hne].
+      all: try (rewrite lookup_insert_ne // in Hlk''; left; by exists t'', s'').
+      all: injection Heq as -> ->;
+           rewrite lookup_insert_eq in Hlk''; injection Hlk'' as <-;
+           apply elem_of_union in Hin as [Hin | Hin].
+      all: try (left; apply Hlk; [discriminate | exact Hin]).
+      all: apply elem_of_singleton in Hin; try discriminate.
+      right. exact Hin. }
     repeat split; intros Hbad;
       destruct (Hback _ Hbad) as [Hold | Heq]; try discriminate;
       [exact (Hu Hold) | exact (Hf Hold) | exact (Hfr Hold)].
@@ -1551,8 +1564,11 @@ Lemma sync_stop_Og_map m Og U T F o ob :
   obsv (to_LState_t m Og U T F) o ob ->
   obsv (to_LState_t (sync_stop_ms m) (sync_stop_Og Og) U T F) o (sync_obs ob).
 Proof.
-  intros (t & S & Hlk & Hin). exists t, (set_map sync_obs S).
-  split; [by rewrite /sync_stop_Og lookup_fmap Hlk | set_solver].
+  intros Hob. destruct ob; [.. | exact Hob].
+  all: destruct Hob as (th & S & Hlk & Hin).
+  all: exists th, (set_map sync_obs S).
+  all: split; [by rewrite /sync_stop_Og lookup_fmap Hlk |].
+  all: apply (elem_of_map_2 sync_obs); exact Hin.
 Qed.
 
 Lemma sync_stop_Og_fwd m Og U T F o ob :
@@ -1560,16 +1576,15 @@ Lemma sync_stop_Og_fwd m Og U T F o ob :
   obsv (to_LState_t m Og U T F) o ob
   \/ exists t, ob = Ofree t /\ obsv (to_LState_t m Og U T F) o (Ounlk t).
 Proof.
-  intros (t & S' & Hlk & Hin).
-  rewrite /sync_stop_Og lookup_fmap in Hlk.
-  apply fmap_Some in Hlk as (S & HS & ->).
-  apply elem_of_map in Hin as (ob0 & -> & Hin0).
-  destruct ob0 as [t0|t0|t0|t0|]; simpl.
-  - left. by exists t, S.
-  - right. exists t0. split; [reflexivity | by exists t, S].
-  - left. by exists t, S.
-  - left. by exists t, S.
-  - left. by exists t, S.
+  intros Hob. destruct ob; [.. | by left].
+  all: destruct Hob as (th & S' & Hlk & Hin).
+  all: rewrite /sync_stop_Og lookup_fmap in Hlk.
+  all: apply fmap_Some in Hlk as (S & HS & ->).
+  all: apply elem_of_map in Hin as (ob0 & Heq & Hin0).
+  all: destruct ob0 as [t0|t0|t0|t0|]; simpl in Heq; try discriminate.
+  all: injection Heq as Heq0; subst.
+  all: try (left; by exists th, S).
+  right. eexists. split; [reflexivity | by exists th, S].
 Qed.
 
 Corollary sync_stop_WellFormed FType m Og U T F :
@@ -1878,139 +1893,143 @@ End departure.
 
 Print Assumptions read_end_preserves_WellFormed.
 
-(** ** Why the observation change is [Hkeep] and not "drop the thread's entries"
+(** ** The root observation, and a defect that stopped being one
 
-    The obvious way to say what ReadEnd does to the observation map is the one
-    [read_end_preserves_IFL] uses: [Og'] has no entry at [(o, t)].  For every
-    invariant about a *thread's* observations that is right, because an
-    observation names its observer and [ObsWF] puts it in that observer's entry.
+    The three hypotheses above were, for a time, the best that could be said.
+    The obvious way to describe what ReadEnd does to the observation map is to
+    drop the departing thread's entries, and for every invariant about a
+    *thread's* observations that is right: an observation names its observer,
+    and the old [ObsWF] put it in that observer's entry.
 
-    [Oroot] does not name an observer.  It is anonymous by design -- change C0
-    keeps it so, being the root being a property of the structure rather than of
-    anyone looking -- and [ObsWF] accordingly permits it in any entry, a
-    reader's included.  Dropping that reader's entries then destroys it, and
-    UNQRT_b, the one invariant that asks about [Oroot], fails.
+    [Oroot] did not name an observer.  It is anonymous by design -- being the
+    root is a property of the structure, not of anyone looking -- so the old
+    [ObsWF] permitted it in any entry, a reader's included.  Dropping that
+    reader's entries then destroyed it, and UNQRT_b, the one invariant that asks
+    about [Oroot], failed.  There was a state witnessing exactly that, and the
+    repair at the time was the smaller of the two available: keep [Hkeep] as an
+    assumption about the action, and add [RTO] to the invariant to tie [Oroot]
+    to [rt].
 
-    So this is an encoding mismatch rather than a defect in a rule: the map is
-    keyed by observer so that a thread can own its fragment, and [Oroot] has no
-    owner to be filed under.  Either the encoding gives it a home no ReadEnd can
-    remove, or the action has to be stated so as to keep it.  [Hkeep] is the
-    second, and it is the smaller change -- it costs one hypothesis and no
-    change to [ObsWF], which every other lemma in [IrisGhost.v] depends on.
+    That was the wrong half of the choice, and the other half is what the
+    reconstruction now does.  [Oroot] is read off the machine state, so no entry
+    holds it, no thread can drop it, and [ObsWF] can say what it wanted to say
+    all along: an entry at [(o, t)] holds observations tagged [t].  The witness
+    state is no longer well formed as an encoding -- that is the first lemma
+    below -- and [Hkeep] stops being an assumption, because the naive step
+    satisfies it.  [RTO] stops being an invariant: it is now true by
+    computation.
 
-    The state below is the witness.  It is well formed, its root observation is
-    recorded in the reader's entry, and the naive step breaks UNQRT_b. *)
+    Two things are worth separating here.  The defect was real: under the old
+    encoding the naive step was unsound, and the mechanization found it.  But it
+    was a defect of the bridge and not of the type system, and the repair that
+    removes it removes an invariant rather than adding one.  That is the only
+    one of the twenty that went that way. *)
 
-Definition ce_ms : MState :=
-  {| stk := fun _ _ => None;
-     hp  := fun o _ => if Nat.eqb o 0 then Some VNull else None;
-     lk  := Some 1;
-     rt  := 0;
-     rds := fun t => t = 2;
-     bnd := fun _ => False |}.
-
-(** The root observation, filed under reader 2 -- which [ObsWF] permits. *)
+(** The old witness: the root observation filed under a reader.  The encoding
+    now rejects it outright, which is the whole of the repair. *)
 Definition ce_Og : ObsMap := {[ (0%nat, 2%nat) := {[Oroot]} ]}.
 
-Definition ce_pre  : LState := to_LState_t ce_ms ce_Og (fun _ _ => False) ∅ ∅.
-Definition ce_post : LState :=
-  to_LState_t (read_end_ms ce_ms 2) ∅ (fun _ _ => False) ∅ (read_end_F ∅ 2).
-
-Lemma ce_ObsWF : ObsWF ce_Og.
+Lemma root_has_no_owner : ~ ObsWF ce_Og.
 Proof.
-  intros o t S ob Hlk Hin.
-  destruct (decide ((o, t) = (0%nat, 2%nat))) as [Heq | Hne].
-  - injection Heq as -> ->. rewrite lookup_singleton_eq in Hlk.
-    injection Hlk as <-. apply elem_of_singleton in Hin. by right.
-  - assert (Hnone : ce_Og !! (o, t) = None)
-      by (apply lookup_singleton_ne; intros Hc; exact (Hne (eq_sym Hc))).
-    rewrite Hnone in Hlk. discriminate.
+  intros HWF.
+  assert (Hlk : ce_Og !! (0%nat, 2%nat) = Some {[Oroot]})
+    by apply lookup_singleton_eq.
+  pose proof (HWF _ _ _ Oroot Hlk (elem_of_singleton_2 _ _ eq_refl)) as Hc.
+  simpl in Hc. discriminate.
 Qed.
 
-Lemma ce_obs o ob : obsv ce_pre o ob <-> (o = 0%nat /\ ob = Oroot).
+(** The naive step, as a map operation rather than as three hypotheses. *)
+Definition drop_thread (Og : ObsMap) (t : TID) : ObsMap :=
+  filter (fun kv => kv.1.2 <> t) Og.
+
+Lemma drop_thread_lookup Og t o t' :
+  drop_thread Og t !! (o, t') = (if decide (t' = t) then None else Og !! (o, t')).
 Proof.
-  split.
-  - intros [t [S [Hlk Hin]]].
-    destruct (decide ((o, t) = (0%nat, 2%nat))) as [Heq | Hne].
-    + injection Heq as -> ->. rewrite lookup_singleton_eq in Hlk.
-      injection Hlk as <-. apply elem_of_singleton in Hin. by split.
-    + assert (Hnone : ce_Og !! (o, t) = None)
-        by (apply lookup_singleton_ne; intros Hc; exact (Hne (eq_sym Hc))).
-      rewrite Hnone in Hlk. discriminate.
-  - intros [-> ->]. exists 2%nat, {[Oroot]}.
-    split; [by rewrite lookup_singleton_eq | set_solver].
+  case_decide as Ht.
+  - apply map_lookup_filter_None. right.
+    intros S _ Hc. simpl in Hc. exact (Hc Ht).
+  - destruct (Og !! (o, t')) as [S|] eqn:HS.
+    + apply map_lookup_filter_Some. split; [exact HS | exact Ht].
+    + apply map_lookup_filter_None. by left.
 Qed.
 
-Lemma ce_no_edges o f o' : ~ Edge ce_pre o f o'.
+Section naive.
+
+  Variables (m : MState) (Og : ObsMap) (U : Var -> TID -> Prop)
+            (T : gset TID) (F : gmap Loc (gset TID)) (t : TID).
+
+  Let s  := to_LState_t m Og U T F.
+  Let s' := to_LState_t (read_end_ms m t) (drop_thread Og t) U T
+              (read_end_F F t).
+
+  (** Nothing of the departing thread's survives. *)
+  Lemma drop_self o ob : ObsWF Og -> obs_tid ob = Some t -> ~ obsv s' o ob.
+  Proof.
+    intros HWF Htid Hob.
+    destruct ob as [t0|t0|t0|t0|]; simpl in Htid;
+      [| | | | discriminate];
+      (injection Htid as ->;
+       destruct Hob as [t1 [S [Hlk Hin]]];
+       rewrite drop_thread_lookup in Hlk;
+       case_decide as Ht1; [discriminate |];
+       pose proof (HWF _ _ _ _ Hlk Hin) as Hc; simpl in Hc;
+       injection Hc as ->; exact (Ht1 eq_refl)).
+  Qed.
+
+  (** Everything that is not its own survives, [Oroot] included -- and that last
+      is now a matter of [rt], which the step does not touch. *)
+  Lemma drop_keep o ob :
+    ObsWF Og -> obsv s o ob -> obs_tid ob <> Some t -> obsv s' o ob.
+  Proof.
+    intros HWF Hob Htid. destruct ob as [t0|t0|t0|t0|]; [| | | | exact Hob];
+      (destruct Hob as [t1 [S [Hlk Hin]]];
+       pose proof (HWF _ _ _ _ Hlk Hin) as Htag; simpl in Htag;
+       injection Htag as ->;
+       exists t1, S; split; [| exact Hin];
+       rewrite drop_thread_lookup; case_decide as Ht1; [| exact Hlk];
+       exfalso; apply Htid; simpl; by rewrite Ht1).
+  Qed.
+
+  (** And nothing new appears. *)
+  Lemma drop_shrink o ob : obsv s' o ob -> obsv s o ob.
+  Proof.
+    intros Hob. destruct ob as [t0|t0|t0|t0|]; [| | | | exact Hob];
+      (destruct Hob as [t1 [S [Hlk Hin]]];
+       rewrite drop_thread_lookup in Hlk; case_decide as Ht1;
+       [discriminate | by exists t1, S]).
+  Qed.
+
+End naive.
+
+(** The three hypotheses of [Section departure], discharged at the map operation
+    that the old encoding could not support. *)
+Theorem read_end_naive_is_sound m Og U T F t :
+  ObsWF Og ->
+  let s  := to_LState_t m Og U T F in
+  let s' := to_LState_t (read_end_ms m t) (drop_thread Og t) U T
+              (read_end_F F t) in
+  (forall o ob, obs_tid ob = Some t -> ~ obsv s' o ob)
+  /\ (forall o ob, obsv s o ob -> obs_tid ob <> Some t -> obsv s' o ob)
+  /\ (forall o ob, obsv s' o ob -> obsv s o ob).
 Proof.
-  unfold Edge. simpl. destruct (Nat.eqb o 0); discriminate.
+  intros HWF s s'. repeat apply conj.
+  - intros o ob. exact (drop_self m Og U T F t o ob HWF).
+  - intros o ob. exact (drop_keep m Og U T F t o ob HWF).
+  - exact (drop_shrink m Og U T F t).
 Qed.
 
-Lemma ce_reaches p o : Reaches ce_pre p o -> p = [] /\ o = 0%nat.
+(** Dropping entries also cannot break [ObsWF], so the step composes with
+    itself: two readers may leave in either order. *)
+Lemma drop_thread_ObsWF Og t : ObsWF Og -> ObsWF (drop_thread Og t).
 Proof.
-  destruct p as [|f p]; unfold Reaches; simpl.
-  - intros H. injection H as <-. by split.
-  - discriminate.
+  intros HWF o t' S ob Hlk Hin.
+  rewrite drop_thread_lookup in Hlk. case_decide as Ht'; [discriminate |].
+  exact (HWF _ _ _ _ Hlk Hin).
 Qed.
 
-Lemma ce_WellFormed FType : WellFormed FType ce_pre.
-Proof.
-  repeat apply conj.
-  - intros o o' f f' x He. exfalso. exact (ce_no_edges o f x He).
-  - intros x t o H. simpl in H. discriminate.
-  - intros y t H. simpl in H. discriminate.
-  - intros t o Tr Hit. exfalso.
-    destruct (proj1 (ce_obs o (Oiter t)) Hit) as [_ Hc]. discriminate.
-  - intros o o' f' t _ He. exfalso. exact (ce_no_edges o' f' o He).
-  - intros o o' f' Tr Hfl. simpl in Hfl. discriminate.
-  - intros lw o t _ Hit. exfalso.
-    destruct (proj1 (ce_obs o (Oiter lw)) Hit) as [_ Hc]. discriminate.
-  - intros t x o H. simpl in H. discriminate.
-  - intros t x o H. simpl in H. discriminate.
-  - intros o t t' Hfr. exfalso.
-    destruct (proj1 (ce_obs o (Ofresh t)) Hfr) as [_ Hc]. discriminate.
-  - intros o f o' t lw _ He. exfalso. exact (ce_no_edges o f o' He).
-  - intros t Hlk. simpl in Hlk. injection Hlk as <-. discriminate.
-  - intros o t Hrd. simpl in Hrd. subst t.
-    repeat apply conj; intros Hbad;
-      apply ce_obs in Hbad as [_ Hc]; discriminate.
-  - intros o Tr t Hfl. simpl in Hfl. discriminate.
-  - intros o f o' He. exfalso. exact (ce_no_edges o f o' He).
-  - intros o f He. exact (ce_no_edges o f (rt (ms ce_pre)) He).
-  - intros p o lw Hlk Hr.
-    destruct (ce_reaches p o Hr) as [_ ->]. right.
-    by apply ce_obs.
-  - intros o t lw _ [H | H]; apply ce_obs in H as [_ Hc]; discriminate.
-  - intros o t H. apply ce_obs in H as [_ Hc]. discriminate.
-  - intros p p' o H1 H2.
-    destruct (ce_reaches p o H1) as [-> _].
-    destruct (ce_reaches p' o H2) as [-> _]. reflexivity.
-Qed.
-
-(** The naive step: thread 2's entries are gone, which is exactly the
-    characterization the per-invariant ReadEnd lemmas use. *)
-Lemma ce_naive_gone o : (∅ : ObsMap) !! (o, 2%nat) = None.
-Proof. by rewrite lookup_empty. Qed.
-
-Lemma ce_post_no_obs o ob : ~ obsv ce_post o ob.
-Proof. intros [t [S [Hlk _]]]. rewrite lookup_empty in Hlk. discriminate. Qed.
-
-Theorem read_end_naive_breaks_UNQRT_b :
-  (forall FType, WellFormed FType ce_pre)
-  /\ ObsWF ce_Og
-  /\ rds (ms ce_pre) 2
-  /\ (forall o, (∅ : ObsMap) !! (o, 2%nat) = None)
-  /\ ~ UNQRT_b ce_post.
-Proof.
-  repeat apply conj;
-    [exact ce_WellFormed | exact ce_ObsWF | reflexivity | exact ce_naive_gone |].
-  intros H.
-  destruct (H [] 0%nat 1%nat eq_refl eq_refl) as [Hbad | Hbad];
-    [exact (ce_post_no_obs _ _ Hbad) | exact (ce_post_no_obs _ _ Hbad)].
-Qed.
-
-Print Assumptions ce_WellFormed.
-Print Assumptions read_end_naive_breaks_UNQRT_b.
+Print Assumptions root_has_no_owner.
+Print Assumptions read_end_naive_is_sound.
+Print Assumptions drop_thread_ObsWF.
 
 (** * The heap mutations, whole
 
@@ -4069,7 +4088,14 @@ Section acquisition.
   Let s  := to_LState_t m Og U T F.
   Let s' := to_LState_t m (<[(z, t) := sz ∪ {[Oiter t]}]> Og) U T F.
 
-  Hypothesis Hlkup  : Og !! (z, t) = Some sz.
+  (** What the acquiring thread's entry held before.  Stated as two
+      containments rather than as an equation, so that the case where the
+      thread has no entry at [z] yet -- which is the case the reader's read
+      needs, and the one the registration cell now decides -- is covered by
+      [sz = ∅] rather than by a second lemma. *)
+  Hypothesis Hsub   : forall S, Og !! (z, t) = Some S -> S ⊆ sz.
+  Hypothesis Hprev  : forall ob, ob ∈ sz ->
+                        exists S, Og !! (z, t) = Some S /\ ob ∈ S.
   Hypothesis Hrd    : rds m t.
   Hypothesis Hbound : forall Tr, flist s z = Some Tr -> Tr t.
   Hypothesis Hznf   : forall t0, ~ obsv s z (Ofresh t0).
@@ -4077,23 +4103,29 @@ Section acquisition.
   (** Observations grow by exactly the acquired iterator. *)
   Lemma ra_mono o ob : obsv s o ob -> obsv s' o ob.
   Proof.
-    intros [t' [S [Hl Hin]]].
-    destruct (decide ((o, t') = (z, t))) as [Heq | Hne].
-    - injection Heq as -> ->. exists t, (sz ∪ {[Oiter t]}).
-      rewrite lookup_insert_eq. split; [reflexivity |].
-      rewrite Hlkup in Hl. injection Hl as <-. set_solver.
-    - exists t', S. rewrite lookup_insert_ne //.
+    intros Hob. destruct ob as [t0|t0|t0|t0|]; [| | | | exact Hob].
+    all: destruct Hob as [t' [S [Hl Hin]]].
+    all: destruct (decide ((o, t') = (z, t))) as [Heq | Hne].
+    all: try solve [exists t', S; split; [| exact Hin];
+                    rewrite lookup_insert_ne //].
+    all: injection Heq as -> ->.
+    all: exists t, (sz ∪ {[Oiter t]});
+         rewrite lookup_insert_eq; split; [reflexivity |];
+         apply elem_of_union_l; exact (Hsub S Hl _ Hin).
   Qed.
 
   Lemma ra_back o ob : obsv s' o ob -> obsv s o ob \/ (o = z /\ ob = Oiter t).
   Proof.
-    intros [t' [S [Hl Hin]]].
-    destruct (decide ((o, t') = (z, t))) as [Heq | Hne].
-    - injection Heq as -> ->. rewrite lookup_insert_eq in Hl.
-      injection Hl as <-. apply elem_of_union in Hin as [Hin | Hin].
-      + left. by exists t, sz.
-      + right. apply elem_of_singleton in Hin. by split.
-    - rewrite lookup_insert_ne // in Hl. left. by exists t', S.
+    intros Hob. destruct ob as [t0|t0|t0|t0|]; [| | | | by left].
+    all: destruct Hob as [t' [S [Hl Hin]]].
+    all: destruct (decide ((o, t') = (z, t))) as [Heq | Hne].
+    all: try solve [rewrite lookup_insert_ne // in Hl; left; by exists t', S].
+    all: injection Heq as -> ->; rewrite lookup_insert_eq in Hl;
+         injection Hl as <-; apply elem_of_union in Hin as [Hin | Hin].
+    all: try solve [left; destruct (Hprev _ Hin) as [S0 [HS0 Hin0]];
+                    by exists t, S0].
+    all: apply elem_of_singleton in Hin; try discriminate.
+    right. split; [reflexivity | exact Hin].
   Qed.
 
   Lemma ra_detached o : Detached s o <-> Detached s' o.
@@ -4256,7 +4288,7 @@ Section acquisition.
     - exact (ra_OW HOW).
     - exact (ra_RWOW HRWOW).
     - exact (ra_AWRT HAWRT).
-    - exact (reader_acquire_preserves_IFL m Og U T F t z sz HIFL Hlkup Hbound).
+    - exact (reader_acquire_preserves_IFL m Og U T F t z sz HIFL Hprev Hbound).
     - exact (ra_ULKR HULKR).
     - exact HFLR.
     - exact (ra_WULK HWNR HWULK).
@@ -4265,7 +4297,7 @@ Section acquisition.
     - exact (ra_FNR HFNR).
     - exact (ra_FPI HFPI).
     - exact HWNR.
-    - exact (reader_acquire_preserves_RITR m Og U T F t z sz HRITR Hlkup).
+    - exact (reader_acquire_preserves_RITR m Og U T F t z sz HRITR Hprev).
     - exact HRINFL.
     - exact (ra_HD HHD).
     - exact HUa.
@@ -6301,7 +6333,8 @@ Inductive lstep (FType : FName -> FieldKind) : LState -> LState -> Prop :=
     lstep FType (to_LState_t m Og U T F)
                 (to_LState_t (sync_stop_ms m) (sync_stop_Og Og) U T F)
 | L_read m Og U T F t z sz :
-    Og !! (z, t) = Some sz ->
+    (forall S, Og !! (z, t) = Some S -> S ⊆ sz) ->
+    (forall ob, ob ∈ sz -> exists S, Og !! (z, t) = Some S /\ ob ∈ S) ->
     rds m t ->
     (forall Tr, flist (to_LState_t m Og U T F) z = Some Tr -> Tr t) ->
     (forall t0, ~ obsv (to_LState_t m Og U T F) z (Ofresh t0)) ->
@@ -6490,7 +6523,7 @@ Proof.
              H H0 H1 H2 Hwf).
   - exact (sync_stop_WellFormed FType m Og U T F H Hwf).
   - exact (reader_acquire_preserves_WellFormed FType m Og U T F t z sz
-             H H0 H1 H2 Hwf).
+             H H0 H1 H2 H3 Hwf).
   - exact (alloc_preserves_WellFormed FType m Og Og' U U' T F lw n x fs
              H H0 H1 H2 H3 H4 H5 H6 H7 H8 Hwf).
   - exact (bind_preserves_WellFormed FType m Og Og' U U' T F tb y o

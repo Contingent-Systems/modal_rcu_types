@@ -100,35 +100,42 @@ fairness as an explicit hypothesis of a liveness statement over `reachable`
 (half a day).  It proves nothing new; it only puts the assumption in a theorem
 statement instead of a paragraph.  Do it only if asked.
 
-### R4. The root observation
+### R4. The root observation — **done**
 
-**A model decision, and only one of the two options survives contact.**
+*Option (a), derive `Oroot` from the structure*, is what the development now
+does.  `to_LState_t`'s `obsv` branches on the observation: at `Oroot` it is
+`o = rt m`, and at every tagged observation it is the entry lookup it was
+before, which is why the change cost the proofs about tagged observations
+nothing.  `ObsWF` is thread-tagged only.
 
-*Option (b), assign `Oroot` to the lock holder* — does not work.  `WriteEnd`
-releases the lock while `retire_self` keeps the root observation, so between
-critical sections it would sit in a thread that is not the writer.  Established;
-do not spend time on it.
+What landed, against the six tasks as written:
 
-*Option (a), derive `Oroot` from the structure* — works, and is more faithful to
-what the paper already says it is ("a property of the structure, not of an
-observer").  Tasks:
+1. Done, in the branching form rather than the disjunctive one.
+2. Done.  `root_has_no_owner` in `Actions.v` is the old counterexample state,
+   now rejected by the encoding: one of the twenty defects turned into a
+   non-issue rather than a repair, and it is the only one that went that way.
+3. Done.  RTO is definitional; `Denotations.v`'s root conjunct is `reflexivity`.
+4. Done, and it turned out to be required rather than optional.  `tobs_del`,
+   `tobs_del_list` and `del_list` were added; ReadEnd and WriteEnd delete their
+   keys.  Blanking them is not enough: a blank key belongs to no running
+   thread, and then the reader's read cannot tell an absent entry from a blank
+   one.
+5. Done, and it needed one more conjunct than the plan expected.  The domain
+   clause is now about *entries* (`Og !! (o,t) = Some sg -> o ∈ D`), and a new
+   conjunct says no key is left behind empty.  Together they make ReadBegin's
+   empty domain provable, which is what the strengthening needed.
+6. Partly.  `read_update` is the reader's read as a step on the invariant's
+   contents, and everything observational in it is discharged: the bounding
+   obligation from FLR, IFL and SameSnap (`read_bound`, with `HSS_SameSnap`
+   supplying SameSnap from the epoch layer), and the entry it must create from
+   the registration cell.  It is **not** a closed Hoare triple, and the reason
+   is not the one R4 was about: a reader must learn what a field holds, and
+   `pt` is exclusive.  That is the fractional or snapshot heap, and it is R1's
+   business, not this item's.
 
-1. Change `to_LState_t`'s `obsv` to
-   `(∃ t s, Og !! (o,t) = Some s ∧ ob ∈ s) ∨ (ob = Oroot ∧ o = rt m)`.
-2. Strengthen `ObsWF` to *thread-tagged only* — entries no longer carry `Oroot`.
-3. `RTO` becomes definitional (`reflexivity`), so one of the twenty defects
-   turns into a non-issue rather than a repair.  Say so.
-4. `read_end_update` deletes its keys instead of retiring them, since there is
-   no longer a root observation to preserve.
-5. Strengthen the invariant's domain clause from *t-tagged entries* to *all
-   entries* — now sound, because a reader's entries are all its own.
-6. `read_atomic` closes: the reader can grant an observation at a node it has
-   not observed, because the entry's absence is now derivable from its cell.
-
-*Effort* 1–2 days.  *Risk* medium — `Oroot` appears 52 times and `obsv` is
-everywhere.  **Do it on a branch**, and expect most affected proofs to get
-shorter rather than longer.  *Acceptance* `RTO` by `reflexivity`; `read_atomic`
-a closed triple; the "ten closed triples" claim becomes eleven.
+*Acceptance, as met* RTO by computation; the "ten closed triples" claim stands
+(ReadBegin and ReadEnd, not the read); `read_update` closed at the update
+level.  *Not met* `read_atomic` as a triple — blocked on a fractional heap.
 
 ---
 
