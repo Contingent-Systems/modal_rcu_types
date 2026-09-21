@@ -94,7 +94,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 257 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 260 say \emph{closed under the
 global context}, and none reports an axiom.
 
 That target had the bug it exists to catch, and we report it because the
@@ -2197,14 +2197,22 @@ Said over a state, that is weaker than memory safety asserts, which is about
 runs.  The gap is one induction, and \texttt{reachable\_WellFormed} and
 \texttt{safety} close it: the invariants are inductive along executions, so at
 \emph{no point} in any run from a well-formed start does a thread other than the
-writer hold a live reference to a node the writer is about to reclaim.  The step
-relation is a parameter there, and deliberately: its obligation is exactly the
-fifteen preservation theorems, so any relation assembled from them discharges it
-by case analysis, and assembling it is transcription rather than proof.
-\texttt{free\_runs\_are\_safe} instantiates it at \textsc{Free} so the
-parameterisation is not vacuous.  Writing the fifteen out as one inductive
-relation, and with it a progress theorem, is what is left of this part; it adds
-nothing to the argument and a good deal to the file.
+writer hold a live reference to a node the writer is about to reclaim.
+
+\texttt{lstep} is the relation, one constructor per action carrying that
+action's hypotheses, so \texttt{lstep\_preserves} is fifteen applications and
+nothing else; \texttt{system\_is\_safe} is the theorem above stated at it.  That
+is the whole system rather than one action, which is what the parameterisation
+was for.
+
+Progress deserves a word, because the obvious statement is not the right one.
+``Some step is always possible'' is false and should be --- a state in which no
+thread can move is a deadlock, and whether one is reachable is a question about
+the program.  \texttt{lstep} relates states, not configurations, so
+relation-level progress is not statable at that level and would not mean what it
+sounds like.  What progress means here is per-thread and per-primitive: that a
+well-typed thread about to execute a primitive finds its side condition true,
+which is what the six guards are, and which \S\ref{sec:alglave} treats.
 
 \paragraph{Against Alglave et al.'s requirements.}
 \label{sec:alglave}
@@ -2267,7 +2275,7 @@ finds the bounding set empty.
 \emph{Read-to-write upgrade.}  Not provided, as \S\ref{sec:relatedwork} says: a
 performance optimisation, orthogonal to memory safety.
 
-\paragraph{What is left, and it is four things.}
+\paragraph{What is left, and it is three things.}
 \emph{Fairness.}  That a reader inside a critical section eventually leaves it.
 The wait's termination reduces to it and no further --- it is a property of the
 client, and no invariant of the shared state could supply it.
@@ -2285,10 +2293,6 @@ that is fifteen theorems and now an induction over runs.  Axiom soundness asks
 for more: that the post-state satisfies the denotation of the post-type
 environment.  Six of the fifteen have it.  This is the real remaining debt and
 we would rather name it than let the invariant work stand in for it.
-
-\emph{Transcription.}  Writing the fifteen actions out as one inductive step
-relation, and proving progress alongside.  It adds nothing to the argument, as
-\S\ref{sec:inv-mech} says, and a good deal to the file.
 
 The read-side denotation is mechanized --- \texttt{D\_rcuItrR}, transcribed from
 the figure --- together with the reader's acquisition

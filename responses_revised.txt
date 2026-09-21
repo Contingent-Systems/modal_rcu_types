@@ -17,7 +17,7 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
 19,900 lines and 1,033 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 257
+succeed if the development contains an admitted proof, or if any of its 260
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -778,7 +778,7 @@ every reachable node, which is a bulk update needing the reachable set
 enumerated, so we record that rather than state a lemma that would claim more
 than it proves.
 
-What is left is four things, and we would rather name them than let the
+What is left is three things, and we would rather name them than let the
 invariant work stand in for them.
 
 Fairness: that a reader inside a critical section eventually leaves it.  The
@@ -797,9 +797,7 @@ and now an induction over runs.  Axiom soundness asks for more: that the
 post-state satisfies the denotation of the post-type environment.  Six of the
 fifteen have it.  This is the real remaining debt.
 
-And transcription: writing the fifteen actions out as one inductive step
-relation and proving progress alongside.  It adds nothing to the argument and a
-good deal to the file.
+
 
 One last thing worth saying about the infinite-heap defect, because it cuts the
 other way.  The checker never had it.  Fields there are a bitset over a declared
@@ -994,12 +992,20 @@ Said over a state that is weaker than memory safety asserts, which is about
 runs, and the gap is one induction.  We close it: the invariants are inductive
 along executions, so at no point in any run from a well-formed start does a
 thread other than the writer hold a live reference to a node the writer is about
-to reclaim.  The step relation is a parameter, deliberately -- its obligation is
-exactly the fifteen preservation theorems, so any relation assembled from them
-discharges it by case analysis, and we instantiate it at Free so the
-parameterisation is not vacuous.  Writing the fifteen out as one inductive
-relation, and a progress theorem with it, is what remains of that part; it adds
-nothing to the argument and a good deal to the file.
+to reclaim.  The relation is written out, one constructor per action carrying that
+action's hypotheses, so its preservation is fifteen applications and nothing
+else, and the safety theorem is stated at the whole system rather than at one
+action.
+
+Progress deserves a word, because the obvious statement is not the right one.
+"Some step is always possible" is false and should be: a state in which no
+thread can move is a deadlock, and whether one is reachable is a question about
+the program.  Our relation relates states, not configurations, so
+relation-level progress is not statable there and would not mean what it sounds
+like.  What progress means for this system is per-thread and per-primitive --
+that a well-typed thread about to execute a primitive finds its side condition
+true -- which is the guards, and which we treat under Alglave's third
+requirement.
 
 Two of Alglave et al.'s four fundamental requirements are now theorems about
 our model rather than arguments in prose, and which invariants they need is the

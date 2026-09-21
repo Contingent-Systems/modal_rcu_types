@@ -6246,3 +6246,303 @@ Print Assumptions reachable_WellFormed.
 Print Assumptions safety.
 Print Assumptions free_step_preserves.
 Print Assumptions free_runs_are_safe.
+
+(** * The step relation, written out
+
+    The [executions] section above takes the step relation as a parameter, and
+    its obligation is exactly the fifteen preservation theorems.  This is the
+    relation itself: one constructor per action, each carrying that action's
+    hypotheses, so that [lstep_preserves] is fifteen applications and nothing
+    else.  It adds no argument; what it adds is that [safety] can be stated at
+    the whole system rather than at one action.
+
+    Built in three groups, in the order the file proves them. *)
+
+Inductive lstep (FType : FName -> FieldKind) : LState -> LState -> Prop :=
+(** ** The reclamation chain *)
+| L_free m Og U T F d t :
+    obsv (to_LState_t m Og U T F) d (Ofree t) ->
+    lstep FType (to_LState_t m Og U T F)
+                (to_LState_t (free_ms m d) Og U T (delete d F))
+| L_read_begin m Og U T F t :
+    (forall lw, lk m = Some lw -> lw <> t) ->
+    (forall o, ~ obsv (to_LState_t m Og U T F) o (Ounlk t)
+            /\ ~ obsv (to_LState_t m Og U T F) o (Ofree t)
+            /\ ~ obsv (to_LState_t m Og U T F) o (Ofresh t)) ->
+    lstep FType (to_LState_t m Og U T F)
+                (to_LState_t (read_begin_ms m t) Og U T F)
+| L_read_end m Og Og' U U' T F t :
+    (forall o ob, obs_tid ob = Some t ->
+       ~ obsv (to_LState_t (read_end_ms m t) Og' U' T (read_end_F F t)) o ob) ->
+    (forall o ob, obsv (to_LState_t m Og U T F) o ob -> obs_tid ob <> Some t ->
+       obsv (to_LState_t (read_end_ms m t) Og' U' T (read_end_F F t)) o ob) ->
+    (forall o ob,
+       obsv (to_LState_t (read_end_ms m t) Og' U' T (read_end_F F t)) o ob ->
+       obsv (to_LState_t m Og U T F) o ob) ->
+    (forall x, undf (to_LState_t (read_end_ms m t) Og' U' T (read_end_F F t)) x t) ->
+    (forall x t', undf (to_LState_t m Og U T F) x t' ->
+       undf (to_LState_t (read_end_ms m t) Og' U' T (read_end_F F t)) x t') ->
+    rds m t ->
+    lstep FType (to_LState_t m Og U T F)
+                (to_LState_t (read_end_ms m t) Og' U' T (read_end_F F t))
+| L_sync_start m Og U T F F' Rs :
+    (forall t, t ∈ Rs <-> rds m t) ->
+    (forall o s0, F' !! o = Some s0 -> s0 = Rs) ->
+    (forall o t, obsv (to_LState_t m Og U T F) o (Ounlk t)
+              \/ obsv (to_LState_t m Og U T F) o (Ofree t) ->
+       exists s0, F' !! o = Some s0) ->
+    (forall o s0, F' !! o = Some s0 ->
+       exists t, obsv (to_LState_t m Og U T F) o (Ounlk t)
+              \/ obsv (to_LState_t m Og U T F) o (Ofree t)) ->
+    lstep FType (to_LState_t m Og U T F)
+                (to_LState_t (sync_start_ms m) Og U T F')
+| L_sync_stop m Og U T F :
+    (forall t, ~ bnd m t) ->
+    lstep FType (to_LState_t m Og U T F)
+                (to_LState_t (sync_stop_ms m) (sync_stop_Og Og) U T F)
+| L_read m Og U T F t z sz :
+    Og !! (z, t) = Some sz ->
+    rds m t ->
+    (forall Tr, flist (to_LState_t m Og U T F) z = Some Tr -> Tr t) ->
+    (forall t0, ~ obsv (to_LState_t m Og U T F) z (Ofresh t0)) ->
+    lstep FType (to_LState_t m Og U T F)
+                (to_LState_t m (<[(z, t) := sz ∪ {[Oiter t]}]> Og) U T F)
+(** ** Allocation and binding *)
+| L_alloc m Og Og' U U' T F lw n x fs :
+    lk m = Some lw ->
+    obsv (to_LState_t (alloc_ms m n fs x lw) Og' U' T F) n (Ofresh lw) ->
+    (forall o ob, obsv (to_LState_t (alloc_ms m n fs x lw) Og' U' T F) o ob ->
+       obsv (to_LState_t m Og U T F) o ob \/ (o = n /\ ob = Ofresh lw)) ->
+    (forall o ob, obsv (to_LState_t m Og U T F) o ob ->
+       obsv (to_LState_t (alloc_ms m n fs x lw) Og' U' T F) o ob) ->
+    (forall y t, (y, t) <> (x, lw) ->
+       undf (to_LState_t (alloc_ms m n fs x lw) Og' U' T F) y t
+       <-> undf (to_LState_t m Og U T F) y t) ->
+    (forall g, hp m n g = None) ->
+    (forall ob, ~ obsv (to_LState_t m Og U T F) n ob) ->
+    (forall o g, hp m o g <> Some (VLoc n)) ->
+    (forall y t, stk m y t <> Some n) ->
+    n <> rt m ->
+    lstep FType (to_LState_t m Og U T F)
+                (to_LState_t (alloc_ms m n fs x lw) Og' U' T F)
+| L_bind m Og Og' U U' T F tb y o :
+    (lk m = Some tb \/ rds m tb) ->
+    obsv (to_LState_t (bind_ms m y tb o) Og' U' T F) o (Oiter tb) ->
+    (forall q ob, obsv (to_LState_t (bind_ms m y tb o) Og' U' T F) q ob ->
+       obsv (to_LState_t m Og U T F) q ob \/ (q = o /\ ob = Oiter tb)) ->
+    (forall q ob, obsv (to_LState_t m Og U T F) q ob ->
+       obsv (to_LState_t (bind_ms m y tb o) Og' U' T F) q ob) ->
+    (forall z t, (z, t) <> (y, tb) ->
+       undf (to_LState_t (bind_ms m y tb o) Og' U' T F) z t
+       <-> undf (to_LState_t m Og U T F) z t) ->
+    ~ Detached (to_LState_t m Og U T F) o ->
+    flist (to_LState_t m Og U T F) o = None ->
+    lstep FType (to_LState_t m Og U T F)
+                (to_LState_t (bind_ms m y tb o) Og' U' T F)
+(** ** The heap mutations *)
+| L_write_fresh m Og U T F lw on f oy :
+    lk m = Some lw ->
+    obsv (to_LState_t m Og U T F) on (Ofresh lw) ->
+    obsv (to_LState_t m Og U T F) oy (Oiter lw) ->
+    (forall p, hstar (hp m) (rt m) p <> Some on) ->
+    InHeap (to_LState_t m Og U T F) oy ->
+    flist (to_LState_t m Og U T F) oy = None ->
+    oy <> rt m ->
+    lstep FType (to_LState_t m Og U T F)
+                (to_LState_t (write_ms m on f (VLoc oy)) Og U T F)
+| L_link_null m Og Og' U T F lw op f on rho :
+    lk m = Some lw ->
+    obsv (to_LState_t (write_ms m op f (VLoc on)) Og' U T F) on (Oiter lw) ->
+    (forall t, ~ obsv (to_LState_t (write_ms m op f (VLoc on)) Og' U T F)
+                 on (Ofresh t)) ->
+    (forall o ob, obsv (to_LState_t (write_ms m op f (VLoc on)) Og' U T F) o ob ->
+       obsv (to_LState_t m Og U T F) o ob \/ (o = on /\ ob = Oiter lw)) ->
+    (forall o ob, obsv (to_LState_t m Og U T F) o ob ->
+       (o, ob) <> (on, Ofresh lw) ->
+       obsv (to_LState_t (write_ms m op f (VLoc on)) Og' U T F) o ob) ->
+    obsv (to_LState_t m Og U T F) on (Ofresh lw) ->
+    obsv (to_LState_t m Og U T F) op (Oiter lw) ->
+    PointsNowhere (hp m) on ->
+    (forall o g, hp m o g <> Some (VLoc on)) ->
+    InHeap (to_LState_t m Og U T F) on ->
+    on <> rt m ->
+    flist (to_LState_t m Og U T F) on = None ->
+    hstar (hp m) (rt m) rho = Some op ->
+    UNQR_h (hp m) (rt m) ->
+    lstep FType (to_LState_t m Og U T F)
+                (to_LState_t (write_ms m op f (VLoc on)) Og' U T F)
+| L_unlink m Og Og' U T F lw ox f1 oz f2 ow rho :
+    lk m = Some lw ->
+    obsv (to_LState_t (write_ms m ox f1 (VLoc ow)) Og' U T F) oz (Ounlk lw) ->
+    ~ obsv (to_LState_t (write_ms m ox f1 (VLoc ow)) Og' U T F) oz (Oiter lw) ->
+    (forall o ob, obsv (to_LState_t (write_ms m ox f1 (VLoc ow)) Og' U T F) o ob ->
+       obsv (to_LState_t m Og U T F) o ob \/ (o = oz /\ ob = Ounlk lw)) ->
+    (forall o ob, obsv (to_LState_t m Og U T F) o ob ->
+       (o, ob) <> (oz, Oiter lw) ->
+       obsv (to_LState_t (write_ms m ox f1 (VLoc ow)) Og' U T F) o ob) ->
+    (forall o g o', hp m o g = Some (VLoc o') -> FType g = RCUField) ->
+    hp m ox f1 = Some (VLoc oz) ->
+    hp m oz f2 = Some (VLoc ow) ->
+    obsv (to_LState_t m Og U T F) ox (Oiter lw) ->
+    obsv (to_LState_t m Og U T F) oz (Oiter lw) ->
+    obsv (to_LState_t m Og U T F) ow (Oiter lw) ->
+    flist (to_LState_t m Og U T F) ow = None ->
+    hstar (hp m) (rt m) rho = Some ox ->
+    UNQR_h (hp m) (rt m) ->
+    (forall q t g, obsv (to_LState_t m Og U T F) q (Ofresh t) ->
+       hp m q g <> Some (VLoc oz)) ->
+    lstep FType (to_LState_t m Og U T F)
+                (to_LState_t (write_ms m ox f1 (VLoc ow)) Og' U T F)
+| L_insert m Og Og' U T F lw op f on oo f4 rho :
+    lk m = Some lw ->
+    obsv (to_LState_t (write_ms m op f (VLoc on)) Og' U T F) on (Oiter lw) ->
+    (forall t, ~ obsv (to_LState_t (write_ms m op f (VLoc on)) Og' U T F)
+                 on (Ofresh t)) ->
+    (forall o ob, obsv (to_LState_t (write_ms m op f (VLoc on)) Og' U T F) o ob ->
+       obsv (to_LState_t m Og U T F) o ob \/ (o = on /\ ob = Oiter lw)) ->
+    (forall o ob, obsv (to_LState_t m Og U T F) o ob ->
+       (o, ob) <> (on, Ofresh lw) ->
+       obsv (to_LState_t (write_ms m op f (VLoc on)) Og' U T F) o ob) ->
+    (forall o g o', hp m o g = Some (VLoc o') -> FType g = RCUField) ->
+    hp m op f = Some (VLoc oo) ->
+    obsv (to_LState_t m Og U T F) on (Ofresh lw) ->
+    obsv (to_LState_t m Og U T F) op (Oiter lw) ->
+    PointsOnlyAt (hp m) on f4 oo ->
+    (forall o g, hp m o g <> Some (VLoc on)) ->
+    InHeap (to_LState_t m Og U T F) on ->
+    on <> rt m ->
+    flist (to_LState_t m Og U T F) on = None ->
+    hstar (hp m) (rt m) rho = Some op ->
+    UNQR_h (hp m) (rt m) ->
+    lstep FType (to_LState_t m Og U T F)
+                (to_LState_t (write_ms m op f (VLoc on)) Og' U T F)
+| L_replace m Og Og' U T F lw op f oo on rho :
+    lk m = Some lw ->
+    obsv (to_LState_t (write_ms m op f (VLoc on)) Og' U T F) on (Oiter lw) ->
+    (forall t, ~ obsv (to_LState_t (write_ms m op f (VLoc on)) Og' U T F)
+                 on (Ofresh t)) ->
+    obsv (to_LState_t (write_ms m op f (VLoc on)) Og' U T F) oo (Ounlk lw) ->
+    ~ obsv (to_LState_t (write_ms m op f (VLoc on)) Og' U T F) oo (Oiter lw) ->
+    (forall o ob, obsv (to_LState_t (write_ms m op f (VLoc on)) Og' U T F) o ob ->
+       obsv (to_LState_t m Og U T F) o ob
+       \/ (o = on /\ ob = Oiter lw) \/ (o = oo /\ ob = Ounlk lw)) ->
+    (forall o ob, obsv (to_LState_t m Og U T F) o ob ->
+       (o, ob) <> (on, Ofresh lw) -> (o, ob) <> (oo, Oiter lw) ->
+       obsv (to_LState_t (write_ms m op f (VLoc on)) Og' U T F) o ob) ->
+    (forall o g o', hp m o g = Some (VLoc o') -> FType g = RCUField) ->
+    hp m op f = Some (VLoc oo) ->
+    Mirrors (hp m) on oo ->
+    obsv (to_LState_t m Og U T F) on (Ofresh lw) ->
+    obsv (to_LState_t m Og U T F) op (Oiter lw) ->
+    obsv (to_LState_t m Og U T F) oo (Oiter lw) ->
+    (forall o g, hp m o g <> Some (VLoc on)) ->
+    InHeap (to_LState_t m Og U T F) on ->
+    on <> rt m ->
+    flist (to_LState_t m Og U T F) on = None ->
+    hstar (hp m) (rt m) rho = Some op ->
+    UNQR_h (hp m) (rt m) ->
+    (forall q t g, obsv (to_LState_t m Og U T F) q (Ofresh t) ->
+       hp m q g <> Some (VLoc oo)) ->
+    lstep FType (to_LState_t m Og U T F)
+                (to_LState_t (write_ms m op f (VLoc on)) Og' U T F)
+(** ** The write critical section's boundaries *)
+| L_write_begin m Og Og' U T F lw :
+    lk m = None ->
+    ~ rds m lw ->
+    (forall p o, Reaches (to_LState_t m Og U T F) p o ->
+       obsv (to_LState_t (write_begin_ms m lw) Og' U T F) o (Oiter lw)
+       \/ obsv (to_LState_t (write_begin_ms m lw) Og' U T F) o Oroot) ->
+    (forall o ob, obsv (to_LState_t (write_begin_ms m lw) Og' U T F) o ob ->
+       obsv (to_LState_t m Og U T F) o ob
+       \/ (ob = Oiter lw /\ exists p, Reaches (to_LState_t m Og U T F) p o)) ->
+    (forall o ob, obsv (to_LState_t m Og U T F) o ob ->
+       obsv (to_LState_t (write_begin_ms m lw) Og' U T F) o ob) ->
+    (forall o, ~ Detached (to_LState_t m Og U T F) o) ->
+    (forall p o, Reaches (to_LState_t m Og U T F) p o ->
+       flist (to_LState_t m Og U T F) o = None) ->
+    lstep FType (to_LState_t m Og U T F)
+                (to_LState_t (write_begin_ms m lw) Og' U T F)
+| L_write_end m Og Og' U U' T F lw :
+    lk m = Some lw ->
+    (forall o ob, obs_tid ob = Some lw ->
+       ~ obsv (to_LState_t (write_end_ms m) Og' U' T F) o ob) ->
+    (forall o ob, obsv (to_LState_t m Og U T F) o ob ->
+       obs_tid ob <> Some lw ->
+       obsv (to_LState_t (write_end_ms m) Og' U' T F) o ob) ->
+    (forall o ob, obsv (to_LState_t (write_end_ms m) Og' U' T F) o ob ->
+       obsv (to_LState_t m Og U T F) o ob) ->
+    (forall x, undf (to_LState_t (write_end_ms m) Og' U' T F) x lw) ->
+    (forall x t, undf (to_LState_t m Og U T F) x t ->
+       undf (to_LState_t (write_end_ms m) Og' U' T F) x t) ->
+    (forall o, ~ Detached (to_LState_t m Og U T F) o) ->
+    lstep FType (to_LState_t m Og U T F)
+                (to_LState_t (write_end_ms m) Og' U' T F).
+
+Lemma lstep_preserves FType s s' :
+  lstep FType s s' -> WellFormed FType s -> WellFormed FType s'.
+Proof.
+  intros Hst Hwf. destruct Hst.
+  - exact (free_preserves_WellFormed FType m Og U T F d t Hwf H).
+  - exact (read_begin_preserves_WellFormed FType m Og U T F t H H0 Hwf).
+  - exact (read_end_preserves_WellFormed FType m Og Og' U U' T F t
+             H H0 H1 H2 H3 H4 Hwf).
+  - exact (sync_start_preserves_WellFormed FType m Og U T F F' Rs
+             H H0 H1 H2 Hwf).
+  - exact (sync_stop_WellFormed FType m Og U T F H Hwf).
+  - exact (reader_acquire_preserves_WellFormed FType m Og U T F t z sz
+             H H0 H1 H2 Hwf).
+  - exact (alloc_preserves_WellFormed FType m Og Og' U U' T F lw n x fs
+             H H0 H1 H2 H3 H4 H5 H6 H7 H8 Hwf).
+  - exact (bind_preserves_WellFormed FType m Og Og' U U' T F tb y o
+             H H0 H1 H2 H3 H4 H5 Hwf).
+  - exact (write_fresh_preserves_WellFormed FType m Og U T F lw on f oy
+             H H0 H1 H2 H3 H4 H5 Hwf).
+  - exact (link_null_preserves_WellFormed FType m Og Og' U T F lw op f on rho
+             H H0 H1 H2 H3 H4 H5 H6 H7 H8 H9 H10 H11 H12 Hwf).
+  - exact (unlink_preserves_WellFormed FType m Og Og' U T F lw ox f1 oz f2 ow
+             rho H H0 H1 H2 H3 H4 H5 H6 H7 H8 H9 H10 H11 H12 H13 Hwf).
+  - exact (insert_preserves_WellFormed FType m Og Og' U T F lw op f on oo f4
+             rho H H0 H1 H2 H3 H4 H5 H6 H7 H8 H9 H10 H11 H12 H13 H14 Hwf).
+  - exact (replace_preserves_WellFormed FType m Og Og' U T F lw op f oo on rho
+             H H0 H1 H2 H3 H4 H5 H6 H7 H8 H9 H10 H11 H12 H13 H14 H15 H16 H17
+             H18 Hwf).
+  - exact (write_begin_preserves_WellFormed FType m Og Og' U T F lw
+             H H0 H1 H2 H3 H4 H5 Hwf).
+  - exact (write_end_preserves_WellFormed FType m Og Og' U U' T F lw
+             H H0 H1 H2 H3 H4 H5 Hwf).
+Qed.
+
+Print Assumptions lstep_preserves.
+
+(** And so the safety theorem holds of the whole system rather than of one
+    action.  This is what [executions] was parameterised for; [free_step] was
+    the placeholder while the relation was being written. *)
+Corollary system_is_safe FType s0 s tw x o y t' :
+  WellFormed FType s0 -> reachable (lstep FType) s0 s ->
+  D_freeable s tw x ->
+  stk (ms s) x tw = Some o ->
+  stk (ms s) y t' = Some o -> ~ undf s y t' ->
+  t' = tw.
+Proof.
+  exact (safety FType (lstep FType) (lstep_preserves FType) s0 s tw x o y t').
+Qed.
+
+(** A word on progress, because the obvious statement is not the right one.
+    ``Some step is always possible'' is false and should be: a state in which no
+    thread can move is a deadlock, and whether one is reachable is a question
+    about the program, not about [LState].  [lstep] has no program counter --
+    it relates states, not configurations -- so relation-level progress is not
+    statable here and would not mean what it sounds like.
+
+    What progress means for this system is per-thread and per-primitive: that a
+    well-typed thread about to execute an RCU primitive finds that primitive's
+    side condition true.  That is what the six [guard_*] propositions in
+    [WellFormed.v] are, and it is discharged where a thread's own resources are
+    available rather than here: [read_begin_guard] and [read_end_guard] in
+    [Triples.v] for the reader's two, [write_end_unconditional] for the one that
+    is trivial, and [writer_guards_are_not_invariants] for the proof that the
+    writer's three cannot be discharged from the state at all, two of them being
+    the blocking ones. *)
+
+Print Assumptions lstep_preserves.
+Print Assumptions system_is_safe.
