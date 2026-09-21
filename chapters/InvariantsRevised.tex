@@ -94,7 +94,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 265 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 273 say \emph{closed under the
 global context}, and none reports an axiom.
 
 That target had the bug it exists to catch, and we report it because the
@@ -1774,6 +1774,38 @@ That the last three needed no new machinery is the substance of the claim.  What
 varies between the rules is which of the three touched-variable forms occur and
 how many times; what does not vary is anything about RCU.
 
+Three more rules are stated that way, and two of them needed framing lemmas the
+five mutations did not, for reasons worth separating.
+
+\textsc{T-Free} is the only action that makes the thread \emph{give resources
+up} rather than write them, so it is the only place the cell map has to come
+apart --- into the reclaimed node's cells, which the step consumes, and the
+rest, which comes back with the environment.  That also makes the path condition
+the harder direction of the two: a write outside a path cannot change the fold,
+but a \emph{deletion} outside it might make the fold fail rather than return
+something else, so the invariance has to be proved separately
+(\texttt{hstarC\_stable\_free}).  Its environment condition is
+\texttt{AvoidsNode}, and the post-environment drops the freed variable rather
+than retyping it to \undf{} --- not an evasion, because \undf{}'s denotation
+asks for a fact about a node the thread no longer references, so its honest
+resource reading is no resource at all, and what \undf{} \emph{means} is
+\texttt{free\_post\_env}, where it belongs.
+
+The binding rules needed the mirror image.  \texttt{EnvOK\_obs} frames an
+observation write at a node the environment does not read, and a bind writes at
+the node it does; but every condition a type puts on an entry is a membership,
+so an entry that only grows carries all of them (\texttt{EnvOK\_obs\_grow}).
+With that, \textsc{T-ReadS} and \textsc{T-Root} are one application each.
+
+The reader's read is the ninth, and it is the one that is not a triple.  The
+reader's types are read on a smaller condition than the writer's --- no paths,
+no cells, which is \texttt{REnvOK} --- and that condition survives the read for
+the same reason the binding rules work: the stack write is at the rebound
+variable's slot and the observation write only grows the entry at the node
+reached, so nothing has to be assumed about aliasing between the environment and
+the node read.  What remains a hypothesis is the edge itself, for the
+fractional-heap reason in \S\ref{sec:inv-readside}.
+
 \paragraph{Chaining the rules, and what that found.}
 Each typed rule was proved in isolation, and nothing had yet forced one rule's
 postcondition to \emph{be} the next one's precondition.  Interface mismatches
@@ -2342,8 +2374,14 @@ in passing.
 \emph{Axiom soundness proper.}  Every action preserves \textsf{WellFormed}, and
 that is fifteen theorems and now an induction over runs.  Axiom soundness asks
 for more: that the post-state satisfies the denotation of the post-type
-environment.  Six of the fifteen have it.  This is the real remaining debt and
-we would rather name it than let the invariant work stand in for it.
+environment.  Nine of the fifteen have it --- the whole write side, the binding
+rules, \textsc{T-Free} and the reader's read.  Eight of those nine are Hoare
+triples; the ninth is the read, which is the step and the environment with the
+edge as a hypothesis, for the reason above.  The six that remain are the
+protocol actions: \textsc{ReadBegin}, \textsc{ReadEnd}, \textsc{SyncStart},
+\textsc{SyncStop}, \textsc{WriteBegin} and \textsc{WriteEnd}.  This is the real
+remaining debt and we would rather name it than let the invariant work stand in
+for it.
 
 The read-side denotation is mechanized --- \texttt{D\_rcuItrR}, transcribed from
 the figure --- together with the reader's acquisition

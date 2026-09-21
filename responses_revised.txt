@@ -17,7 +17,7 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
 19,900 lines and 1,033 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 265
+succeed if the development contains an admitted proof, or if any of its 273
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -633,6 +633,33 @@ new machinery is the substance of the claim: what varies between the rules is
 which of the three touched-variable forms occur and how many times, and what
 does not vary is anything about RCU.
 
+Three more rules are stated that way now, and two of them needed framing lemmas
+the five mutations did not.  T-Free is the only action that makes the thread
+*give resources up* rather than write them, so it is the only place the cell map
+has to come apart -- into the reclaimed node's cells, which the step consumes,
+and the rest, which comes back with the environment.  That also makes the path
+condition the harder direction of the two: a write outside a path cannot change
+the fold, but a deletion outside it might make the fold fail rather than return
+something else, so the invariance is a separate lemma.  Its post-environment
+drops the freed variable rather than retyping it to undef -- not an evasion,
+because undef's denotation asks for a fact about a node the thread no longer
+references, so its honest resource reading is no resource at all, and what undef
+means is the pure lemma, where it belongs.
+
+The binding rules needed the mirror image.  The framing lemma we had frames an
+observation write at a node the environment does not read, and a bind writes at
+the node it does; but every condition a type puts on an entry is a membership,
+so an entry that only grows carries all of them.  With that, T-ReadS and T-Root
+are one application each.
+
+The reader's read is the ninth, and it is the one that is not a triple.  The
+reader's types are read on a smaller condition than the writer's -- no paths, no
+cells -- and that condition survives the read for the same reason the binding
+rules work: the stack write is at the rebound variable's slot and the
+observation write only grows the entry at the node reached, so nothing has to be
+assumed about aliasing between the environment and the node read.  What remains
+a hypothesis is the edge itself, for the fractional-heap reason above.
+
 Each typed rule was proved in isolation, and nothing had forced one rule's
 postcondition to *be* the next one's precondition -- which is the class of
 defect that only appears under composition.  So we ran the write side of the
@@ -815,8 +842,13 @@ we name it rather than do it in passing.
 
 Axiom soundness proper.  Every action preserves WellFormed -- fifteen theorems,
 and now an induction over runs.  Axiom soundness asks for more: that the
-post-state satisfies the denotation of the post-type environment.  Six of the
-fifteen have it.  This is the real remaining debt.
+post-state satisfies the denotation of the post-type environment.  Nine of the
+fifteen have it now -- the whole write side, the binding rules, Free, and the
+reader's read.  Eight of those nine are Hoare triples; the ninth is the reader's
+read, which is the step and the environment with the edge as a hypothesis, for
+the fractional-heap reason above.  The six that remain are the protocol actions:
+ReadBegin, ReadEnd, SyncStart, SyncStop, WriteBegin, WriteEnd.  This is the real
+remaining debt, and it is now a list of six rather than a gap.
 
 
 

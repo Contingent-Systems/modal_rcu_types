@@ -28,16 +28,30 @@ is uneven rather than simply incomplete:
 
 So the work splits three ways, cheapest first.
 
-**R1a — bind, free, reader_acquire (3 rules).**  The pure half exists
-(`bind_post_env`, `free_post_env`, `reader_post_env`); only the typed rule is
-missing, and the pattern is `alloc_typed`'s: open the invariant, apply the
-atomic triple, frame the untouched environment with `EnvOK_cell` / `EnvOK_obs` /
-`EnvOK_stack`, supply the touched variable with `TyOK_demoted` /
-`TyOK_freeable` / `TyOK_promoted`.  `bind_atomic` and `free_atomic` already
-exist as closed triples; `reader_acquire` has `reader_env` for the reader side.
-*Effort* 2 days each.  *Risk* low — this is the established pattern.
-*Acceptance* `bind_typed`, `free_typed`, `read_typed`, each with `EnvOK` on both
-sides.
+**R1a — bind, free, reader_acquire (3 rules).  Done.**  `free_typed`,
+`bind_typed` and `read_typed` all have an environment on both sides.
+
+Two framing lemmas were missing and are new.  `EnvOK_free` is reclamation's: it
+is the only action that makes the thread *give cells up*, so it is the only
+place the cell map comes apart (`cells_split`, `cells_list`), and the fold that
+reads a path has to survive deletion rather than overwriting
+(`hstarC_stable_free`, the mirror of `hstarC_stable_cell` and the harder
+direction, since a missing cell makes the fold fail rather than return
+something else).  `AvoidsNode` is the environment condition it needs.
+`EnvOK_obs_grow` is the binding rules': `EnvOK_obs` frames a write at a node the
+environment does *not* read, and a bind writes at the node it does — but every
+condition a type puts on an entry is a membership, so growth is free.
+`EnvOK_scope` carries the rebound variable out of scope.
+
+`free_atomic` was generalised from a singleton observation to any entry holding
+\frbl{}, which is what the environment actually supplies.
+
+`read_typed` is **not** a Hoare triple, for the reason recorded at R4: the edge
+is a hypothesis because a reader cannot learn a cell's contents while the
+points-to assertion is exclusive.  Everything else — the bounding obligation,
+the observation grant, the environment on both sides — is discharged.  The
+reader's environment condition is `REnvOK`, the hypothesis `reader_env` already
+took, now named and carried across the read by `REnvOK_read`.
 
 **R1b — read_begin, read_end (2 rules).**  Both have closed triples already
 (`read_begin_atomic`, `read_end_atomic`) and neither touches the heap, so the
