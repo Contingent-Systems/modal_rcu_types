@@ -205,6 +205,31 @@ simulation may need rethinking once (2) is attempted.  *Mitigation* do (4)
 first, as a rehearsal: if the epoch model does not slot in, the interface in (1)
 is wrong and you have lost days rather than weeks.
 
+**Status: the rehearsal is done and the interface survived it.**  `rocq/Refine.v`
+has the `Impl` record, the relation `ISim` (which is `Epochs.v`'s `Sim` with the
+epoch state made abstract), and the obligation `Refines` as five clauses — one
+per protocol action, plus one saying the implementation's grace-period guard
+decides the model's.  `EpochImpl` is the first instance and `epochs_refine`
+assembles it from the five theorems `Epochs.v` already had, for a different
+purpose.  It slotted in unchanged, which is the signal the mitigation was
+looking for.
+
+Two things were added beyond the four tasks.  `refines_run` lifts the obligation
+from one step to a run (`rtc` of the paired step), which is what a claim about a
+client actually needs.  And `eager_is_not_a_refinement` shows the fifth clause
+is load-bearing rather than decorative: the epoch model with its guard replaced
+by "always" satisfies all four *step* clauses — they are literally the same
+theorems — and fails only the guard, because the model's SyncStop does not
+itself check anything; the checking is in when it is allowed to run.  So the
+obligation is not four equations with a condition attached for tidiness: the
+condition is the safety property.
+
+**What is left of A1** is task 3 and the bridge.  `pstep` relates an
+implementation state to the published model's `m` and `F`; what it does not yet
+touch is the observation map, so the run-level result does not yet compose with
+`lstep` and therefore does not yet transfer memory safety.  That composition,
+and the reclamation clause (task 3) it needs, is the remaining research.
+
 ### A2. Hazard pointers
 
 **The cheapest way to find out how RCU-specific this is.**  `Oiter t` —

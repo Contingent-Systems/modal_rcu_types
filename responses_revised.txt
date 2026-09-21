@@ -17,7 +17,7 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
 19,900 lines and 1,033 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 282
+succeed if the development contains an admitted proof, or if any of its 287
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -844,6 +844,36 @@ same way and is not the obstacle there: it also takes an iterator observation on
 every reachable node, which is a bulk update needing the reachable set
 enumerated, so we record that rather than state a lemma that would claim more
 than it proves.
+
+One more thing is new since the last draft, and it is about scope rather than
+about a defect.  Everything above is about one abstract model.  A client
+compiled against a real RCU is safe only if that RCU refines the model, and
+refinement proved once over an interface is one theorem where refinement argued
+per implementation is one argument per implementation forever.  We now have that
+interface: an implementation is a state space with the four protocol actions on
+it and three observations -- who is reading, who is bounding, what the free list
+says -- and the obligation is five clauses, one per action plus one saying the
+implementation's grace-period guard decides the model's.
+
+We read the interface off a proof rather than inventing it.  The counter model
+we had already built to settle the equivalence you will find asserted in our
+related work came with a relation and one theorem per action; the interface is
+that relation with the state made abstract, and the first instance is assembled
+from those theorems unchanged.  That the old proof slots into the new interface
+without adjustment is the evidence that the interface is the right shape.
+
+The fifth clause is the one with content.  An implementation can satisfy all
+four step clauses and still be unsafe, because the model's SyncStop does not
+itself check anything -- the checking is in when it is allowed to run.  We give
+the witness: the counter model with its guard replaced by "always" satisfies the
+four step clauses, they being literally the same theorems, and fails only the
+guard.  The condition is the safety property, not tidiness.
+
+What this does not yet do is transfer memory safety: the paired step relates an
+implementation to the machine state and the free list, not yet to the
+observation map, so it does not yet compose with the step relation and the
+safety theorem above.  That composition is the remaining research and we would
+rather say so.
 
 What is left is three things, and we would rather name them than let the
 invariant work stand in for them.  The third has changed shape since the last

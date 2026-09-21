@@ -94,7 +94,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 282 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 287 say \emph{closed under the
 global context}, and none reports an axiom.
 
 That target had the bug it exists to catch, and we report it because the
@@ -2384,6 +2384,42 @@ finds the bounding set empty.
 
 \emph{Read-to-write upgrade.}  Not provided, as \S\ref{sec:relatedwork} says: a
 performance optimisation, orthogonal to memory safety.
+
+\paragraph{From one model to any implementation.}
+Everything above is about \emph{one} abstract model.  A client compiled against
+a real RCU is safe only if that RCU refines the model, and refinement proved
+once over an interface is one theorem, where refinement argued per
+implementation is one argument per implementation forever.
+\texttt{rocq/Refine.v} is that interface: an implementation is a state space
+with the four protocol actions on it and three observations --- who is reading,
+who is bounding, what the free list says --- and the obligation
+\texttt{Refines} is five clauses, one per action plus one saying the
+implementation's grace-period guard decides the model's.
+
+The interface was read off a proof rather than invented.  \texttt{Epochs.v}
+already contained a second model of the same protocol, together with a relation
+and one theorem per action across it; \texttt{ISim} is that relation with the
+epoch state made abstract, and \texttt{epochs\_refine} assembles the first
+instance from the five theorems that file already had, unchanged.  That the old
+proof slots into the new interface without adjustment is the evidence that the
+interface is the right shape rather than a shape.
+
+The fifth clause is the one with content, and it is worth saying why.  Four of
+the five are about single steps agreeing, and an implementation that got one
+wrong would be wrong obviously.  An implementation can satisfy all four and
+still be unsafe, because the model's \textsc{SyncStop} does not itself check
+anything --- the checking is in when it is allowed to run.
+\texttt{eager\_is\_not\_a\_refinement} is the epoch model with its guard
+replaced by ``always'': it satisfies the four step clauses, they being literally
+the same theorems, and fails only the guard.  The condition is the safety
+property, not a tidiness clause attached to four equations.
+
+What this does not yet do is transfer memory safety.  The paired step relates an
+implementation to the published model's machine state and free list; it does not
+yet touch the observation map, so it does not yet compose with the step relation
+of \S\ref{sec:inv-mech} and the safety theorem stated there.  That composition
+is the remaining research, and we would rather say so than let the interface
+stand in for it.
 
 \paragraph{What is left, and it is three things.}
 The third of them has changed shape since the last draft, and is now a list of
