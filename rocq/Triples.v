@@ -5968,8 +5968,370 @@ Proof.
   - exact Hty.
 Qed.
 
+(** The free list is read by exactly one type, \frbl{}, and only ever to find
+    an entry; so a free list that keeps the entries it had carries every
+    environment that the old one did.  That is the whole of \textsc{SyncStart}'s
+    effect on the environment: it adds stamps, and adding a stamp at a node no
+    variable is \frbl{} at changes nothing. *)
+Lemma EnvOK_fl root t U Qc FType fs Sm Ob C Fl Fl' G :
+  (forall o e, Fl !! o = Some e -> Fl' !! o = Some e) ->
+  EnvOK root t U Qc FType fs Sm Ob C Fl G ->
+  EnvOK root t U Qc FType fs Sm Ob C Fl' G.
+Proof.
+  intros Hsub Hok y ty Hin. pose proof (Hok y ty Hin) as Hty.
+  destruct ty; simpl in Hty |- *; try exact Hty.
+  destruct Hty as [Hdet Hfle]. split; [exact Hdet |].
+  intros o Hstk. destruct (Hfle o Hstk) as [e [He HQ]].
+  exists e. split; [exact (Hsub o e He) | exact HQ].
+Qed.
+
+(** \textsc{SyncStop} recolours every \unlk{} observation of the writer's to
+    \frbl{}, so the environment changes too: the variables typed \unlk{} become
+    \frbl{}, and the rest are unchanged.  [syncenv] is that retyping. *)
+Definition syncty (ty : Ty) : Ty :=
+  match ty with TUnlinked => TFreeable | _ => ty end.
+
+Definition syncenv (G : Env) : Env := map (fun p => (fst p, syncty (snd p))) G.
+
+Lemma syncenv_In x ty' G :
+  In (x, ty') (syncenv G) -> exists ty, In (x, ty) G /\ ty' = syncty ty.
+Proof.
+  intros Hin. apply in_map_iff in Hin as [[z ty] [Heq Hin]].
+  injection Heq as <- <-. by exists ty.
+Qed.
+
+(** And the environment survives it.  Every type but \unlk{} asks for an
+    observation [sync_obs] fixes, so those transfer unchanged; \unlk{} asks for
+    one it moves, which is the retyping.  What the retyped variables need in
+    addition is the free-list entry \frbl{} carries, and that is
+    \textsc{SyncStop}'s own certificate rather than anything the environment
+    had -- which is why it is a hypothesis here and discharged by
+    [wm\_lb\_entry\_empty] where the certificate lives. *)
+Lemma EnvOK_syncstop root t U Qc FType fs Sm Ob C Fl G :
+  (forall x o, In (x, TUnlinked) G -> Sm !! (x, t) = Some o ->
+     exists e, Fl !! o = Some e /\ Qc e) ->
+  EnvOK root t U Qc FType fs Sm Ob C Fl G ->
+  EnvOK root t U Qc FType fs Sm
+    ((fun sg => set_map sync_obs sg : gset obs) <$> Ob) C Fl (syncenv G).
+Proof.
+  intros Hcert Hok y ty' Hin'.
+  destruct (syncenv_In y ty' G Hin') as [ty [Hin ->]].
+  pose proof (Hok y ty Hin) as Hty.
+  assert (Hmv : forall q sq ob, Ob !! q = Some sq -> ob ∈ sq ->
+            ((fun s0 => set_map sync_obs s0 : gset obs) <$> Ob) !! q
+              = Some (set_map sync_obs sq : gset obs)
+            /\ sync_obs ob ∈ (set_map sync_obs sq : gset obs)).
+  { intros q sq ob Hq Hob. split.
+    - by rewrite lookup_fmap Hq.
+    - by apply (elem_of_map_2 sync_obs). }
+  destruct ty; simpl in Hty |- *.
+  - destruct Hty as (o & sg & Hstk & Hob & Hit & Hundf & Hf & Hpath & Hpre).
+    destruct (Hmv o sg (Oiter t) Hob Hit) as [Hob' Hit'].
+    exists o, (set_map sync_obs sg : gset obs). repeat apply conj;
+      [exact Hstk | exact Hob' | exact Hit' | exact Hundf | | exact Hpath |].
+    + intros f w Hw. specialize (Hf f w Hw). destruct w as [z | ]; [| exact Hf].
+      destruct Hf as (oy & sy & Hsy & Hcy & Hoy & Hity).
+      destruct (Hmv oy sy (Oiter t) Hoy Hity) as [Hoy' Hity'].
+      by exists oy, (set_map sync_obs sy : gset obs).
+    + intros rho1 rho2 Happ. destruct (Hpre rho1 rho2 Happ)
+        as (o' & sg' & Hp' & Hob2 & Hit2).
+      destruct (Hmv o' sg' (Oiter t) Hob2 Hit2) as [Hob3 Hit3].
+      by exists o', (set_map sync_obs sg' : gset obs).
+  - destruct Hty as (o & sg & Hstk & Hob & Hfr & Hundf & Hf & Hnull).
+    destruct (Hmv o sg (Ofresh t) Hob Hfr) as [Hob' Hfr'].
+    exists o, (set_map sync_obs sg : gset obs). repeat apply conj;
+      [exact Hstk | exact Hob' | exact Hfr' | exact Hundf | | exact Hnull].
+    intros f w Hw. specialize (Hf f w Hw). destruct w as [z | ]; [| exact Hf].
+    destruct Hf as (oy & sy & Hsy & Hcy & Hoy & Hity).
+    destruct (Hmv oy sy (Oiter t) Hoy Hity) as [Hoy' Hity'].
+    by exists oy, (set_map sync_obs sy : gset obs).
+  - (* the retyped case: \unlk{} becomes \frbl{} *)
+    destruct Hty as (o & sg & Hstk & Hob & Hin0 & Hundf).
+    destruct (Hmv o sg (Ounlk t) Hob Hin0) as [Hob' Hin1]. simpl in Hin1.
+    split; [by exists o, (set_map sync_obs sg : gset obs) |].
+    intros o' Hstk'. rewrite Hstk in Hstk'. injection Hstk' as <-.
+    exact (Hcert y o Hin Hstk).
+  - destruct Hty as [(o & sg & Hstk & Hob & Hin0 & Hundf) Hfle].
+    destruct (Hmv o sg (Ofree t) Hob Hin0) as [Hob' Hin1].
+    split; [by exists o, (set_map sync_obs sg : gset obs) | exact Hfle].
+  - exact Hty.
+  - exact Hty.
+Qed.
+
 Print Assumptions EnvOK_obs_grow.
 Print Assumptions EnvOK_scope.
+Print Assumptions EnvOK_fl.
+Print Assumptions EnvOK_syncstop.
+
+(** ** The two grace-period rules, with the environment
+
+    Neither of these is a Hoare triple, and for once the reason is the same for
+    both and is not a gap in the reading: they are the two bulk updates, and a
+    bulk update needs its set enumerated.  \textsc{SyncStart} stamps every
+    detached node and \textsc{SyncStop} recolours every observation of the
+    writer's, and in each case "every" is a premise no resource carries --- the
+    thread would have to hold the whole column of the observation map, or the
+    whole free list, to know it had them all.  What is stated here is therefore
+    the step plus the environment, with the enumeration explicit, which is what
+    \texttt{sync\_start\_update} and \texttt{sync\_stop\_update} already did for
+    the invariant alone.
+
+    The environment halves are small and go in opposite directions.
+    \textsc{SyncStart} does not touch an observation at all, so the environment
+    is unchanged and what has to be shown is only that a free list which keeps
+    the entries it had carries it --- [EnvOK\_fl], and the free list is read by
+    exactly one type.  \textsc{SyncStop} does not touch the free list, so the
+    environment changes: every variable typed \unlk{} becomes \frbl{}, which is
+    [syncenv], and every other type asks for an observation the recolouring
+    fixes.  The certificate the retyped variables need is the grace period's
+    own, not the environment's, which is why it is a hypothesis of
+    [EnvOK\_syncstop] and discharged by the watermark where the certificate
+    lives. *)
+
+Section typed_sync.
+  Context `{!rcuG Σ, !heapG Σ, !stackG Σ, !lockG Σ, !invGS_gen hlc Σ}.
+  Context (FType : FName -> FieldKind).
+  Context (phys : MState -> iProp Σ).
+
+  Lemma sync_start_typed γo γf g Rg m Og U T St root fs Qc
+        lw Sm Ob C Fl G (l : list (Loc * nat)) :
+    WellFormed FType (to_LState_t m Og U T (e_F (mkE g Rg St))) ->
+    FLD (to_LState_t m Og U T (e_F (mkE g Rg St))) ->
+    EWF (mkE g Rg St) ->
+    RepresentsR (rds m) Rg ->
+    NoDup l.*1 ->
+    (forall p, p ∈ l -> p.2 = g) ->
+    (forall o t, (obsv (to_LState_t m Og U T (e_F (mkE g Rg St))) o (Ounlk t)
+                  \/ obsv (to_LState_t m Og U T (e_F (mkE g Rg St))) o (Ofree t))
+                 -> (o, g) ∈ l) ->
+    (forall p, p ∈ l -> exists t,
+        obsv (to_LState_t m Og U T (e_F (mkE g Rg St))) p.1 (Ounlk t)
+        \/ obsv (to_LState_t m Og U T (e_F (mkE g Rg St))) p.1 (Ofree t)) ->
+    (* the thread's own free-list entries are among the invariant's *)
+    (forall o e, Fl !! o = Some e -> St !! o = Some e) ->
+    (* and the enumeration does not restamp one it already holds *)
+    (forall o e, Fl !! o = Some e -> o ∉ l.*1) ->
+    EnvOK root lw U Qc FType fs Sm Ob C Fl G ->
+    ([∗ list] p ∈ l, (∃ s, fl_ctl γf p.1 s) ∨ ⌜St !! p.1 = None⌝) -∗
+    phys m -∗ tobs_auth γo Og -∗ fl_auth γf St -∗
+    (phys m ==∗ phys (sync_start_ms m)) -∗
+    |==> phys (sync_start_ms m)
+         ∗ tobs_auth γo Og
+         ∗ fl_auth γf (ins_list St l)
+         ∗ ([∗ list] p ∈ l, fl_ctl γf p.1 p.2)
+         ∗ ⌜WellFormed FType
+              (to_LState_t (sync_start_ms m) Og U T
+                 (e_F (mkE (S g) Rg (ins_list St l))))⌝
+         ∗ ⌜EnvOK root lw U Qc FType fs Sm Ob C (ins_list St l) G⌝.
+  Proof.
+    iIntros (Hwf HFLD HEWF HRR Hnd Hg Hcov Hdet Hsub Hfresh Hok)
+            "Hfrags Hp Ho Hf Hstep".
+    iMod (sync_start_update FType phys γo γf g Rg m Og U T St l
+            Hwf HFLD HEWF HRR Hnd Hg Hcov Hdet with "Hfrags Hp Ho Hf Hstep")
+      as "(Hp & Ho & Hf & Hfrags & %Hwf')".
+    iModIntro. iFrame. iPureIntro. split; [exact Hwf' |].
+    apply (EnvOK_fl root lw U Qc FType fs Sm Ob C Fl); [| exact Hok].
+    intros o e He. rewrite ins_list_notin; [exact (Hsub o e He) |].
+    exact (Hfresh o e He).
+  Qed.
+
+  (** \textsc{SyncStop}.  The observation half is the bulk recolouring, and the
+      enumeration premise is stated as what it is: the writer holds every entry
+      of its own column.  That is the honest form -- it is a fact about the
+      thread's map rather than about the shared one, and it is exactly what a
+      writer that has been tracking its own observations since
+      \textsc{WriteBegin} has. *)
+  Lemma sync_stop_typed γo γf m Og U T F St root fs Qc lw Sm Ob C Fl G :
+    WellFormed FType (to_LState_t m Og U T F) ->
+    ObsWF Og ->
+    lk m = Some lw ->
+    (forall t, ~ bnd m t) ->
+    (* the writer holds every entry of its own column: the enumeration premise *)
+    (forall o sg, Og !! (o, lw) = Some sg -> Ob !! o = Some sg) ->
+    (forall o sg, Ob !! o = Some sg -> Og !! (o, lw) = Some sg) ->
+    (* the certificate the retyped variables need *)
+    (forall x o, In (x, TUnlinked) G -> Sm !! (x, lw) = Some o ->
+       exists e, Fl !! o = Some e /\ Qc e) ->
+    EnvOK root lw U Qc FType fs Sm Ob C Fl G ->
+    obs_own γo lw Ob -∗
+    phys m -∗ tobs_auth γo Og -∗ fl_auth γf St -∗
+    (phys m ==∗ phys (sync_stop_ms m)) -∗
+    |==> ∃ Og', phys (sync_stop_ms m)
+         ∗ tobs_auth γo Og'
+         ∗ fl_auth γf St
+         ∗ obs_own γo lw ((fun sg => set_map sync_obs sg : gset obs) <$> Ob)
+         ∗ ⌜ObsWF Og'⌝
+         ∗ ⌜WellFormed FType (to_LState_t (sync_stop_ms m) Og' U T F)⌝
+         ∗ ⌜EnvOK root lw U Qc FType fs Sm
+              ((fun sg => set_map sync_obs sg : gset obs) <$> Ob) C Fl
+              (syncenv G)⌝.
+  Proof.
+    iIntros (Hwf Hobs Hlk Hquiet Hcover Hagree Hcert Hok) "Hob Hp Ho Hf Hstep".
+    set (l := (fun p => ((p.1, lw), (set_map sync_obs p.2 : gset obs)))
+                <$> map_to_list Ob).
+    assert (Hkeys : l.*1 = (fun o => (o, lw)) <$> (map_to_list Ob).*1).
+    { subst l. rewrite -!list_fmap_compose. by apply list_fmap_ext. }
+    assert (Hnd : NoDup l.*1).
+    { rewrite Hkeys. apply NoDup_fmap_2;
+        [intros a b Hab; by injection Hab | apply NoDup_fst_map_to_list]. }
+    assert (Hval : forall p, p ∈ l -> exists sg,
+              Og !! p.1 = Some sg /\ p.1.2 = lw
+              /\ p.2 = (set_map sync_obs sg : gset obs)).
+    { intros p Hp. subst l. apply list_elem_of_fmap_1 in Hp as [q [-> Hq]].
+      destruct q as [o sg]. apply elem_of_map_to_list in Hq. exists sg.
+      repeat apply conj; [exact (Hagree o sg Hq) | reflexivity
+                         | reflexivity]. }
+    assert (Hall : forall o sg, Og !! (o, lw) = Some sg ->
+              ((o, lw), (set_map sync_obs sg : gset obs)) ∈ l).
+    { intros o sg Ho. subst l.
+      apply (list_elem_of_fmap_2
+               (fun p : Loc * gset obs =>
+                  ((p.1, lw), (set_map sync_obs p.2 : gset obs)))
+               (map_to_list Ob) (o, sg)).
+      apply elem_of_map_to_list. exact (Hcover o sg Ho). }
+    iMod (sync_stop_update FType phys γo γf m Og U T F St lw l
+            Hwf Hobs Hlk Hquiet Hnd Hval Hall with "[Hob] Hp Ho Hf Hstep")
+      as "(Hp & Ho & Hf & Hfrags & %HWF' & %Hwf')".
+    { subst l. rewrite big_sepL_fmap /obs_own big_opM_map_to_list.
+      iApply (big_sepL_mono with "Hob"). intros k q _. simpl.
+      iIntros "H". iLeft. by iExists q.2. }
+    iModIntro. iExists (ins_list Og l). iFrame "Hp Ho Hf".
+    iSplitL "Hfrags".
+    { rewrite /obs_own big_sepM_fmap big_opM_map_to_list.
+      subst l. rewrite big_sepL_fmap.
+      by iApply (big_sepL_mono with "Hfrags"). }
+    iPureIntro. split; [exact HWF' |]. split; [exact Hwf' |].
+    exact (EnvOK_syncstop root lw U Qc FType fs Sm Ob C Fl G Hcert Hok).
+  Qed.
+
+End typed_sync.
+
+Print Assumptions sync_start_typed.
+Print Assumptions sync_stop_typed.
+
+(** ** The write critical section's boundaries, with the environment
+
+    \textsc{WriteBegin} and \textsc{WriteEnd} are the last two, and they are the
+    pair the plan said to leave until last because the first of them is the
+    system's largest ghost step: the writer takes an \itr{} observation on
+    \emph{every reachable node}, which \textbf{UNQRT-b} is the reason for.  That
+    is a bulk update, so it carries an enumeration premise, and no resource the
+    thread holds can discharge it --- which is the same wall \textsc{SyncStart}
+    and \textsc{SyncStop} hit and is why these four are the four that remain
+    without triples.  We state them with the enumeration explicit rather than
+    dress it up.
+
+    The environment halves are, unexpectedly, the two smallest in the file, and
+    one of them is small because of the root observation.  Entering, the only
+    type the writer starts with is \rt{}, and [RootOK] is now a stack binding
+    and nothing else --- so \textsc{WriteBegin}'s post-environment costs one
+    lookup.  Under the old encoding it would have needed the entry at the root
+    to hold [Oroot], which is precisely the entry the bulk update is
+    overwriting.  Leaving, the post-environment is empty for the same reason
+    \textsc{ReadEnd}'s is: ToRCUWrite scopes the writer's variables to the
+    block, and the writer keeps no entry, which is now a statement about
+    resources because \textsc{WriteEnd} deletes rather than blanks. *)
+
+Section typed_writesection.
+  Context `{!rcuG Σ, !heapG Σ, !stackG Σ, !lockG Σ, !invGS_gen hlc Σ}.
+  Context (FType : FName -> FieldKind).
+  Context (phys : MState -> iProp Σ).
+
+  Lemma write_begin_typed γo γf m Og U T F St root fs Qc lw x Sm C Fl
+        (l : list ((Loc * TID) * gset obs)) :
+    WellFormed FType (to_LState_t m Og U T F) ->
+    ObsWF Og ->
+    lk m = None ->
+    ~ rds m lw ->
+    (forall o, ~ Detached (to_LState_t m Og U T F) o) ->
+    (forall q o, Reaches (to_LState_t m Og U T F) q o ->
+        flist (to_LState_t m Og U T F) o = None) ->
+    NoDup l.*1 ->
+    (forall p, p ∈ l -> p.1.2 = lw) ->
+    (forall p, p ∈ l ->
+        exists q, Reaches (to_LState_t m Og U T F) q p.1.1) ->
+    (forall q o, Reaches (to_LState_t m Og U T F) q o ->
+        exists v, ((o, lw), v) ∈ l) ->
+    (forall p, p ∈ l -> Oiter lw ∈ p.2) ->
+    (forall p ob, p ∈ l ->
+        (exists sg, Og !! p.1 = Some sg /\ ob ∈ sg) -> ob ∈ p.2) ->
+    (forall p ob, p ∈ l -> ob ∈ p.2 ->
+        ob = Oiter lw \/ (exists sg, Og !! p.1 = Some sg /\ ob ∈ sg)) ->
+    (* the writer's one starting type: the root, which is a binding and, since
+       the root observation became a property of the structure, nothing else *)
+    Sm !! (x, lw) = Some root ->
+    ([∗ list] p ∈ l, (∃ s, tobs_ctl γo p.1.1 p.1.2 s) ∨ ⌜Og !! p.1 = None⌝) -∗
+    phys m -∗ tobs_auth γo Og -∗ fl_auth γf St -∗
+    (phys m ==∗ phys (write_begin_ms m lw)) -∗
+    |==> phys (write_begin_ms m lw)
+         ∗ tobs_auth γo (ins_list Og l)
+         ∗ fl_auth γf St
+         ∗ ([∗ list] p ∈ l, tobs_ctl γo p.1.1 p.1.2 p.2)
+         ∗ ⌜ObsWF (ins_list Og l)⌝
+         ∗ ⌜WellFormed FType
+              (to_LState_t (write_begin_ms m lw) (ins_list Og l) U T F)⌝
+         ∗ ⌜forall Ob, EnvOK root lw U Qc FType fs Sm Ob C Fl [(x, TRoot)]⌝.
+  Proof.
+    iIntros (Hwf Hobs Hlk Hnrd Hclean Hrfl Hnd Hkey Hreach Hcovers Hiter
+             Hgrow Hcontent Hroot) "Hfrags Hp Ho Hf Hstep".
+    iMod (write_begin_update FType phys γo γf m Og U T F St lw l
+            Hwf Hobs Hlk Hnrd Hclean Hrfl Hnd Hkey Hreach Hcovers Hiter
+            Hgrow Hcontent with "Hfrags Hp Ho Hf Hstep")
+      as "(Hp & Ho & Hf & Hfrags & %HWF' & %Hwf')".
+    iModIntro. iFrame. iPureIntro. split; [exact HWF' |]. split; [exact Hwf' |].
+    intros Ob z ty Hin. destruct Hin as [Heq | []].
+    injection Heq as <- <-. exact Hroot.
+  Qed.
+
+  (** \textsc{WriteEnd}.  The writer hands in every entry of its own column and
+      keeps nothing, which is the same shape [read_end_typed] has and for the
+      same reason. *)
+  Lemma write_end_typed γo γf m Og U T F St root fs Qc lw Sm Ob C Fl G :
+    WellFormed FType (to_LState_t m Og U T F) ->
+    ObsWF Og ->
+    lk m = Some lw ->
+    (forall o, ~ Detached (to_LState_t m Og U T F) o) ->
+    (* the writer holds every entry of its own column: the enumeration premise *)
+    (forall o sg, Og !! (o, lw) = Some sg -> Ob !! o = Some sg) ->
+    EnvOK root lw U Qc FType fs Sm Ob C Fl G ->
+    obs_own γo lw Ob -∗
+    phys m -∗ tobs_auth γo Og -∗ fl_auth γf St -∗
+    (phys m ==∗ phys (write_end_ms m)) -∗
+    |==> ∃ Og', phys (write_end_ms m)
+         ∗ tobs_auth γo Og'
+         ∗ fl_auth γf St
+         ∗ ⌜ObsWF Og'⌝
+         ∗ ⌜WellFormed FType
+              (to_LState_t (write_end_ms m) Og'
+                 (fun z t' => U z t' \/ t' = lw) T F)⌝
+         ∗ ⌜EnvOK root lw (fun z t' => U z t' \/ t' = lw) Qc FType fs Sm ∅ C Fl
+              []⌝.
+  Proof.
+    iIntros (Hwf Hobs Hlk Hclean Hcover Hok) "Hob Hp Ho Hf Hstep".
+    set (ks := (fun o => (o, lw)) <$> (map_to_list Ob).*1).
+    assert (Hkey : forall k, k ∈ ks -> k.2 = lw).
+    { intros k Hk. subst ks. by apply list_elem_of_fmap_1 in Hk as [o [-> _]]. }
+    assert (Hcov : forall o sg, Og !! (o, lw) = Some sg -> (o, lw) ∈ ks).
+    { intros o sg Ho. subst ks.
+      apply (list_elem_of_fmap_2 (fun q => (q, lw)) (map_to_list Ob).*1 o).
+      apply (list_elem_of_fmap_2 fst (map_to_list Ob) (o, sg)).
+      apply elem_of_map_to_list. exact (Hcover o sg Ho). }
+    iMod (write_end_update FType phys γo γf m Og U T F St lw ks
+            Hwf Hobs Hlk Hclean Hkey Hcov with "[Hob] Hp Ho Hf Hstep")
+      as "(Hp & Ho & Hf & %HWF' & %Hwf')".
+    { subst ks. rewrite -list_fmap_compose big_sepL_fmap.
+      rewrite /obs_own big_opM_map_to_list.
+      iApply (big_sepL_mono with "Hob"). intros k q _. simpl.
+      iIntros "H". by iExists q.2. }
+    iModIntro. iExists (del_list Og ks). iFrame.
+    iPureIntro. split; [exact HWF' |]. split; [exact Hwf' |].
+    by intros z ty [].
+  Qed.
+
+End typed_writesection.
+
+Print Assumptions write_begin_typed.
+Print Assumptions write_end_typed.
 
 Lemma EnvOK_obs root t U Qc FType fs Sm Ob C Fl G o sg' :
   ReadsObs root C Sm t G o ->

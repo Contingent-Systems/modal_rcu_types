@@ -17,7 +17,7 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
 19,900 lines and 1,033 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 276
+succeed if the development contains an admitted proof, or if any of its 282
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -660,6 +660,25 @@ observation write only grows the entry at the node reached, so nothing has to be
 assumed about aliasing between the environment and the node read.  What remains
 a hypothesis is the edge itself, for the fractional-heap reason above.
 
+The last six are the protocol, and their environments are the smallest in the
+development.  ReadBegin and ReadEnd have environments the block structure fixes
+rather than derives, so what is worth proving is that the two fit: entering, the
+reader gets a registration whose domain is the domain of its empty observation
+map, which is exactly the shape the read consumes; leaving, it hands back
+exactly the entries that domain names.  We also state the two composed, which
+makes re-entry a fact about resources rather than an argument.
+
+SyncStart touches no observation, so the environment is unchanged and all that
+is needed is that a free list keeping the entries it had carries it -- the free
+list is read by exactly one type.  SyncStop touches no free-list entry, so the
+environment changes instead: every variable typed unlinked becomes freeable, and
+every other type asks for an observation the recolouring fixes.  WriteBegin's
+half is one lookup, and it is one lookup because of the root observation: the
+only type the writer starts with is rcuRoot, which is now a stack binding and
+nothing else, where under the old encoding it would have asked for the entry at
+the root to hold the root observation -- precisely the entry WriteBegin's bulk
+update overwrites.  WriteEnd's is empty, for the same reason ReadEnd's is.
+
 Each typed rule was proved in isolation, and nothing had forced one rule's
 postcondition to *be* the next one's precondition -- which is the class of
 defect that only appears under composition.  So we ran the write side of the
@@ -827,7 +846,8 @@ enumerated, so we record that rather than state a lemma that would claim more
 than it proves.
 
 What is left is three things, and we would rather name them than let the
-invariant work stand in for them.
+invariant work stand in for them.  The third has changed shape since the last
+draft: it is now a list of premises rather than a list of rules.
 
 Fairness: that a reader inside a critical section eventually leaves it.  The
 wait's termination reduces to that and no further; it is a property of the
@@ -842,15 +862,26 @@ we name it rather than do it in passing.
 
 Axiom soundness proper.  Every action preserves WellFormed -- fifteen theorems,
 and now an induction over runs.  Axiom soundness asks for more: that the
-post-state satisfies the denotation of the post-type environment.  Eleven of the
-fifteen have it now -- the whole write side, the binding rules, Free, the
-reader's read, and the two block boundaries.  Ten of those eleven are Hoare
-triples; the eleventh is the reader's read, which is the step and the
-environment with the edge as a hypothesis, for the fractional-heap reason above.
-ReadBegin and ReadEnd also compose: a section's postcondition is its own
-precondition, so re-entry is a fact about resources rather than an argument.
-The four that remain are SyncStart, SyncStop, WriteBegin and WriteEnd.  This is
-the real remaining debt, and it is now a list of four rather than a gap.
+post-state satisfies the denotation of the post-type environment.  All fifteen
+now have it.  Ten of the fifteen are Hoare triples -- the whole write side, the
+binding rules, Free, and the two read-block boundaries.  The other five are the
+step plus the environment with a premise made explicit, and the premises are of
+exactly two kinds.
+
+The reader's read has one: the edge it follows, because a reader cannot learn a
+cell's contents while the points-to assertion is exclusive.  That is the
+fractional heap named above.
+
+The other four -- SyncStart, SyncStop, WriteBegin, WriteEnd -- have an
+enumeration premise, and it is the same premise four times: they are the bulk
+updates, and a bulk update needs its set enumerated.  "Every detached node is
+stamped", "every entry of the writer's is recoloured", "every reachable node is
+observed", "every entry is given up".  No resource a thread holds discharges
+those.  Where it can be stated as a fact about the thread's *own* map rather
+than the shared one we state it that way -- the writer holds its whole column --
+which is the honest form and is what a writer that has tracked its observations
+since WriteBegin actually has.  We would rather name that than dress it up: it
+is the shape of what is left, and it is narrower than "six rules are missing".
 
 
 

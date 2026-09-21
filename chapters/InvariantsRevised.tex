@@ -94,7 +94,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 276 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 282 say \emph{closed under the
 global context}, and none reports an axiom.
 
 That target had the bug it exists to catch, and we report it because the
@@ -1806,6 +1806,35 @@ reached, so nothing has to be assumed about aliasing between the environment and
 the node read.  What remains a hypothesis is the edge itself, for the
 fractional-heap reason in \S\ref{sec:inv-readside}.
 
+The last six are the protocol, and their environments are the smallest in the
+file.  \textsc{ReadBegin} and \textsc{ReadEnd} have environments ToRCURead
+fixes rather than derives --- the section starts with nothing and ends with
+nothing --- so what is worth proving is that the two \emph{fit}: entering, the
+reader gets a registration whose domain is the domain of its empty observation
+map, which is exactly the shape the read consumes; leaving, it hands back
+exactly the entries that domain names.  \texttt{read\_section\_typed} is the
+two composed, which makes re-entry a matter of resources rather than of
+argument.
+
+\textsc{SyncStart} touches no observation, so the environment is unchanged and
+all that is needed is that a free list keeping the entries it had carries it
+(\texttt{EnvOK\_fl}); the free list is read by exactly one type.
+\textsc{SyncStop} touches no free-list entry, so the environment changes
+instead: every variable typed \unlk{} becomes \frbl{} (\texttt{syncenv}), and
+every other type asks for an observation the recolouring fixes.  The certificate
+the retyped variables need is the grace period's own rather than the
+environment's, which is why it is a hypothesis of \texttt{EnvOK\_syncstop} and
+discharged where the watermark is.
+
+\textsc{WriteBegin}'s environment half is one lookup, and it is one lookup
+because of the root observation.  The only type the writer starts with is
+\rt{}, and \texttt{RootOK} is now a stack binding and nothing else; under the
+old encoding it would have asked for the entry at the root to hold \rt{}, which
+is precisely the entry \textsc{WriteBegin}'s bulk update overwrites.
+\textsc{WriteEnd}'s is empty, for the same reason \textsc{ReadEnd}'s is, and it
+is now a statement about resources rather than a convention because
+\textsc{WriteEnd} deletes its keys rather than blanking them.
+
 \paragraph{Chaining the rules, and what that found.}
 Each typed rule was proved in isolation, and nothing had yet forced one rule's
 postcondition to \emph{be} the next one's precondition.  Interface mismatches
@@ -2357,6 +2386,9 @@ finds the bounding set empty.
 performance optimisation, orthogonal to memory safety.
 
 \paragraph{What is left, and it is three things.}
+The third of them has changed shape since the last draft, and is now a list of
+premises rather than a list of rules.
+
 \emph{Fairness.}  That a reader inside a critical section eventually leaves it.
 The wait's termination reduces to it and no further --- it is a property of the
 client, and no invariant of the shared state could supply it.
@@ -2374,16 +2406,28 @@ in passing.
 \emph{Axiom soundness proper.}  Every action preserves \textsf{WellFormed}, and
 that is fifteen theorems and now an induction over runs.  Axiom soundness asks
 for more: that the post-state satisfies the denotation of the post-type
-environment.  Eleven of the fifteen have it --- the whole write side, the
-binding rules, \textsc{T-Free}, the reader's read, and the two block
-boundaries.  Ten of those eleven are Hoare triples; the eleventh is the read,
-which is the step and the environment with the edge as a hypothesis, for the
-reason above.  \textsc{ReadBegin} and \textsc{ReadEnd} also compose
-(\texttt{read\_section\_typed}): a section's postcondition is its own
-precondition, so re-entry is a fact about resources rather than an argument.
-The four that remain are \textsc{SyncStart}, \textsc{SyncStop},
-\textsc{WriteBegin} and \textsc{WriteEnd}.  This is the real remaining debt and
-we would rather name it than let the invariant work stand in for it.
+environment.  All fifteen now have it.  Ten of the fifteen are Hoare triples
+--- the whole write side, the binding rules, \textsc{T-Free}, and the two
+read-block boundaries, which also compose (\texttt{read\_section\_typed}), so
+re-entry is a fact about resources rather than an argument.  The other five are
+the step plus the environment with a premise made explicit, and the premises are
+of exactly two kinds.
+
+The reader's read has one: the edge it follows, because a reader cannot learn a
+cell's contents while the points-to assertion is exclusive.  That is the
+fractional heap named above.
+
+The other four --- \textsc{SyncStart}, \textsc{SyncStop}, \textsc{WriteBegin}
+and \textsc{WriteEnd} --- have an enumeration premise, and it is the same
+premise four times: they are the bulk updates, and a bulk update needs its set
+enumerated.  ``Every detached node is stamped'', ``every entry of the writer's
+is recoloured'', ``every reachable node is observed'', ``every entry is given
+up''.  No resource a thread holds discharges those.  Where it can be stated as a
+fact about the thread's \emph{own} map rather than the shared one we state it
+that way --- the writer holds its whole column --- which is the honest form and
+is what a writer that has tracked its observations since \textsc{WriteBegin}
+actually has.  That is what is left, and it is narrower than ``six rules are
+missing''.
 
 The read-side denotation is mechanized --- \texttt{D\_rcuItrR}, transcribed from
 the figure --- together with the reader's acquisition

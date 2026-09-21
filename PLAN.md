@@ -68,27 +68,40 @@ the two composed, and it makes re-entry a matter of resources rather than of
 argument: the postcondition of a section *is* its own precondition, which is
 `reentry_safe` in `Epochs.v` one level down.
 
-**R1c — sync_start, sync_stop (2 rules).**  These need the environment to
-survive a bulk observation change.  `TyOK_freeable` already gives SyncStop's
-touched case (unlinked becomes freeable) and `wm_lb_entry_empty` gives the
-certificate it needs.  SyncStart's difficulty is that its post-environment is
-unchanged but its free list is not, so what has to be shown is that no
-variable's type reads the free list except `freeable`, which none does yet at
-that point.  *Effort* 3 days each.  *Risk* medium — the bulk update is where the
-"these are all" premises live.
+**R1c — sync_start, sync_stop (2 rules).  Done.**  `sync_start_typed` and
+`sync_stop_typed`, with two framing lemmas.  The free list is read by exactly
+one type, so a free list that keeps the entries it had carries any environment
+the old one did (`EnvOK_fl`) — that is the whole of SyncStart's effect.
+SyncStop goes the other way: the free list is untouched and the environment
+changes, because every variable typed `unlinked` becomes `freeable`
+(`syncenv`, `EnvOK_syncstop`) while every other type asks for an observation
+`sync_obs` fixes.  The certificate the retyped variables need is the grace
+period's own, so it is a hypothesis of the framing lemma rather than something
+the environment carried.
 
-**R1d — write_begin, write_end (2 rules).**  The hardest, and they should be
-done last.  `write_begin_preserves_WellFormed` requires the writer to take an
-iterator observation on *every reachable node*, which is a bulk ghost update
-needing the reachable set enumerated — the same premise `sync_start_update`
-carries.  `write_end` is the mirror: retire them all, and its `Hclean` premise
-(nothing left detached) is what ToRCUWrite enforces.  *Effort* 1 week for the
-pair.  *Risk* medium-high; this is where an enumeration premise may prove
-unavoidable, in which case say so rather than dress it up.
+**R1d — write_begin, write_end (2 rules).  Done.**  `write_begin_typed` and
+`write_end_typed`.  The environment halves turned out to be the two smallest in
+the file, and one of them is small *because of R4*: entering, the writer's only
+type is `rcuRoot`, and `RootOK` is now a stack binding and nothing else — under
+the old encoding it would have needed the entry at the root to hold `Oroot`,
+which is precisely the entry WriteBegin's bulk update overwrites.  Leaving, the
+post-environment is empty for the same reason ReadEnd's is, and that is now a
+statement about resources because WriteEnd deletes rather than blanks.
 
-**Total** ~2.5 weeks.  **Order** R1a, R1b, R1c, R1d.  Do not start R1d first
-because it is the interesting one; it is the one most likely to consume a week
-and leave nothing.
+**The enumeration premise is unavoidable, and is stated as such.**  All four of
+SyncStart, SyncStop, WriteBegin and WriteEnd are bulk updates, and a bulk update
+needs its set enumerated: "every detached node is stamped", "every entry of the
+writer's is recoloured", "every reachable node is observed", "every entry is
+given up".  No resource a thread holds discharges those, so these four are the
+four without Hoare triples.  Where it could be stated as a fact about the
+*thread's own* map rather than the shared one — SyncStop and WriteEnd — it is
+(`forall o sg, Og !! (o, lw) = Some sg -> Ob !! o = Some sg`, the writer holds
+its whole column), which is the honest form and what a writer that has tracked
+its observations since WriteBegin actually has.
+
+**Total, as spent** one session rather than 2.5 weeks, because R4 had already
+done the two things that would have made R1a and R1d expensive: the root
+observation stopped needing an entry, and ReadEnd/WriteEnd started deleting.
 
 ### R2. The step relation, written out
 
