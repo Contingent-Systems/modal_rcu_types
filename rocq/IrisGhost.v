@@ -541,7 +541,23 @@ Print Assumptions initial_ghost_obsv.
     The logical observation map is recovered pointwise rather than computed: a
     location is observed as [ob] when some thread's entry records it.  That
     avoids a fold over the map and keeps the reconstruction definitionally
-    transparent, which is what makes the lemmas below one-liners. *)
+    transparent, which is what makes the lemmas below one-liners.
+
+    [Oroot] is the exception, and it is not a thread's to hold.  The paper says
+    so in words -- the root observation is a property of the structure, not of
+    an observer -- but the encoding did not, and the gap cost an invariant:
+    nothing tied [Oroot] to [rt m], so [RTO] had to be added as a repair.  Here
+    the root observation is read straight off the machine state, which no thread
+    can grant, revoke, or carry out of a critical section.  [RTO] is then not an
+    invariant at all but a definitional fact, and the thread-indexed part of the
+    map holds only thread-tagged observations, which is what [ObsWF] now says.
+
+    The reconstruction branches on the observation rather than taking a
+    disjunction, so that at every concrete tag -- [iterator], [unlinked],
+    [freeable], [fresh] -- it still reduces to the entry lookup it was before.
+    That is not cosmetic: it is why the change costs the proofs about those tags
+    nothing at all, and why only the handful of places that quantify over an
+    unknown observation have to say what they mean at the root. *)
 
 Definition ObsMap := gmap (Loc * TID) (gset obs).
 
@@ -549,7 +565,10 @@ Definition to_LState_t
     (m : MState) (Og : ObsMap) (U : Var -> TID -> Prop)
     (T : gset TID) (F : gmap Loc (gset TID)) : LState :=
   {| ms    := m;
-     obsv  := fun o ob => exists t s, Og !! (o, t) = Some s /\ ob ∈ s;
+     obsv  := fun o ob => match ob with
+                          | Oroot => o = rt m
+                          | _ => exists t s, Og !! (o, t) = Some s /\ ob ∈ s
+                          end;
      undf  := U;
      thrd  := fun t => t ∈ T;
      flist := fun o => match F !! o with
@@ -588,22 +607,51 @@ Qed.
 Print Assumptions no_finite_scope_set.
 
 Lemma to_LState_t_obs Og m U T F o t s ob :
+  ob <> Oroot ->
   Og !! (o, t) = Some s -> ob ∈ s ->
   obsv (to_LState_t m Og U T F) o ob.
-Proof. intros Hlk Hin. by exists t, s. Qed.
+Proof. intros Hne Hlk Hin. destruct ob; [.. | done]; by exists t, s. Qed.
+
+(** Reading the reconstruction backwards.  Everywhere a proof used to destruct
+    an observation into the entry that carries it, it now has one more case to
+    dismiss, and this is the lemma that presents it. *)
+Lemma obsv_inv m Og U T F o ob :
+  obsv (to_LState_t m Og U T F) o ob ->
+  (exists t s, Og !! (o, t) = Some s /\ ob ∈ s) \/ (ob = Oroot /\ o = rt m).
+Proof.
+  intros H. destruct ob; [left; exact H .. |].
+  right. split; [reflexivity | exact H].
+Qed.
+
+Lemma obsv_root m Og U T F o : o = rt m -> obsv (to_LState_t m Og U T F) o Oroot.
+Proof. intros H. exact H. Qed.
+
+Lemma obsv_root_inv m Og U T F o : obsv (to_LState_t m Og U T F) o Oroot -> o = rt m.
+Proof. intros H. exact H. Qed.
+
+(** RTO, the sixteenth defect, at the reconstruction.  It was added to the
+    invariant because nothing tied the root observation to [rt]; here it is not
+    an invariant to be maintained but a fact about the encoding, and the proof
+    is the identity.  The witness [obs_stray] in [WellFormed.v] still shows
+    that the published nineteen do not imply it -- the defect was real -- but
+    no action has to preserve it any more. *)
+Lemma to_LState_t_RTO m Og U T F : RTO (to_LState_t m Og U T F).
+Proof. intros o H. exact H. Qed.
 
 (** Independence: changing one thread's entry cannot affect what another
     thread's entries record.  This is the property the single-map design could
     not state, and it is what lets a reader keep an observation across a write
     that revokes the writer's. *)
 Lemma to_LState_t_other_thread Og m U T F o t t' s' ob :
+  ob <> Oroot ->
   t <> t' ->
   Og !! (o, t') = Some s' -> ob ∈ s' ->
   obsv (to_LState_t m (<[(o, t) := ∅]> Og) U T F) o ob.
 Proof.
-  intros Hne Hlk Hin. exists t', s'. split; [| exact Hin].
-  rewrite lookup_insert_ne; [exact Hlk |].
-  intros HH. apply Hne. congruence.
+  intros Hroot Hne Hlk Hin. destruct ob; [.. | done];
+    (exists t', s'; split; [| exact Hin];
+     rewrite lookup_insert_ne; [exact Hlk |];
+     intros HH; apply Hne; congruence).
 Qed.
 
 Section threadghost.
@@ -679,6 +727,26 @@ Section threadghost.
 
   (** A thread replaces its own observations of a location.  The writer's
       unlink step is this with [s' = {[Ounlk t]}]. *)
+  (** Giving an entry up.  ReadEnd and WriteEnd are the two actions that end a
+      thread's participation, and what they do to the observation map is not to
+      blank its entries but to remove them: a thread outside a critical section
+      has no column at all.  That is what lets the invariant say every key
+      belongs to someone who is currently running, and it is why the update is
+      a deallocation rather than a write. *)
+  Lemma tobs_del γ Og o t s :
+    tobs_auth γ Og -∗ tobs_ctl γ o t s ==∗ tobs_auth γ (delete (o, t) Og).
+  Proof.
+    iIntros "Ha Hf".
+    iMod (own_update_2 _ _ _
+            (● (Excl <$> (delete (o, t) Og)
+                : gmap (Loc * TID) (excl (leibnizO (gset obs)))))
+           with "Ha Hf") as "Ha".
+    { rewrite fmap_delete. apply auth_update_dealloc.
+      apply delete_singleton_local_update.
+      apply _. }
+    iModIntro. iFrame.
+  Qed.
+
   Lemma tobs_set γ Og o t s s' :
     tobs_auth γ Og -∗ tobs_ctl γ o t s ==∗
       tobs_auth γ (<[(o, t) := s']> Og) ∗ tobs_ctl γ o t s'.
@@ -697,6 +765,8 @@ Section threadghost.
 
 End threadghost.
 
+Print Assumptions obsv_inv.
+Print Assumptions to_LState_t_RTO.
 Print Assumptions to_LState_t_other_thread.
 Print Assumptions tobs_ctl_agree.
 Print Assumptions tobs_ctl_exclusive.
@@ -719,7 +789,7 @@ Definition obs_tid (ob : obs) : option TID :=
 
 Definition ObsWF (Og : ObsMap) : Prop :=
   forall o t s ob, Og !! (o, t) = Some s -> ob ∈ s ->
-    obs_tid ob = Some t \/ ob = Oroot.
+    obs_tid ob = Some t.
 
 (** Under it, a thread's observations are exactly what its own entries record,
     so reading an observation off the reconstruction locates the entry. *)
@@ -728,8 +798,10 @@ Lemma obsv_t_locates m Og U T F o t ob :
   obsv (to_LState_t m Og U T F) o ob ->
   exists s, Og !! (o, t) = Some s /\ ob ∈ s.
 Proof.
-  intros HWF Htid [t' [s [Hlk Hin]]].
-  destruct (HWF o t' s ob Hlk Hin) as [Htid' | ->].
-  - rewrite Htid in Htid'. injection Htid' as ->. by exists s.
-  - simpl in Htid. discriminate.
+  intros HWF Htid Hobs.
+  assert (Hex : exists t' s, Og !! (o, t') = Some s /\ ob ∈ s).
+  { destruct ob; [exact Hobs .. |]. simpl in Htid. discriminate. }
+  destruct Hex as [t' [s [Hlk Hin]]].
+  pose proof (HWF o t' s ob Hlk Hin) as Htid'.
+  rewrite Htid in Htid'. injection Htid' as ->. by exists s.
 Qed.

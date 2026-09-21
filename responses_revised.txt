@@ -17,7 +17,7 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
 19,900 lines and 1,033 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 260
+succeed if the development contains an admitted proof, or if any of its 265
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -135,6 +135,18 @@ neither does.
   Unique-Reachable-Tree's second part, whose conclusion is "iterator or root"
   and which is read as "every reachable node is the writer's, except the root
   itself" -- under the published set the exception is not tied to the root.
+  This one is the only defect of the twenty that we later removed rather than
+  repaired, and the reason is worth a sentence.  We first added it as a
+  conjunct.  It is better read as an artefact of our encoding: we filed every
+  observation under an observing thread, so the anonymous one had to be filed
+  under some thread too, and three problems followed from that alone -- the
+  conjunct had to be added, ReadEnd could not simply drop a departing thread's
+  entries, and the clause relating a reader's entries to its registration had
+  to be about tagged observations rather than about entries, which made it too
+  weak to decide whether a reader has an entry at a node.  Reading the root
+  observation off the root pointer instead removes all three at once.  The
+  witness still stands -- the published nineteen really do not imply it -- but
+  no action has to preserve it, and the reader's read closes as a consequence.
 - WriterFresh is too weak.  It is stated with a stack reference in its
   hypothesis -- a thread that *names* a fresh node holds the lock -- so a fresh
   observation whose variable has left scope constrains nobody.  This corrects
@@ -384,13 +396,15 @@ ReadEnd changed its own statement twice, and neither change is visible from any
 single invariant.  It needs the departing reader's variables to leave scope in
 the same step, or Reader-Writer-Observation fails immediately -- the block
 structure of the read critical section supplies this, but only once it is
-carried into the action's statement.  And it must not be described as "the
+carried into the action's statement.  And for a time it could not be described as "the
 departing thread's entries are gone", which is the natural description and is
 correct for every invariant about a thread's observations: the root observation
-is anonymous, the observation map is keyed by observer, so that description
-deletes the root observation and the second half of Unique-Root fails.  We give
-a well-formed state where it does.  This is an encoding mismatch rather than a
-defect in anything published, and we report it as such.
+is anonymous, the observation map was keyed by observer, so that description
+deleted the root observation and the second half of Unique-Root failed.  We
+gave a well-formed state where it did.  This was an encoding mismatch rather
+than a defect in anything published, and it is now gone: with the root
+observation read off the root pointer, no thread holds it, the natural
+description is the right one, and ReadEnd deletes its keys.
 
 Readers-Iterators-Only turns out to be load-bearing in exactly one place --
 ReadEnd, where it is what says the departing thread held no detaching
@@ -471,8 +485,10 @@ made this change.
 
 With a finite heap, eight actions close completely: Free, all five heap
 mutations, T-Alloc, and the binding rules -- which is to say the entire write
-side.  Each is stated with no parameters and nothing assumed about shared state:
-the invariant is opened, every premise is *derived*, the step is taken, the
+side.  ReadBegin and ReadEnd join them once the free list stops being anybody's
+exclusive property, which is the epoch representation below, so ten in all.
+Each is stated with no parameters and nothing assumed about shared state: the
+invariant is opened, every premise is *derived*, the step is taken, the
 invariant is closed.
 
 There are four kinds of premise and each is discharged differently.
@@ -742,16 +758,21 @@ iterators-in-free-list obligation -- a reader acquiring a reference to a node
 already on the free list must be one of the threads its grace period waits for
 -- and working out what discharges it is what turned up the fifteenth defect
 above.  With the entries agreeing it is four lines.  Both conjuncts are
-carried in the invariant now.  What the read still wants is not an invariant but
-a decision: the rule gives the reader an observation at a node it may never have
-observed, and to grant one it must hold that node's entry or know the entry
-absent.  The reader's cell records which nodes it observes, so the first is
-available for those; the second is not, because ReadEnd leaves the root
-observation behind, and that observation is deliberately anonymous, so it can
-sit in a departed reader's entry.  Deciding that the root observation belongs to
-the lock holder would let ReadEnd clear its keys outright and close the read.
-It is the same question as the two unconstrained observations above, one
-observation further, and we raise it rather than settle it.
+carried in the invariant now, and the second thing the read wanted was not an
+invariant but a decision about the root observation, which we have since taken.
+The rule gives the reader an observation at a node it may never have observed,
+and to grant one it must hold that node's entry or know the entry absent.  The
+reader's cell records which nodes it observes, so the first was always
+available for those; the second was not, because ReadEnd left the root
+observation behind.  Reading that observation off the root pointer instead lets
+ReadEnd delete its keys, makes the clause relating entries to registrations a
+statement about entries, and closes the question: a node outside the cell's
+domain has no entry of the reader's.  The reader's read is now a step on the
+invariant's contents with nothing observational left open.  What is left of it
+is the cell read itself: a reader must learn what the field holds, and the
+points-to assertion is exclusive.  That is a fractional or snapshot heap -- the
+correction above still stands, since neither the reader's environment nor the
+step uses a heap fragment, but the read of the cell does.
 
 WriteBegin asks whether the lock is free and SyncStop whether any thread is
 still bounding: the two points where the protocol tests or waits on shared state
@@ -785,12 +806,12 @@ Fairness: that a reader inside a critical section eventually leaves it.  The
 wait's termination reduces to that and no further; it is a property of the
 client, and no invariant of the shared state could supply it.
 
-A decision about the root observation.  It is deliberately anonymous, and that
-is what stops ReadEnd clearing its own keys, which is what stops the reader's
-read from closing like the other nine rules.  Deriving it from the structure
-rather than storing it in a thread's entry would settle both at once and would
-be more faithful to what we say it is; we have not made that change, because it
-is a change to the model.
+A fractional heap for the reader's read.  This is what is left of the read now
+that the root observation is derived from the structure rather than stored in a
+thread's entry.  A reader must learn what a field holds and the points-to
+assertion is exclusive; nothing else about the read is open.  The repair is
+standard and it changes the camera under the write side as well, which is why
+we name it rather than do it in passing.
 
 Axiom soundness proper.  Every action preserves WellFormed -- fifteen theorems,
 and now an induction over runs.  Axiom soundness asks for more: that the
