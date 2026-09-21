@@ -94,7 +94,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 250 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 253 say \emph{closed under the
 global context}, and none reports an axiom.
 
 That target had the bug it exists to catch, and we report it because the
@@ -2166,6 +2166,29 @@ entry.  Deciding that \rt{} belongs to the lock holder would let
 \textsc{ReadEnd} clear its keys outright and close the read; it is the same
 question as \S\ref{sec:defect-obs}'s, one observation further, and we raise it
 rather than settle it.
+
+\paragraph{What the machinery is for.}
+Everything above is machinery, and it is worth stating the property it exists
+to establish, because once the invariants are right it is four lines and it uses
+exactly two of them.
+
+A variable typed \frbl{} names a node the writer is about to reclaim.  What
+memory safety needs is that reclaiming it pulls the rug from under nobody.
+\textbf{IFL} says a thread observing a node as an iterator is in that node's
+free-list entry, and the \frbl{} denotation says the entry is empty, because the
+grace period has completed; so nobody observes the node as an iterator, which is
+\texttt{freeable\_is\_unobserved}.  \textbf{RWOW} says a live variable's
+referent carries an observation --- an iterator one, or a detaching one
+belonging to the lock holder.  The first is now impossible and the second
+identifies the holder as the writer itself, so
+\texttt{no\_live\_reference\_to\_a\_freeable\_node}: the only live reference to
+a node about to be freed is the writer's own.
+\texttt{free\_invalidates\_nobody} states it the way a client would ask it.
+
+Two invariants, and both are ones the published set has --- which is the right
+outcome.  The sixteen we add are not there to prove this; they are there to make
+the fifteen actions preserve the set that proves it, which is the division of
+labour a global invariant set is supposed to have.
 
 \paragraph{Against Alglave et al.'s requirements.}
 \label{sec:alglave}

@@ -10,7 +10,7 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
 19,900 lines and 1,033 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 250
+succeed if the development contains an admitted proof, or if any of its 253
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -946,6 +946,23 @@ obtained rather than assumed.  All four steps of the reclamation chain --
 ReadBegin, ReadEnd, SyncStart and SyncStop -- are complete as actions, each
 preserving all nineteen invariants, and ReadBegin and ReadEnd are also closed
 triples in the resource reading, for the reasons given above.
+
+It is also worth stating the property all of this exists to establish, because
+once the invariants are right it is four lines and uses exactly two of them.  A
+variable typed freeable names a node the writer is about to reclaim, and memory
+safety needs that reclaiming it pulls the rug from under nobody.
+Iterators-in-free-list says a thread observing a node as an iterator is in that
+node's entry, and the freeable denotation says the entry is empty because the
+grace period has completed; so nobody observes it as an iterator.
+Reader-writer-observation says a live variable's referent carries an observation
+-- an iterator one, or a detaching one belonging to the lock holder -- so the
+first case is now impossible and the second identifies the holder as the writer
+itself.  The only live reference to a node about to be freed is the writer's
+own.
+
+Both of those are invariants the published set already has, which is the right
+outcome: the sixteen we add are not there to prove this, they are there to make
+the fifteen actions preserve the set that does.
 
 Two of Alglave et al.'s four fundamental requirements are now theorems about
 our model rather than arguments in prose, and which invariants they need is the

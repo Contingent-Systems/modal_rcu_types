@@ -618,3 +618,74 @@ Proof.
 Qed.
 
 Print Assumptions tsub_itr_undef.
+
+(** * What the whole thing is for
+
+    Everything above is machinery.  This is the property the machinery exists to
+    establish, and it is worth seeing how short it is once the invariants are
+    right, and which of them it uses.
+
+    A variable typed \frbl{} names a node the writer is about to reclaim.  The
+    claim memory safety needs is that reclaiming it cannot pull the rug from
+    under anyone: no other thread holds a live reference to it.
+
+    Two invariants do it.  IFL says a thread observing a node as an iterator is
+    in that node's free-list entry; the \frbl{} denotation says the entry is
+    empty, because the grace period has completed.  Together, nobody observes
+    the node as an iterator.  RWOW says a live variable's referent carries an
+    observation -- an iterator one, or a detaching one belonging to the lock
+    holder.  The first is now impossible, and the second identifies the holder
+    as the writer itself.  So the only live reference to a node about to be
+    freed is the writer's own. *)
+
+Section safety.
+  Variable FType : FName -> FieldKind.
+
+  (** A node whose grace period has completed is observed as an iterator by
+      nobody.  This is IFL spent, and it is the whole of the reclamation
+      argument. *)
+  Theorem freeable_is_unobserved s t x o :
+    IFL s -> D_freeable s t x ->
+    stk (ms s) x t = Some o ->
+    forall t', ~ obsv s o (Oiter t').
+  Proof.
+    intros HIFL (o0 & Hstk & _ & _ & _ & Tr & Hfl & Hemp) Hd t' Hit.
+    rewrite Hd in Hstk. injection Hstk as <-.
+    exact (Hemp t' (HIFL t' o Tr Hit Hfl)).
+  Qed.
+
+  (** And so the only live reference to it is the writer's own. *)
+  Theorem no_live_reference_to_a_freeable_node s tw x o :
+    IFL s -> RWOW s -> D_freeable s tw x ->
+    stk (ms s) x tw = Some o ->
+    forall y t', t' <> tw -> stk (ms s) y t' = Some o -> ~ undf s y t' -> False.
+  Proof.
+    intros HIFL HRWOW Hfree Hd y t' Hne Hy Hnu.
+    destruct (HRWOW y t' o Hy Hnu) as [Hit | [Hlk' _]].
+    - exact (freeable_is_unobserved s tw x o HIFL Hfree Hd t' Hit).
+    - apply Hne.
+      destruct Hfree as (o0 & _ & _ & Hlk & _).
+      rewrite Hlk in Hlk'. injection Hlk' as Hlk'. exact (eq_sym Hlk').
+  Qed.
+
+  (** Said the other way round, which is the form a client cares about: a
+      thread with a live reference to a node the writer is about to free is the
+      writer.  Nothing else can be reading it, so the [Free] of the operational
+      semantics cannot invalidate a reference anybody holds. *)
+  Corollary free_invalidates_nobody s tw x o y t' :
+    IFL s -> RWOW s -> D_freeable s tw x ->
+    stk (ms s) x tw = Some o ->
+    stk (ms s) y t' = Some o -> ~ undf s y t' -> t' = tw.
+  Proof.
+    intros HIFL HRWOW Hfree Hd Hy Hnu.
+    destruct (Nat.eq_dec t' tw) as [Heq | Hne]; [exact Heq |].
+    exfalso.
+    exact (no_live_reference_to_a_freeable_node s tw x o HIFL HRWOW Hfree Hd
+             y t' Hne Hy Hnu).
+  Qed.
+
+End safety.
+
+Print Assumptions freeable_is_unobserved.
+Print Assumptions no_live_reference_to_a_freeable_node.
+Print Assumptions free_invalidates_nobody.
