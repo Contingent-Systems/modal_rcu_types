@@ -771,9 +771,28 @@ every reachable node, which is a bulk update needing the reachable set
 enumerated, so we record that rather than state a lemma that would claim more
 than it proves.
 
-Both read-side rules close, as described above.  What is left on the read side
-is the reader's read itself, which is the fractional-heap item; the protocol's
-two testing points are the other.
+What is left is four things, and we would rather name them than let the
+invariant work stand in for them.
+
+Fairness: that a reader inside a critical section eventually leaves it.  The
+wait's termination reduces to that and no further; it is a property of the
+client, and no invariant of the shared state could supply it.
+
+A decision about the root observation.  It is deliberately anonymous, and that
+is what stops ReadEnd clearing its own keys, which is what stops the reader's
+read from closing like the other nine rules.  Deriving it from the structure
+rather than storing it in a thread's entry would settle both at once and would
+be more faithful to what we say it is; we have not made that change, because it
+is a change to the model.
+
+Axiom soundness proper.  Every action preserves WellFormed -- fifteen theorems,
+and now an induction over runs.  Axiom soundness asks for more: that the
+post-state satisfies the denotation of the post-type environment.  Six of the
+fifteen have it.  This is the real remaining debt.
+
+And transcription: writing the fifteen actions out as one inductive step
+relation and proving progress alongside.  It adds nothing to the argument and a
+good deal to the file.
 
 One last thing worth saying about the infinite-heap defect, because it cuts the
 other way.  The checker never had it.  Fields there are a bitset over a declared

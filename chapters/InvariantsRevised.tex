@@ -507,7 +507,7 @@ The semantic changes above invalidate specific cases in Section
 
 \item \textbf{HD (\S15)} --- \emph{done, after correcting the invariant.}  This
   item was expected to be the easiest --- four empty cases and one dismissed as
-  trivial --- and the dismissed one turned out to be the seventh defect: the
+  trivial --- and the dismissed one turned out to be a defect: the
   published \textbf{HD} is false, and \texttt{Free} falsifies it.  See \S15 for
   the counterexample and the repair.  With the source restricted to non-detached
   nodes the \textsc{Free} case goes through by exactly the argument this list
@@ -577,24 +577,27 @@ thread that is neither the writer nor a reader, against which
 further one,
 \texttt{FPI\_not\_preserved\_by\_replace}, is a defect in
 \textsc{T-Replace} and \textsc{T-UnlinkH} rather than in an invariant
-statement; both rules now carry the repairing premise.  Five more are described where
-they were found, and it is worth grouping them rather than numbering them in
-sequence, because they are not all of a kind.  Three are further invariant
-defects: the free list's unconstrained domain (\S\ref{sec:defect-fld}) and two
-observations that constrain nobody (\S\ref{sec:defect-obs}).  Two are defects in
-the model rather than in an invariant: \textsf{WellFormed} is not closed under
-the published composition, so the framing the soundness argument needs does not
-hold; and allocation makes the heap infinite, so no points-to assertion exists
-over it.  Both are in \S\ref{sec:inv-mech}.
+statement; both rules now carry the repairing premise.  Nine more are described
+where they were found, and it is worth grouping them rather than numbering them
+in sequence, because they are not all of a kind.
 
-Two further ones came out of the reader's read: \S\ref{sec:defect-samesnap},
-free-list entries need not agree, which \textsc{SyncStart} carries as a
-hypothesis; and \S\ref{sec:defect-frw}, fresh-reachability is guarded by the
-stack, which is \textbf{WFresh}'s defect one invariant along.  Two more are at
-the two ends of the read side:
-\S\ref{sec:defect-br}, the bounding set is unconstrained, so nothing makes the
-grace period terminate; and \S\ref{sec:defect-wunlkw}, \textbf{WUNLK} is guarded
-by the lock, so it says nothing in the state a reader starts in.
+Two are defects in the model rather than in an invariant: \textsf{WellFormed} is
+not closed under the published composition, so the framing the soundness
+argument needs does not hold; and allocation makes the heap infinite, so no
+points-to assertion exists over it.  Both are in \S\ref{sec:inv-mech}.
+
+The other seven are further invariant defects, and they arrived in three waves.
+Giving the linking rules a resource reading found three: the free list's
+unconstrained domain (\S\ref{sec:defect-fld}) and two observations that
+constrain nobody (\S\ref{sec:defect-obs}).  Giving the \emph{read side} one
+found two more, at its two ends: \S\ref{sec:defect-br}, the bounding set is
+unconstrained, so nothing makes the grace period terminate; and
+\S\ref{sec:defect-wunlkw}, \textbf{WUNLK} is guarded by the lock, so it says
+nothing in the state a reader starts in.  Attempting the reader's own read found
+the last two: \S\ref{sec:defect-samesnap}, free-list entries need not agree,
+which \textsc{SyncStart} carries as a hypothesis; and \S\ref{sec:defect-frw},
+fresh-reachability is guarded by the stack, which is \textbf{WFresh}'s defect
+one invariant along.
 
 That is twenty: sixteen invariants, two rule defects, two model defects.  The
 second rule defect is the one \S\ref{sec:inv-mech} reaches by chaining the rules
@@ -1876,9 +1879,9 @@ chains along a path, so the guard becomes ``every field on the path is an RCU
 field'' and propagates into every use.  Both of those are repairs to what the
 invariants \emph{say}.  The defect is not there.  It is in the assumption the
 proofs make to connect them, and weakening that assumption leaves every
-invariant as published.  That is the sixteenth defect: not that \textbf{ULKR}
-and \textbf{OW} disagree, but that the published proofs reconcile them by
-assuming a system with no scalar fields at all.
+invariant as published.  That is the second of the two rule defects: not that
+\textbf{ULKR} and \textbf{OW} disagree, but that the published proofs reconcile
+them by assuming a system with no scalar fields at all.
 
 Two things this reading turned up.  The denotation of \texttt{freeable} was
 stated as $F(o) = \lambda t. \bot$ --- an equality of \emph{functions} --- and
@@ -2264,13 +2267,34 @@ finds the bounding set empty.
 \emph{Read-to-write upgrade.}  Not provided, as \S\ref{sec:relatedwork} says: a
 performance optimisation, orthogonal to memory safety.
 
-\paragraph{What is left.}
-One assumption about clients that no type system discharges, and one decision
-about who owns the root observation.  The
-read-side denotation is now mechanized --- \texttt{D\_rcuItrR}, transcribed from
+\paragraph{What is left, and it is four things.}
+\emph{Fairness.}  That a reader inside a critical section eventually leaves it.
+The wait's termination reduces to it and no further --- it is a property of the
+client, and no invariant of the shared state could supply it.
+
+\emph{A decision about the root observation.}  \rt{} is deliberately anonymous,
+and that is what stops \textsc{ReadEnd} from clearing its own keys, which is
+what stops the reader's read from closing like the other nine rules.  Deriving
+it from the structure rather than storing it in a thread's entry would settle
+both at once and would be more faithful to what the published text says it is;
+we have not made that change, because it is a change to the model and the
+model is the paper's.
+
+\emph{Axiom soundness proper.}  Every action preserves \textsf{WellFormed}, and
+that is fifteen theorems and now an induction over runs.  Axiom soundness asks
+for more: that the post-state satisfies the denotation of the post-type
+environment.  Six of the fifteen have it.  This is the real remaining debt and
+we would rather name it than let the invariant work stand in for it.
+
+\emph{Transcription.}  Writing the fifteen actions out as one inductive step
+relation, and proving progress alongside.  It adds nothing to the argument, as
+\S\ref{sec:inv-mech} says, and a good deal to the file.
+
+The read-side denotation is mechanized --- \texttt{D\_rcuItrR}, transcribed from
 the figure --- together with the reader's acquisition
-(\texttt{reader\_post\_env}).  That one is worth a caution: the denotation's
-bounding-thread conjunct asks that a bounding reader's node already carry a
-free-list entry, which the reader's own rule does not establish and which a
-bounding reader holding an iterator on a live node would violate.  It appears in
-the theorem as a hypothesis rather than as something proved.
+(\texttt{reader\_post\_env}).  That one is worth a caution rather than a
+heading: the denotation's bounding-thread conjunct asks that a bounding reader's
+node already carry a free-list entry, which the reader's own rule does not
+establish and which a bounding reader holding an iterator on a live node would
+violate.  It appears in the theorem as a hypothesis rather than as something
+proved.
