@@ -94,7 +94,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 245 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 250 say \emph{closed under the
 global context}, and none reports an axiom.
 
 That target had the bug it exists to catch, and we report it because the
@@ -2059,6 +2059,23 @@ it the model has no way to tell them apart.
 
 What it costs is a change to the state model, where the ticket costs only a
 camera.  We took the epochs, and the development is now built on them.
+
+That also discharges something \S\ref{sec:relatedwork} asserts of this paper.
+It says a variation on our semantics would keep a vector of per-thread counts in
+place of the reader set and a snapshot of counts in place of the bounding set,
+and that ours is ``simpler than this alternative, while also equivalent''.  The
+alternative is \texttt{rocq/Epochs.v}, and \texttt{Sim} is the relation: the two
+states agree on who is reading, who is bounding, and what the free list is --
+the published model's three components, recovered from the counters, which have
+more structure than that.  \texttt{sim\_read\_begin},
+\texttt{sim\_read\_end}, \texttt{sim\_sync\_start} and \texttt{sim\_sync\_stop}
+are the four steps across it.
+
+The one worth reading is \texttt{sim\_sync\_stop\_guard}.  The published rule
+blocks until no thread is still bounding; the counters block until every reader
+registered no earlier than the current epoch.  The theorem is that those are the
+same condition --- which is the sentence the related work asserts, and the whole
+of what ``more clearly equivalent to these implementations'' was claiming.
 
 The ghost free list is stamps --- one epoch per node awaiting reclamation,
 owned by the writer --- and the threads a snapshot contains are derived from the

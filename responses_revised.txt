@@ -10,7 +10,7 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
 19,900 lines and 1,033 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 245
+succeed if the development contains an admitted proof, or if any of its 250
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -249,6 +249,18 @@ distinguishes a reader's new critical section from its old one, and without it
 the model cannot tell them apart.  The cost is a change to the state model,
 where the ticket costs only a camera; we took the counters, and the development
 is built on them.
+
+That also discharges something we assert of ourselves in the related work,
+where we say a variation on our semantics would keep a vector of per-thread
+counts in place of the reader set and a snapshot of counts in place of the
+bounding set, and that ours is "simpler than this alternative, while also
+equivalent".  The alternative is the counter model, and we now give the relation
+and the four steps across it: the two states agree on who is reading, who is
+bounding, and what the free list is, which are the published model's three
+components.  The one worth reading is the guard.  The published rule blocks
+until no thread is still bounding; the counters block until every reader
+registered no earlier than the current epoch; the theorem is that those are the
+same condition.  That is the sentence, proved.
 
 The ghost free list is stamps -- one epoch per node awaiting reclamation, owned
 by the writer -- and the threads a snapshot contains are derived from the

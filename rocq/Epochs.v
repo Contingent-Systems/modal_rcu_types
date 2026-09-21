@@ -552,3 +552,137 @@ Qed.
 
 Print Assumptions no_section_spans_a_grace_period.
 Print Assumptions reclamation_waits_for_overlapping_readers.
+
+(** * The equivalence the paper asserts of itself
+
+    The related work says: ``A slight variation on our semantics would use a
+    bounding set that tracked such a snapshot of counts, and a vector of
+    per-thread counts in place of the reader set... Our current semantics are
+    simpler than this alternative, while also equivalent.''  That ``equivalent''
+    is asserted and not proved, and this file is the alternative.  Here is the
+    relation, and the four steps across it.
+
+    [Sim] says the two states agree on everything the published model has: who
+    is reading, who is bounding, and what the free list is.  The counters have
+    more structure than that, which is the point of them; the claim is that the
+    published model's three components are recoverable. *)
+
+Definition Sim (m : MState) (F : gmap Loc (gset TID)) (s : EState) : Prop :=
+  (forall t, rds m t <-> e_rds s t)
+  /\ (forall t, bnd m t <-> e_bnd s t)
+  /\ F = e_F s.
+
+(** ReadEnd.  The published rule performs three updates; the counters perform
+    one, and [e_end_is_read_end] is why that is the same step. *)
+Theorem sim_read_end m F s t :
+  Sim m F s -> Sim (read_end_ms m t) (read_end_F F t) (e_end s t).
+Proof.
+  intros (Hr & Hb & Hf).
+  destruct (e_end_is_read_end s t) as (Hrds & Hbnd & HF).
+  repeat apply conj.
+  - intros t'. simpl. rewrite Hrds. split.
+    + intros [H Hne]. split; [by apply Hr | exact Hne].
+    + intros [H Hne]. split; [by apply Hr | exact Hne].
+  - intros t'. simpl. rewrite Hbnd. split.
+    + intros [H Hne]. split; [by apply Hb | exact Hne].
+    + intros [H Hne]. split; [by apply Hb | exact Hne].
+  - rewrite Hf. rewrite HF. reflexivity.
+Qed.
+
+(** ReadBegin.  The published rule adds the thread to [R]; the counters
+    register it at the current epoch, which leaves the free list alone
+    ([e_begin_keeps_the_free_list]) exactly as the published rule does. *)
+Theorem sim_read_begin m F s t :
+  EWF s -> ereg s !! t = None ->
+  Sim m F s -> Sim (read_begin_ms m t) F (e_begin s t).
+Proof.
+  intros HWF Hnone (Hr & Hb & Hf). repeat apply conj.
+  - intros t'. unfold e_rds. simpl.
+    destruct (decide (t' = t)) as [-> | Hne].
+    + rewrite lookup_insert_eq. split; [by intros _ | by intros _; right].
+    + rewrite lookup_insert_ne; [| exact (fun Hc => Hne (eq_sym Hc))].
+      split; [by intros [H | Hc]; [apply Hr | destruct (Hne Hc)]
+             | by intros H; left; apply Hr].
+  - intros t'. simpl. unfold e_bnd. simpl.
+    destruct (decide (t' = t)) as [-> | Hne].
+    + rewrite lookup_insert_eq. split.
+      * intros Hbt. exfalso.
+        destruct (proj1 (Hb t) Hbt) as [e [He _]].
+        by rewrite Hnone in He.
+      * intros [e [He Hlt]]. exfalso. simpl in He. injection He as <-.
+        exact (Nat.lt_irrefl _ Hlt).
+    + rewrite lookup_insert_ne; [| exact (fun Hc => Hne (eq_sym Hc))].
+      exact (Hb t').
+  - rewrite Hf. rewrite (e_begin_keeps_the_free_list s t HWF Hnone).
+    reflexivity.
+Qed.
+
+(** SyncStart.  The published rule sets [B] to [R] and writes the current
+    readers into an entry for each detached node; the counters stamp those
+    nodes and bump.  [e_sync_start_snapshot] is that the entry written is the
+    same set. *)
+Definition ss_F (F : gmap Loc (gset TID)) (ds : gset Loc) (Rs : gset TID)
+  : gmap Loc (gset TID) := gset_to_gmap Rs ds ∪ F.
+
+Theorem sim_sync_start m F s ds :
+  EWF s -> Sim m F s ->
+  Sim (sync_start_ms m) (ss_F F ds (dom (ereg s))) (e_sync_start s ds).
+Proof.
+  intros HWF (Hr & Hb & Hf). repeat apply conj.
+  - intros t. simpl. exact (Hr t).
+  - intros t. simpl. unfold e_bnd. simpl. split.
+    + intros Hrd. destruct (proj1 (Hr t) Hrd) as [e He].
+      exists e. split;
+        [exact He | exact (proj2 (Nat.lt_succ_r e (egen s)) (proj2 HWF t e He))].
+    + intros [e [He _]]. apply Hr. by exists e.
+  - apply map_eq. intros o. unfold ss_F.
+    destruct (decide (o ∈ ds)) as [Hin | Hni].
+    + assert (Hg : gset_to_gmap (dom (ereg s)) ds !! o = Some (dom (ereg s)))
+        by (apply lookup_gset_to_gmap_Some; split; [exact Hin | reflexivity]).
+      rewrite (lookup_union_Some_l _ _ _ _ Hg).
+      symmetry. exact (e_sync_start_snapshot s ds o HWF Hin).
+    + assert (Hg : gset_to_gmap (dom (ereg s)) ds !! o = None)
+        by (apply lookup_gset_to_gmap_None; exact Hni).
+      rewrite (lookup_union_r _ _ _ Hg). rewrite Hf.
+      assert (Hg' : gset_to_gmap (egen s) ds !! o = None)
+        by (apply lookup_gset_to_gmap_None; exact Hni).
+      unfold e_F. rewrite lookup_fmap. rewrite lookup_fmap.
+      assert (Hst : estamp (e_sync_start s ds) !! o = estamp s !! o)
+        by (simpl; exact (lookup_union_r _ _ _ Hg')).
+      rewrite Hst. reflexivity.
+Qed.
+
+(** SyncStop.  The published rule empties [B]; under the counters [B] is
+    derived and the guard already makes it empty, so the step is a no-op on the
+    relation.  What the two models really share is the *guard*, and the theorem
+    below is that the published model's ``no thread is still bounding'' and the
+    counters' ``every reader registered no earlier than the current epoch'' are
+    the same condition.  That is the sentence in the related work, proved. *)
+Theorem sim_sync_stop_guard m F s :
+  Sim m F s ->
+  ((forall t, ~ bnd m t)
+   <-> (forall t e, ereg s !! t = Some e -> egen s <= e)).
+Proof.
+  intros (_ & Hb & _). split.
+  - intros Hq t e He.
+    destruct (Nat.le_gt_cases (egen s) e) as [Hle | Hgt]; [exact Hle |].
+    exfalso. apply (Hq t). apply Hb. by exists e.
+  - intros Hq t Hbt. destruct (proj1 (Hb t) Hbt) as [e [He Hlt]].
+    exact (Nat.lt_irrefl _ (Nat.lt_le_trans _ _ _ Hlt (Hq t e He))).
+Qed.
+
+Theorem sim_sync_stop m F s :
+  (forall t, ~ bnd m t) -> Sim m F s -> Sim (sync_stop_ms m) F s.
+Proof.
+  intros Hq (Hr & Hb & Hf). repeat apply conj.
+  - intros t. simpl. exact (Hr t).
+  - intros t. simpl. split; [by intros [] |].
+    intros Hbe. exfalso. exact (Hq t (proj2 (Hb t) Hbe)).
+  - exact Hf.
+Qed.
+
+Print Assumptions sim_read_end.
+Print Assumptions sim_read_begin.
+Print Assumptions sim_sync_start.
+Print Assumptions sim_sync_stop_guard.
+Print Assumptions sim_sync_stop.
