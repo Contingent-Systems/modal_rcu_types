@@ -94,7 +94,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 273 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 276 say \emph{closed under the
 global context}, and none reports an axiom.
 
 That target had the bug it exists to catch, and we report it because the
@@ -2374,14 +2374,16 @@ in passing.
 \emph{Axiom soundness proper.}  Every action preserves \textsf{WellFormed}, and
 that is fifteen theorems and now an induction over runs.  Axiom soundness asks
 for more: that the post-state satisfies the denotation of the post-type
-environment.  Nine of the fifteen have it --- the whole write side, the binding
-rules, \textsc{T-Free} and the reader's read.  Eight of those nine are Hoare
-triples; the ninth is the read, which is the step and the environment with the
-edge as a hypothesis, for the reason above.  The six that remain are the
-protocol actions: \textsc{ReadBegin}, \textsc{ReadEnd}, \textsc{SyncStart},
-\textsc{SyncStop}, \textsc{WriteBegin} and \textsc{WriteEnd}.  This is the real
-remaining debt and we would rather name it than let the invariant work stand in
-for it.
+environment.  Eleven of the fifteen have it --- the whole write side, the
+binding rules, \textsc{T-Free}, the reader's read, and the two block
+boundaries.  Ten of those eleven are Hoare triples; the eleventh is the read,
+which is the step and the environment with the edge as a hypothesis, for the
+reason above.  \textsc{ReadBegin} and \textsc{ReadEnd} also compose
+(\texttt{read\_section\_typed}): a section's postcondition is its own
+precondition, so re-entry is a fact about resources rather than an argument.
+The four that remain are \textsc{SyncStart}, \textsc{SyncStop},
+\textsc{WriteBegin} and \textsc{WriteEnd}.  This is the real remaining debt and
+we would rather name it than let the invariant work stand in for it.
 
 The read-side denotation is mechanized --- \texttt{D\_rcuItrR}, transcribed from
 the figure --- together with the reader's acquisition

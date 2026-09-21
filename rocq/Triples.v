@@ -5109,6 +5109,106 @@ End typed_read.
 
 Print Assumptions read_typed.
 
+(** ** The block boundaries, with the reader's environment
+
+    \textsc{ReadBegin} and \textsc{ReadEnd} are the two rules whose
+    environments are fixed rather than derived: ToRCURead scopes the reader's
+    variables to the block, so the section starts with nothing and ends with
+    nothing.  What is worth proving is therefore not that some environment
+    survives but that the two \emph{fit} -- that what \textsc{ReadBegin} hands
+    the reader is exactly what the read consumes, and that what the read
+    produces is exactly what \textsc{ReadEnd} takes back.  That is what the
+    three lemmas below say, and the third is the section as a whole.
+
+    The reader's environment condition is [REnvOK], and at the empty
+    environment it is vacuous; the content is in the resources.  Entering, the
+    reader holds a registration whose domain is the domain of its (empty)
+    observation map, which is the shape [read_typed] consumes.  Leaving, it
+    hands back exactly the entries that domain names, which is the shape
+    [read_end_atomic] takes.  Re-entry is then safe as a matter of resources
+    rather than as an argument: the postcondition of a section is its own
+    precondition, which is [reentry_safe] in [Epochs.v] one level down. *)
+
+Section typed_readsection.
+  Context `{!rcuG Σ, !physG Σ, !heapG Σ, !lockG Σ, !stackG Σ, !freshG Σ,
+            !invGS_gen hlc Σ}.
+  Context (FType : FName -> FieldKind).
+  Context (root : Loc) (fs : list FName).
+
+  (** Entering: the registration's domain is empty, the observation map is
+      empty, and the two agree -- which is the precondition [read_typed] asks
+      for at the empty environment. *)
+  Lemma read_begin_typed N γm γh γl γs γo γf γr γe γq E t U Sm :
+    ↑N ⊆ E ->
+    rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr γe γq -∗
+    reg_cell γe t None
+    ={E}=∗ ∃ e, reg_cell γe t (Some (e, dom (∅ : gmap Loc (gset obs))))
+                ∗ obs_own γo t ∅
+                ∗ ⌜REnvOK t U Sm ∅ []⌝.
+  Proof.
+    iIntros (HN) "#Hinv Hcell".
+    iMod (read_begin_atomic FType root fs N γm γh γl γs γo γf γr γe γq E t HN
+            with "Hinv Hcell") as (e) "Hcell".
+    iModIntro. iExists e. rewrite dom_empty_L /obs_own big_sepM_empty.
+    iFrame. iSplit; [done |].
+    iPureIntro. by intros x [].
+  Qed.
+
+  (** Leaving: the reader hands in the entries its registration names, and gets
+      its registration back empty.  It keeps nothing, which is what makes the
+      post-environment empty a statement about resources rather than a
+      convention. *)
+  Lemma read_end_typed N γm γh γl γs γo γf γr γe γq E t e Ob U Sm G :
+    ↑N ⊆ E ->
+    REnvOK t U Sm Ob G ->
+    rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr γe γq -∗
+    reg_cell γe t (Some (e, dom Ob)) -∗
+    obs_own γo t Ob
+    ={E}=∗ reg_cell γe t None
+           ∗ ⌜REnvOK t (fun x t' => U x t' \/ t' = t) Sm ∅ []⌝.
+  Proof.
+    iIntros (HN Hok) "#Hinv Hcell Hob".
+    set (lo := (fun p => ((p.1, t), p.2)) <$> map_to_list Ob).
+    assert (Hkey : forall p, p ∈ lo -> p.1.2 = t).
+    { intros p Hp. subst lo. by apply list_elem_of_fmap_1 in Hp as [q [-> _]]. }
+    assert (Hcov : forall o, o ∈ dom Ob -> exists v, ((o, t), v) ∈ lo).
+    { intros o Ho. apply elem_of_dom in Ho as [v Hv]. exists v. subst lo.
+      apply (list_elem_of_fmap_2 (fun p : Loc * gset obs => ((p.1, t), p.2))
+               (map_to_list Ob) (o, v)).
+      by apply elem_of_map_to_list. }
+    iMod (read_end_atomic FType root fs N γm γh γl γs γo γf γr γe γq E t e
+            (dom Ob) lo HN Hkey Hcov with "Hinv Hcell [Hob]") as "Hcell".
+    { subst lo. rewrite big_sepL_fmap /obs_own big_opM_map_to_list.
+      by iApply (big_sepL_mono with "Hob"). }
+    iModIntro. iFrame. iPureIntro. by intros x [].
+  Qed.
+
+  (** And the section, as a whole.  A thread that enters and leaves is back
+      where it started, so nothing stops it entering again -- the resource
+      statement of [reentry_safe]. *)
+  Lemma read_section_typed N γm γh γl γs γo γf γr γe γq E t :
+    ↑N ⊆ E ->
+    rcu_invT FType (phys γm γh γl γs root fs) N γo γf γr γe γq -∗
+    reg_cell γe t None
+    ={E}=∗ reg_cell γe t None.
+  Proof.
+    iIntros (HN) "#Hinv Hcell".
+    iMod (read_begin_typed N γm γh γl γs γo γf γr γe γq E t
+            (fun _ _ => False) ∅ HN with "Hinv Hcell")
+      as (e) "(Hcell & Hob & _)".
+    rewrite dom_empty_L.
+    iMod (read_end_typed N γm γh γl γs γo γf γr γe γq E t e ∅
+            (fun _ _ => False) ∅ [] HN (fun x Hx => match Hx with end)
+            with "Hinv [Hcell] Hob") as "[Hcell _]"; [| done].
+    by rewrite dom_empty_L.
+  Qed.
+
+End typed_readsection.
+
+Print Assumptions read_begin_typed.
+Print Assumptions read_end_typed.
+Print Assumptions read_section_typed.
+
 (** ** The environment, as a condition on those maps
 
     [ItrOK] is [D_rcuItr] with every mention of the shared state replaced by a

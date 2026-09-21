@@ -53,13 +53,20 @@ the observation grant, the environment on both sides — is discharged.  The
 reader's environment condition is `REnvOK`, the hypothesis `reader_env` already
 took, now named and carried across the read by `REnvOK_read`.
 
-**R1b — read_begin, read_end (2 rules).**  Both have closed triples already
-(`read_begin_atomic`, `read_end_atomic`) and neither touches the heap, so the
-environment survives without any framing lemma about cells.  `reader_env` is the
-bridge.  Note that `read_end`'s post-environment is *empty* — ToRCURead scopes
-the reader's variables to the block — which is what `Hundf_t` already encodes.
-*Effort* 2 days each.  *Risk* low.  *Blocked by* R4 if you want the read rule
-itself (see below); the two block-boundary rules are not blocked.
+**R1b — read_begin, read_end (2 rules).  Done.**  `read_begin_typed`,
+`read_end_typed` and, because the point of the pair is that they compose,
+`read_section_typed`.
+
+Both environments are fixed rather than derived — ToRCURead scopes the reader's
+variables to the block, so the section starts with nothing and ends with
+nothing — so what is worth proving is not that an environment survives but that
+the two rules *fit*.  Entering, the reader gets a registration whose domain is
+the domain of its (empty) observation map, which is exactly the shape
+`read_typed` consumes; leaving, it hands back exactly the entries that domain
+names, which is exactly what `read_end_atomic` takes.  `read_section_typed` is
+the two composed, and it makes re-entry a matter of resources rather than of
+argument: the postcondition of a section *is* its own precondition, which is
+`reentry_safe` in `Epochs.v` one level down.
 
 **R1c — sync_start, sync_stop (2 rules).**  These need the environment to
 survive a bulk observation change.  `TyOK_freeable` already gives SyncStop's
