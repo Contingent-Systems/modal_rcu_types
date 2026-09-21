@@ -12,10 +12,10 @@ All three items done; nothing outstanding here.
   3- conclusion: done.  Extended with the mechanization and the two
      lessons drawn from it.
 
-Still open, but not a todo item -- it needs a decision rather than
-work: which PDF the reviewer response accompanies.  The response says
-the corrected invariants "appear as an appendix", which is true of the
-current build but not of the submitted one.
+Decided: the response accompanies the revised PDF.  It now says so in
+its opening paragraph, and names Appendix A (the corrected invariants)
+and Appendix B (the algorithmic presentation and the checker) as the
+two that were not in the submitted version.  Nothing else outstanding.
 
 The text below is draft material for the Tassarotti comparison, not a
 todo list.

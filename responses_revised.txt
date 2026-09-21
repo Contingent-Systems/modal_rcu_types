@@ -1,4 +1,11 @@
-We thank the reviewers for their careful attention and feedback. We will take into consideration all of your comments about the presentation when we revise the paper.
+We thank the reviewers for their careful attention and feedback.
+
+This response accompanies a revised PDF, and refers to it throughout: the
+corrected invariants are Appendix A and the algorithmic presentation and checker
+are Appendix B, neither of which was in the submitted version.  Where we say
+below that we give a proof, a counterexample or a witness, it is in that PDF or
+in the Rocq development it describes, and can be checked.  We have also taken
+into account your comments about the presentation.
 
 > R1: Presentation 
 Thanks for pointing out the detailed presentation issues. We have early versions which capture many those, but we will consider binding T-Replace to Figure 7 carefully. On the ordering point in Section 6: we agree. In the revision the logical state and the observation map are introduced before any invariant that refers to them, and the discussion of the invariants as a group now follows the individual statements rather than preceding them.
