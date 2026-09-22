@@ -95,7 +95,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 307 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 316 say \emph{closed under the
 global context}, and none reports an axiom.
 
 That target had the bug it exists to catch, and we report it because the
@@ -2560,14 +2560,50 @@ al.\ name: the link is their Release-Acquire-1, the registration write and the
 scan that reads it their second and third.  We arrive at the same three from the
 invariants rather than from the algorithm, which is the check on all of this.
 
-What is still not here is the account itself: an operational model in which
-view, release and acquire are \emph{defined} rather than assumed, and a theorem
-that a run under it is matched by a run of \S\ref{sec:inv-mech}'s relation.
-Everything above is about the \emph{statement} of that theorem --- which
-invariants it must re-establish (one), where it must synchronise (three places),
-and what it must assume about views (that they are sub-heaps and sub-maps).  We
-would rather publish the obligations than an account that quietly assumed
-them.
+The model is written too.  It is release-acquire in its view form: a history
+per cell, a view as a timestamp per cell, and three steps --- a write that may
+or may not release, \texttt{rcu\_assign\_pointer} being the one that does and
+a field initialisation the one that does not, and a read that acquires, which
+is \texttt{rcu\_dereference}.  Nothing about views is assumed: the
+bookkeeping and the closure release-acquire turns on hold at the initial
+configuration and are preserved by every step.
+
+One modelling point is worth naming because the obvious simplification is
+wrong.  The released view belongs to the \emph{message}, not to the location.
+Attach it to the location and publishing a location twice retroactively changes
+what an earlier reader is obliged to have acquired, and the closure is not
+preserved.
+
+What comes out is that a reader is at least as far along as the publisher of
+anything it can see, and so sees what the publisher wrote --- with the two
+programmer's obligations named rather than buried: initialise before you
+publish, and do not rewrite afterwards, both of which the \frsh{} discipline
+enforces on the write side.  That the release is necessary is not argued but
+exhibited: the same run twice, differing in one bit, where the relaxed version
+is a perfectly good run of the semantics in which the reader sees the link and
+the node's field as it was \emph{before} initialisation.
+
+And then the bridge.  A run under the discipline reaches a configuration in
+which every thread's own view satisfies every invariant, given that the
+sequentially consistent state whose heap is what has been written does.
+Nineteen of the twenty conjuncts come free from the partition above; the
+twentieth is publication, and it comes from the semantics.
+
+Three things are still not proved, and we would rather name them than let the
+model stand in for them.  The bridge is restricted to write-once cells, which
+is the right fragment for publication and the wrong one for links --- and what
+protects a reader holding a stale link is not the memory model but the grace
+period, proved elsewhere and sequentially; joining the two needs the invariants
+carried along a \emph{pair} of runs, and that simulation is not built.  The
+semantics is over the heap only, so the registrations, which need
+synchronisation for the opposite reason, are stated and not carried.  And it is
+release-acquire and not weaker: every read acquires and every view only grows,
+so nothing here would survive a relaxed model unchanged.
+
+What we claim is narrower than ``RCU is verified under weak memory'' and, we
+think, more useful: the single invariant a weak memory model endangers is
+publication, publication is what the releasing write buys, and the buying can
+be written down.
 
 \paragraph{What is left, and it is three things.}
 The third of them used to be ``axiom soundness proper'' and is no longer: all

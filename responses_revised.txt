@@ -17,7 +17,7 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
 23,100 lines and 1,116 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 307
+succeed if the development contains an admitted proof, or if any of its 316
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -1041,13 +1041,47 @@ the link is Release-Acquire-1, the registration write and the scan that reads it
 the second and third.  We arrive at the same three from the invariants rather
 than from the algorithm, which is the check on all of this.
 
-What is still not here is the account itself: an operational model in which
-view, release and acquire are defined rather than assumed, and a theorem that a
-run under it is matched by a run of our step relation.  Everything above is
-about the statement of that theorem -- which invariants it must re-establish
-(one), where it must synchronise (three places), and what it must assume about
-views.  We would rather publish the obligations than an account that quietly
-assumed them.
+The model is written too.  It is release-acquire in its view form: a history
+per cell, a view as a timestamp per cell, and three steps -- a write that may or
+may not release, rcu_assign_pointer being the one that does and a field
+initialisation the one that does not, and a read that acquires, which is
+rcu_dereference.  Nothing about views is assumed: the bookkeeping and the
+closure release-acquire turns on hold at the initial configuration and are
+preserved by every step.
+
+One modelling point is worth naming because the obvious simplification is wrong.
+The released view belongs to the message, not to the location.  Attach it to the
+location and publishing a location twice retroactively changes what an earlier
+reader is obliged to have acquired, and the closure is not preserved.
+
+What comes out is that a reader is at least as far along as the publisher of
+anything it can see, and so sees what the publisher wrote, with the two
+programmer's obligations named rather than buried: initialise before you
+publish, and do not rewrite afterwards -- both of which the fresh discipline
+enforces on the write side.  That the release is necessary is not argued but
+exhibited: the same run twice differing in one bit, where the relaxed version is
+a perfectly good run of the semantics in which the reader sees the link and the
+node's field as it was before initialisation.
+
+And then the bridge: a run under the discipline reaches a configuration in which
+every thread's own view satisfies every invariant, given that the sequentially
+consistent state whose heap is what has been written does.  Nineteen of the
+twenty conjuncts come free from the partition above; the twentieth is
+publication, and it comes from the semantics.
+
+Three things are still not proved and we would rather name them.  The bridge is
+restricted to write-once cells, which is the right fragment for publication and
+the wrong one for links -- what protects a reader holding a stale link is not
+the memory model but the grace period, which is proved elsewhere and
+sequentially, and joining the two needs the invariants carried along a pair of
+runs, which we have not built.  The semantics is over the heap only, so the
+registrations, which need synchronisation for the opposite reason, are stated
+and not carried.  And it is release-acquire and not weaker.
+
+What we claim is narrower than "RCU is verified under weak memory" and, we
+think, more useful: the single invariant a weak memory model endangers is
+publication, publication is what the releasing write buys, and the buying can be
+written down.
 
 
 One last thing worth saying about the infinite-heap defect, because it cuts the

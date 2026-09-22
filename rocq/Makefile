@@ -99,7 +99,7 @@ BST.vo: WellFormed.vo HeapPaths.vo IrisGhost.vo Denotations.vo Actions.vo \
 
 # A successful build proves less here than it looks.  `Admitted.` compiles and
 # writes a .vo like any other proof, and `Print Assumptions` reports an axiom on
-# stdout without failing anything.  So the development's actual claim -- 307
+# stdout without failing anything.  So the development's actual claim -- 316
 # results, every one closed under the global context, no axioms -- is precisely
 # the thing that building it does not check.  This target checks it.
 #

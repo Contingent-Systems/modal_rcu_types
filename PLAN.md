@@ -401,13 +401,55 @@ Release-Acquire-1, the registration write and the scan that reads it are their
 -2 and -3.  We arrive at the same three from the invariants rather than from the
 algorithm.
 
-**What remains, and it is genuinely the paper.**  An operational model in which
-"view", "release" and "acquire" are *defined* rather than assumed, and a
-theorem that a run under it is matched by a run of `lstep`.  Everything here is
-about the *statement* of that theorem: which invariants it must re-establish
-(one), where it must synchronise (three places), and what it must assume about
-views (sub-heaps and sub-maps).  Better to publish the obligations than an
-account that quietly assumes them.
+**The model is now written too.**  `rastep` is release-acquire in its view
+form: a history per cell, a view as a timestamp per cell, and three steps — a
+write that may or may not release (`rcu_assign_pointer` is the one that does, a
+field initialisation the one that does not) and a read that acquires
+(`rcu_dereference`).  Nothing about views is assumed any more: `ra_ok` and
+`RAClosed` hold at the initial configuration and are preserved by every step
+(`rastep_ok`, `rastep_closed`).
+
+One modelling point was worth getting right rather than nearly right: the
+released view belongs to the **message**, not to the location.  Attaching it to
+the location is the obvious simplification and it is wrong — publishing a
+location twice would retroactively change what an earlier reader is obliged to
+have acquired, and `rastep_closed` would not hold.
+
+What comes out: `ra_publication`, that a reader is at least as far along as the
+publisher of anything it can see; `ra_reader_sees`, the same as the guarantee a
+reader wants, with the two programmer's obligations named
+(initialise-before-publish, and don't rewrite afterwards — both of which the
+`rcuFresh` discipline enforces); and `release_is_necessary`, the same run twice
+differing in one bit, where the relaxed version is a perfectly good run of the
+semantics in which the reader sees the link and the node's field as it was
+before initialisation.
+
+And the bridge: `weak_run_is_sound`.  A run of the semantics under the
+discipline reaches a configuration in which **every thread's own view satisfies
+every invariant**, given that the SC state whose heap is what has been written
+does.  Nineteen conjuncts come free from task 1's partition; the twentieth is
+publication, and `publication_holds` gets it from the semantics.
+
+**What is still not proved**, stated in the file rather than left as "future
+work":
+
+- `weak_run_is_sound` is restricted to write-once cells.  That is the right
+  fragment for publication and the wrong one for links — and the reason a link
+  needs no fragment is the grace period, which is proved elsewhere and
+  sequentially.  Joining the two needs the invariants carried along a *pair* of
+  runs, the weak one and the SC one it refines, and that simulation is not
+  built.
+- The semantics is over the heap only.  The registrations need synchronisation
+  for the opposite reason (`stale_registrations_are_unsafe`); the same three
+  steps would carry them, but the argument that the scan ending a grace period
+  must acquire each registration it reads is stated, not proved.
+- It is release-acquire and not weaker.  Every read acquires and every view
+  only grows, so there is nothing out of thin air to rule out, and none of it
+  would survive a relaxed model unchanged.
+
+The claim is narrower than "RCU is verified under weak memory" and more useful:
+the single invariant a weak memory model endangers is publication, publication
+is what the releasing write buys, and the buying is written down.
 
 ---
 
@@ -433,7 +475,7 @@ existing proof rather than designed, and the five theorems that file already had
 slotted in unchanged — which is what said the record was the right shape before
 any time was spent on the bridge.
 
-**A3's three tasks are done as stated; what remains is the operational model.**
+**A3 is done as far as this development goes; the remaining gaps are named above.**
 
 ## Do not
 
