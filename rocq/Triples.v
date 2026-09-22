@@ -2494,7 +2494,7 @@ End heapghost.
 
 (** * The type environment as a resource
 
-    The eight closed triples say the invariants survive and hand the thread its
+    The closed triples say the invariants survive and hand the thread its
     fragments back.  Axiom soundness asks for more: that the post-state
     satisfies the denotation of the post-type environment.  The pure half of
     that is already proved -- [Actions.v] has a [post_env] theorem for every
@@ -5687,8 +5687,8 @@ Print Assumptions EnvOK_alloc.
 
 (** ** Framing: what a step must not touch
 
-    The seven other closed triples do not grow the maps at a new location; they
-    overwrite an entry.  So what they need is not monotonicity but *framing*:
+    Every rule but the allocation leaves the maps' domains alone; it overwrites
+    an entry rather than growing them at a new location.  So what they need is not monotonicity but *framing*:
     the environment survives a step whose footprint it does not read.  There are
     only three kinds of footprint -- a cell, a location's observations, a stack
     slot -- so there are three lemmas, not seven.

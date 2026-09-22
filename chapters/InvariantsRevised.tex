@@ -2489,8 +2489,10 @@ relation already has them.  Interleaving the two is taking their union; we have
 not checked that composition, so we do not state it.
 
 \paragraph{What is left, and it is three things.}
-The third of them has changed shape since the last draft, and is now a list of
-premises rather than a list of rules.
+The third of them used to be ``axiom soundness proper'' and is no longer: all
+fifteen actions have it.  What is left in its place is narrower and more
+specific, and naming it that way seems more useful than keeping the old
+heading.
 
 \emph{Fairness.}  That a reader inside a critical section eventually leaves it.
 The wait's termination reduces to it and no further --- it is a property of the
@@ -2506,10 +2508,10 @@ discardable-fraction points-to, which is standard, and which changes the camera
 under the write side as well --- which is why it is named here rather than done
 in passing.
 
-\emph{Axiom soundness proper.}  Every action preserves \textsf{WellFormed}, and
-that is fifteen theorems and now an induction over runs.  Axiom soundness asks
-for more: that the post-state satisfies the denotation of the post-type
-environment.  All fifteen now have it.  Ten of the fifteen are Hoare triples
+\emph{The enumeration premises.}  Axiom soundness itself is done: every action
+preserves \textsf{WellFormed}, that is fifteen theorems and now an induction
+over runs, and every action also satisfies the denotation of its post-type
+environment.  Ten of the fifteen are Hoare triples
 --- the whole write side, the binding rules, \textsc{T-Free}, and the two
 read-block boundaries, which also compose (\texttt{read\_section\_typed}), so
 re-entry is a fact about resources rather than an argument.  The other five are

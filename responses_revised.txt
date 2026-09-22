@@ -363,12 +363,14 @@ worth more than the sum of the cases.
 We should be exact about what these theorems are, since their shape invites
 overreading.  Each says an action preserves WellFormed: the global invariants
 survive every atomic step.  Axiom soundness asks for more -- the post-state must
-satisfy the denotation of the post-type environment, not just the invariants,
-so that after T-Replace the fresh reference really is an rcuItr at the replaced
-node's path and the replaced one really is unlinked.  That half is not done.
-What the invariants give is the half of each case that is about the shared
-structure rather than the types, which is the half the technical report treats
-as trivial and the half where we found the defects.
+satisfy the denotation of the post-type environment, not just the invariants, so
+that after T-Replace the fresh reference really is an rcuItr at the replaced
+node's path and the replaced one really is unlinked.  That is a separate half,
+and it is done too; we come back to it below, because the shape of what is left
+over there is worth stating precisely.  What the invariants give is the half of
+each case that is about the shared structure rather than the types, which is the
+half the technical report treats as trivial and the half where we found the
+defects.
 
 For Free, eighteen of the nineteen follow from a single observation, that
 freeing removes edges and therefore removes paths, so every invariant with a
@@ -928,8 +930,10 @@ Interleaving the two is taking their union; we have not checked that
 composition, so we do not state it.
 
 What is left is three things, and we would rather name them than let the
-invariant work stand in for them.  The third has changed shape since the last
-draft: it is now a list of premises rather than a list of rules.
+invariant work stand in for them.  The third used to be "axiom soundness
+proper" and is no longer: all fifteen actions have it.  What is left in its
+place is narrower and more specific, and naming it that way seems more useful
+than keeping the old heading.
 
 Fairness: that a reader inside a critical section eventually leaves it.  The
 wait's termination reduces to that and no further; it is a property of the
@@ -942,13 +946,13 @@ assertion is exclusive; nothing else about the read is open.  The repair is
 standard and it changes the camera under the write side as well, which is why
 we name it rather than do it in passing.
 
-Axiom soundness proper.  Every action preserves WellFormed -- fifteen theorems,
-and now an induction over runs.  Axiom soundness asks for more: that the
-post-state satisfies the denotation of the post-type environment.  All fifteen
-now have it.  Ten of the fifteen are Hoare triples -- the whole write side, the
-binding rules, Free, and the two read-block boundaries.  The other five are the
-step plus the environment with a premise made explicit, and the premises are of
-exactly two kinds.
+The enumeration premises.  Axiom soundness itself is done: every action
+preserves WellFormed, that is fifteen theorems and now an induction over runs,
+and every action also satisfies the denotation of its post-type environment.
+Ten of the fifteen are Hoare triples -- the whole write side, the binding rules,
+Free, and the two read-block boundaries.  The other five are the step plus the
+environment with a premise made explicit, and those premises are what is left.
+They are of exactly two kinds.
 
 The reader's read has one: the edge it follows, because a reader cannot learn a
 cell's contents while the points-to assertion is exclusive.  That is the
