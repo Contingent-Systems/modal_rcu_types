@@ -430,11 +430,11 @@ Definition c_L {I : Impl} (c : Conf I) : LState :=
 Definition c_ok {I : Impl} (c : Conf I) : Prop :=
   i_wf (c_i c) /\ ISim (c_i c) (c_m c) (c_F c).
 
-Inductive xstep {I : Impl} : Conf I -> Conf I -> Prop :=
+Inductive xstep {I : Impl} (FType : FName -> FieldKind) : Conf I -> Conf I -> Prop :=
 | X_free (i : I) m Og U T F d t :
     obsv (to_LState_t m Og U T F) d (Ofree t) ->
     i_can_free i d ->
-    xstep (MkConf i m Og U T F)
+    xstep FType (MkConf i m Og U T F)
           (MkConf (i_free i d) (free_ms m d) Og U T (delete d F))
 | X_read_begin (i : I) m Og U T F t :
     i_can_begin i t ->
@@ -442,7 +442,7 @@ Inductive xstep {I : Impl} : Conf I -> Conf I -> Prop :=
     (forall o, ~ obsv (to_LState_t m Og U T F) o (Ounlk t)
             /\ ~ obsv (to_LState_t m Og U T F) o (Ofree t)
             /\ ~ obsv (to_LState_t m Og U T F) o (Ofresh t)) ->
-    xstep (MkConf i m Og U T F)
+    xstep FType (MkConf i m Og U T F)
           (MkConf (i_read_begin i t) (read_begin_ms m t) Og U T F)
 | X_read_end (i : I) m Og Og' U U' T F t :
     (forall o ob, obs_tid ob = Some t ->
@@ -457,7 +457,7 @@ Inductive xstep {I : Impl} : Conf I -> Conf I -> Prop :=
     (forall x t', undf (to_LState_t m Og U T F) x t' ->
        undf (to_LState_t (read_end_ms m t) Og' U' T (read_end_F F t)) x t') ->
     rds m t ->
-    xstep (MkConf i m Og U T F)
+    xstep FType (MkConf i m Og U T F)
           (MkConf (i_read_end i t) (read_end_ms m t) Og' U' T (read_end_F F t))
 | X_sync_start (i : I) m Og U T F ds :
     (forall o s0, i_ss_F i F ds !! o = Some s0 -> s0 = i_snapshot i) ->
@@ -467,17 +467,28 @@ Inductive xstep {I : Impl} : Conf I -> Conf I -> Prop :=
     (forall o s0, i_ss_F i F ds !! o = Some s0 ->
        exists t, obsv (to_LState_t m Og U T F) o (Ounlk t)
               \/ obsv (to_LState_t m Og U T F) o (Ofree t)) ->
-    xstep (MkConf i m Og U T F)
+    xstep FType (MkConf i m Og U T F)
           (MkConf (i_sync_start i ds) (sync_start_ms m) Og U T
                   (i_ss_F i F ds))
 | X_sync_stop (i : I) m Og U T F :
     i_quiet i ->
-    xstep (MkConf i m Og U T F)
-          (MkConf (i_sync_stop i) (sync_stop_ms m) (sync_stop_Og Og) U T F).
+    xstep FType (MkConf i m Og U T F)
+          (MkConf (i_sync_stop i) (sync_stop_ms m) (sync_stop_Og Og) U T F)
+(** And the writer's ten, which the implementation does not take part in.  A
+    heap action touches the heap and the observation map; it never touches the
+    free list or the reader set, so the implementation does not move and the
+    relation is kept for free.  Those two facts are the side conditions here,
+    and [heap_actions_are_quiet] below discharges them for every one of the
+    ten, which is what makes this constructor usable rather than decorative. *)
+| X_heap (i : I) m Og U T F m' Og' U' T' :
+    lstep FType (to_LState_t m Og U T F) (to_LState_t m' Og' U' T' F) ->
+    (forall t, rds m' t <-> rds m t) ->
+    (forall t, bnd m' t <-> bnd m t) ->
+    xstep FType (MkConf i m Og U T F) (MkConf i m' Og' U' T' F).
 
 (** The implementation half: a conforming implementation keeps the relation. *)
-Theorem xstep_ok (I : Impl) (HR : Refines I) (c c' : Conf I) :
-  xstep c c' -> c_ok c -> c_ok c'.
+Theorem xstep_ok (I : Impl) (HR : Refines I) FType (c c' : Conf I) :
+  xstep FType c c' -> c_ok c -> c_ok c'.
 Proof.
   intros Hst [Hwf HS]. destruct Hst; simpl in Hwf, HS |- *.
   - split; [exact (ref_wf_free I HR i d Hwf H0)
@@ -490,6 +501,10 @@ Proof.
            | exact (ref_sync_start I HR i m F ds Hwf HS)].
   - split; [exact (ref_wf_stop I HR i Hwf)
            | exact (ref_sync_stop I HR i m F Hwf H HS)].
+  - split; [exact Hwf |].
+    destruct HS as (Hr & Hb & Hf). repeat apply conj; [| | exact Hf].
+    + intros t. exact (iff_trans (H0 t) (Hr t)).
+    + intros t. exact (iff_trans (H1 t) (Hb t)).
 Qed.
 
 (** The type system half: every such step is a step of [lstep].  The two places
@@ -499,7 +514,7 @@ Qed.
     threads now reading''.  Everything else is the observation conditions,
     unchanged. *)
 Theorem xstep_lstep (I : Impl) (HR : Refines I) FType (c c' : Conf I) :
-  c_ok c -> xstep c c' -> lstep FType (c_L c) (c_L c').
+  c_ok c -> xstep FType c c' -> lstep FType (c_L c) (c_L c').
 Proof.
   intros [Hwf HS] Hst. destruct Hst; simpl in Hwf, HS |- *.
   - exact (L_free FType m Og U T F d t H).
@@ -509,21 +524,52 @@ Proof.
              (ref_snapshot I HR i m F Hwf HS) H H0 H1).
   - exact (L_sync_stop FType m Og U T F
              (proj1 (ref_guard I HR i m F Hwf HS) H)).
+  - exact H.
+Qed.
+
+(** The side conditions [X_heap] asks for, discharged for all ten.  Every one of
+    the writer's machine-state transformers carries [rds] and [bnd] through
+    unchanged --- they are written [rds := rds m] and [bnd := bnd m] in
+    [Actions.v] --- so the conditions are reflexivity, ten times.  That is the
+    content: not that they are preserved by an argument, but that the heap
+    actions do not mention the two components the implementation owns. *)
+Theorem heap_actions_are_quiet m :
+  (* T-ReadH for a reader takes no machine step at all *)
+  ((forall t, rds m t <-> rds m t) /\ (forall t, bnd m t <-> bnd m t))
+  (* the five heap mutations *)
+  /\ (forall o f v, (forall t, rds (write_ms m o f v) t <-> rds m t)
+                 /\ (forall t, bnd (write_ms m o f v) t <-> bnd m t))
+  (* allocation *)
+  /\ (forall n fs x lw, (forall t, rds (alloc_ms m n fs x lw) t <-> rds m t)
+                     /\ (forall t, bnd (alloc_ms m n fs x lw) t <-> bnd m t))
+  (* the binding rules *)
+  /\ (forall y tb o, (forall t, rds (bind_ms m y tb o) t <-> rds m t)
+                  /\ (forall t, bnd (bind_ms m y tb o) t <-> bnd m t))
+  (* and the two ends of the write critical section, which move the lock and
+     nothing the implementation can see *)
+  /\ (forall lw, (forall t, rds (write_begin_ms m lw) t <-> rds m t)
+              /\ (forall t, bnd (write_begin_ms m lw) t <-> bnd m t))
+  /\ ((forall t, rds (write_end_ms m) t <-> rds m t)
+      /\ (forall t, bnd (write_end_ms m) t <-> bnd m t)).
+Proof.
+  repeat apply conj; try (intros; apply iff_refl).
+  all: intros; split; intros; apply iff_refl.
 Qed.
 
 Print Assumptions xstep_ok.
 Print Assumptions xstep_lstep.
+Print Assumptions heap_actions_are_quiet.
 
 (** And the two halves together, over a run.  This is the statement a claim
     about a client needs: start well formed and in the relation, run the
     implementation, and every state you reach is one the type system's
     invariants hold of. *)
 Theorem xrun_WellFormed (I : Impl) (HR : Refines I) FType (c c' : Conf I) :
-  rtc xstep c c' -> c_ok c -> WellFormed FType (c_L c) ->
+  rtc (xstep FType) c c' -> c_ok c -> WellFormed FType (c_L c) ->
   c_ok c' /\ WellFormed FType (c_L c').
 Proof.
   induction 1 as [| a b c Hab Hbc IH]; intros Hok Hwf; [by split |].
-  apply IH; [exact (xstep_ok I HR a b Hab Hok) |].
+  apply IH; [exact (xstep_ok I HR FType a b Hab Hok) |].
   exact (lstep_preserves FType (c_L a) (c_L b)
            (xstep_lstep I HR FType a b Hok Hab) Hwf).
 Qed.
@@ -540,16 +586,23 @@ Print Assumptions xrun_WellFormed.
     under a conforming implementation is memory-safe, and that is one theorem
     rather than one argument per implementation.
 
-    It does not deliver the *mutation* half.  [xstep] has the five protocol
-    actions and not the ten heap ones, because those do not involve the
-    implementation at all: they are the writer's, they touch the heap and the
-    observation map and never the free list or the reader set, and [lstep]
-    already has them.  Interleaving the two relations is a matter of taking
-    their union, and stating it that way would suggest the composition had been
-    checked; it has not, so we state what has. *)
+    It delivers the mutation half too, and the way it does is the point.  The
+    ten heap actions do not involve the implementation at all --- they are the
+    writer's, they touch the heap and the observation map and never the free
+    list or the reader set --- so [X_heap] lets any [lstep] through on the
+    condition that it leaves [rds] and [bnd] alone, and
+    [heap_actions_are_quiet] discharges that for all ten by reflexivity.  So
+    [xstep] really is the union of the two relations, a run may interleave the
+    writer's mutations with the protocol freely, and [xrun_safe] is about whole
+    programs rather than the protocol in isolation.
+
+    What is *not* here is any claim that the two relations are the only steps,
+    or that a scheduler exists that produces any particular interleaving.
+    [xstep] says what may happen, not what does; progress and fairness are the
+    same open questions they were, and nothing above narrows them. *)
 Corollary xrun_safe (I : Impl) (HR : Refines I) FType (c c' : Conf I)
     tw x o :
-  rtc xstep c c' -> c_ok c -> WellFormed FType (c_L c) ->
+  rtc (xstep FType) c c' -> c_ok c -> WellFormed FType (c_L c) ->
   D_freeable (c_L c') tw x ->
   stk (ms (c_L c')) x tw = Some o ->
   forall y t', t' <> tw -> stk (ms (c_L c')) y t' = Some o ->
@@ -570,7 +623,7 @@ Print Assumptions xrun_safe.
     this corollary is new --- it is [xrun_safe] at [EpochImpl] --- and that is
     the point of having proved the general one. *)
 Corollary epoch_run_safe FType (c c' : Conf EpochImpl) tw x o :
-  rtc xstep c c' -> c_ok c -> WellFormed FType (c_L c) ->
+  rtc (xstep FType) c c' -> c_ok c -> WellFormed FType (c_L c) ->
   D_freeable (c_L c') tw x ->
   stk (ms (c_L c')) x tw = Some o ->
   forall y t', t' <> tw -> stk (ms (c_L c')) y t' = Some o ->

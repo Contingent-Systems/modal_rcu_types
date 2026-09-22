@@ -251,12 +251,17 @@ and `xrun_safe` the payoff: a run of a conforming implementation reaches only
 states in which a `freeable` node has no live reference.  `epoch_run_safe` is
 that at `EpochImpl`, so the chain is visible end to end.
 
-**What A1 does not cover, stated rather than implied.**  `xstep` has the five
-protocol actions and not the ten heap ones, because the heap actions do not
-involve the implementation at all — they are the writer's, they touch the heap
-and the observation map and never the free list or the reader set, and `lstep`
-already has them.  Interleaving the two relations is taking their union; we have
-not checked that composition, so we do not state it.
+**The composition is done too.**  `xstep`'s `X_heap` admits any `lstep`
+on the condition that it leaves `rds` and `bnd` alone, and
+`heap_actions_are_quiet` discharges that for all ten heap actions by
+reflexivity — the machine-state transformers are written to carry both through
+unchanged.  So `xstep` is the union of the two relations, a run may interleave
+the writer's mutations with the protocol freely, and `xrun_safe` is about whole
+programs rather than the protocol in isolation.
+
+**What A1 still does not claim.**  That these are the only steps, or that a
+scheduler exists producing any particular interleaving.  The relation says what
+may happen, not what does; progress and fairness are untouched by it.
 
 ### A2. Hazard pointers
 

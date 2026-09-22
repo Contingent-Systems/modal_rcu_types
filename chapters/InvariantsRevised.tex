@@ -95,7 +95,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 301 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 302 say \emph{closed under the
 global context}, and none reports an axiom.
 
 That target had the bug it exists to catch, and we report it because the
@@ -2481,12 +2481,21 @@ counter model, so the chain is visible end to end: the counter model refines the
 published one, and a client running against it never sees a live reference to a
 node it has reclaimed.
 
-What this does \emph{not} cover is the mutation half.  \texttt{xstep} has the
-five protocol actions and not the ten heap ones, because the heap actions do not
-involve the implementation at all: they are the writer's, they touch the heap
-and the observation map and never the free list or the reader set, and the step
-relation already has them.  Interleaving the two is taking their union; we have
-not checked that composition, so we do not state it.
+The mutation half comes with it, and the way it does is the point.  The ten
+heap actions do not involve the implementation at all --- they are the writer's,
+they touch the heap and the observation map and never the free list or the
+reader set --- so the paired relation admits any step of
+\S\ref{sec:inv-mech}'s on the condition that it leaves $R$ and $B$ alone, and
+that condition is discharged for all ten by reflexivity: the machine-state
+transformers are written to carry $R$ and $B$ through unchanged.  The paired
+relation is therefore the union of the two, a run may interleave the writer's
+mutations with the protocol freely, and the safety transfer is about whole
+programs rather than about the protocol in isolation.
+
+What is \emph{not} claimed is that these are the only steps, or that a
+scheduler exists producing any particular interleaving.  The relation says what
+may happen, not what does; progress and fairness are the same open questions
+they were.
 
 \paragraph{What is left, and it is three things.}
 The third of them used to be ``axiom soundness proper'' and is no longer: all

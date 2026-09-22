@@ -17,7 +17,7 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
 23,100 lines and 1,116 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 301
+succeed if the development contains an admitted proof, or if any of its 302
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -922,12 +922,21 @@ observation half.  Running the pair, a conforming implementation reaches only
 states in which a freeable node has no live reference, and we instantiate that
 at the counter model so the chain is visible end to end.
 
-What this does not cover is the mutation half.  The paired relation has the five
-protocol actions and not the ten heap ones, because the heap actions do not
-involve the implementation at all: they are the writer's, and they touch the
-heap and the observation map and never the free list or the reader set.
-Interleaving the two is taking their union; we have not checked that
-composition, so we do not state it.
+The mutation half comes with it, and the way it does is the point.  The ten heap
+actions do not involve the implementation at all -- they are the writer's, and
+they touch the heap and the observation map and never the free list or the
+reader set -- so the paired relation admits any step of the type system's on the
+condition that it leaves the reader set and the bounding set alone, and that
+condition holds for all ten by reflexivity, the machine-state transformers being
+written to carry both through unchanged.  The paired relation is therefore the
+union of the two, a run may interleave the writer's mutations with the protocol
+freely, and the safety transfer is about whole programs rather than about the
+protocol in isolation.
+
+What we do not claim is that these are the only steps, or that a scheduler
+exists producing any particular interleaving.  The relation says what may
+happen, not what does; progress and fairness are the same open questions they
+were.
 
 What is left is three things, and we would rather name them than let the
 invariant work stand in for them.  The third used to be "axiom soundness
