@@ -17,7 +17,7 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
 23,100 lines and 1,116 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 302
+succeed if the development contains an admitted proof, or if any of its 305
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -982,6 +982,43 @@ which is the honest form and is what a writer that has tracked its observations
 since WriteBegin actually has.  We would rather name that than dress it up: it
 is the shape of what is left, and it is narrower than "six rules are missing".
 
+
+
+A third thing about scope, and it is about the memory model.  We are
+sequentially consistent; Tassarotti et al. verify under release-acquire, where a
+thread's view of the heap is a sub-heap of what has been written -- a thread
+sees some of the writes that happened and never one that did not.  So the
+question a weak reading puts to an invariant is exactly whether it still holds
+when the heap shrinks, and one that does transfers from the union of all views,
+which is what the writer maintains, to each thread's own view for free.
+
+We asked it the same way we asked the last one, mechanically.  Sixteen of the
+twenty-six conjuncts do not mention the heap at all and survive any change to it
+whatever, the proof of each being one tactic; nine mention it only to rule
+something out and survive shrinking; exactly one does not.
+
+That one is heap-domain closure.  Every other invariant reads the heap to rule
+something out; this one reads it to require something -- that the node at the
+end of an edge is in the heap -- and a thread that has acquired the edge but not
+the node breaks it.  That is not an artificial state: it is the publication
+race, the writer initialising a node and then linking it while a reader acquires
+the link without the initialisation, and we give it as a witness.
+
+Read as an obligation, heap-domain closure under a weak memory model *is* the
+publish-subscribe guarantee -- the second of the four fundamental requirements,
+and the release-acquire pair Tassarotti names first.  So the single place a
+per-thread heap bites is the single place the literature says synchronisation is
+needed, and it tells us the synchronisation points are not only the protocol's
+two but a third at the link, where a writer publishes.  It also says what is not
+at risk: the memory-safety argument uses two heap-free invariants, and our
+publish-subscribe proof uses one heap-free and one that survives shrinking.
+
+What this is not is a weak-memory account.  There is no such semantics here and
+no theorem relating a weak run to a sequentially consistent one; reading a view
+as a sub-heap is an assumption about what such a model would supply, right for
+release-acquire and wrong for a model admitting out-of-thin-air reads.  We
+report the partition because it is checkable and because it says where that work
+would go.
 
 
 One last thing worth saying about the infinite-heap defect, because it cuts the

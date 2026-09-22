@@ -341,7 +341,39 @@ points, which are SyncStart's snapshot and ReadEnd's registration clear, and
 which are the release/acquire pairs; restate `Sim` against a weak-memory
 operational model.
 
-*Effort* a paper.  **Not before this one is out.**
+*Effort* a paper.
+
+**Task 1 is done, and it changed the guess in task 2.**  `rocq/Weak.v`.  Under
+release-acquire a thread's view is a *sub-heap* of what has been written, so the
+question an invariant faces is exactly "does it still hold when the heap
+shrinks?"  Asked mechanically: sixteen of the twenty-six conjuncts do not
+mention the heap at all and survive any change to it, proof `exact` each; nine
+mention it only to rule something out and survive shrinking; and exactly one
+does not.
+
+That one is **HD**, heap-domain closure — and read as an obligation, what it
+asks is that a thread which can see an edge can see the node at the end of it.
+That is publish-subscribe: Alglave's second requirement, and the release-acquire
+pair Tassarotti names first.  `publication_is_the_obligation` is the witness,
+and it is the publication race written down: the writer initialises then links,
+the reader acquires the link without the initialisation.
+
+So the guess in task 2 was incomplete.  The synchronisation points are not only
+the protocol's two; the type system needs a third, at the **link**, which is
+where a writer publishes.  Our SC model gets that for free and a weak one does
+not.
+
+Also worth having before the rest starts: the memory-safety argument is
+untouched by any of this.  It uses IFL and RWOW, both heap-free, and
+`readers_cannot_see_unpublished` uses FNR and FRW — one heap-free, one that
+survives shrinking.  None of the three has anything to say about views.
+
+**What task 1 does not settle**, and the file says so: there is no weak-memory
+semantics here, no release or acquire, and no theorem relating a weak run to an
+SC one.  Reading a view as a sub-heap is an *assumption* about what such a model
+would provide — the right one for release-acquire, where a thread's knowledge
+only grows and is always of writes that happened, and the wrong one for a model
+admitting out-of-thin-air reads.  Tasks 2 and 3 remain the paper.
 
 ---
 
@@ -367,7 +399,7 @@ existing proof rather than designed, and the five theorems that file already had
 slotted in unchanged — which is what said the record was the right shape before
 any time was spent on the bridge.
 
-**A3 is the only item left, and it is deliberately not started.**
+**A3's first task is done; its second and third are the paper.**
 
 ## Do not
 

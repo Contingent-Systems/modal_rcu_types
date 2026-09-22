@@ -95,7 +95,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 302 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 305 say \emph{closed under the
 global context}, and none reports an axiom.
 
 That target had the bug it exists to catch, and we report it because the
@@ -2496,6 +2496,48 @@ What is \emph{not} claimed is that these are the only steps, or that a
 scheduler exists producing any particular interleaving.  The relation says what
 may happen, not what does; progress and fairness are the same open questions
 they were.
+
+\paragraph{How much of this is about sequential consistency.}
+The same question can be asked of the memory model, and it has a sharper
+answer.  We are sequentially consistent; Tassarotti et al. verify under
+release-acquire, where a thread's view of the heap is a \emph{sub-heap} of what
+has been written --- a thread sees some of the writes that have happened and
+never one that has not.  So the question a weak reading puts to an invariant is
+exactly whether it still holds when the heap shrinks, and an invariant that
+survives shrinking transfers from the union of all views, which is what the
+writer maintains, to every thread's own view for free.
+
+Asked mechanically: sixteen of the twenty-six conjuncts do not mention the heap
+at all and survive any change to it whatever, the proof of each being one
+tactic; nine mention it only to rule something out --- the heap occurs in a
+hypothesis, or under a negation --- and survive shrinking; and exactly one does
+not.
+
+That one is \textbf{HD}.  Every other invariant reads the heap to rule
+something out; \textbf{HD} reads it to \emph{require} something, namely that
+the node at the end of an edge is in the heap.  A thread that has acquired the
+edge but not the node breaks it, and that is not an artificial state: it is the
+publication race, the writer initialising a node and then linking it while a
+reader acquires the link without the initialisation.  We give it as a witness.
+
+Read as an obligation, \textbf{HD} under a weak memory model \emph{is} the
+publish-subscribe guarantee --- Alglave et al.'s second requirement, and the
+release-acquire pair Tassarotti et al. name first.  So the single place a
+per-thread heap bites is the single place the literature says synchronisation
+is required, and it tells us the synchronisation points are not only the
+protocol's two but a third at the link, where a writer publishes.  It also says
+what is \emph{not} at risk: the memory-safety argument uses \textbf{IFL} and
+\textbf{RWOW}, both heap-free, and the publish-subscribe proof uses
+\textbf{FNR} and \textbf{FRW}, one heap-free and one that survives shrinking,
+so none of the three has anything to say about views.
+
+What this is not is a weak-memory account.  There is no such semantics here, no
+release and no acquire, and no theorem relating a run under one to a run under
+sequential consistency; reading a view as a sub-heap is an assumption about what
+such a model would supply rather than a consequence of one.  It is the right
+assumption for release-acquire and the wrong one for a model admitting
+out-of-thin-air reads.  We report the partition because it is checkable and
+because it says where that work would go.
 
 \paragraph{What is left, and it is three things.}
 The third of them used to be ``axiom soundness proper'' and is no longer: all
