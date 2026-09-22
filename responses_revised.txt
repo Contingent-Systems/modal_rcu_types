@@ -16,7 +16,7 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
-19,900 lines and 1,033 lemmas and theorems, axiom-free).  The build refuses to
+23,100 lines and 1,116 lemmas and theorems, axiom-free).  The build refuses to
 succeed if the development contains an admitted proof, or if any of its 301
 assumption checks reports an axiom rather than closed under the
 global context;
