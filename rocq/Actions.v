@@ -2040,8 +2040,10 @@ Print Assumptions drop_thread_ObsWF.
     the eleven heap-free invariants were identities precisely because nothing
     touched the observation map.  Here they are not.  T-Insert promotes a node
     from [fresh] to [iterator], T-UnlinkH demotes one from [iterator] to
-    [unlinked], and T-Replace does both at once, so RWOW, AWRT, IFL, WULK,
-    WFresh, FNR, RITR and RINFL all acquire content.
+    [unlinked], and T-Replace does both at once, so ten of the eleven -- RWOW,
+    AWRT, IFL, WULK, WFresh, FNR, RITR, RINFL, WUNLK and WITR -- acquire
+    content.  WNR is the one that does not, being the only one of the eleven
+    that mentions no observation.
 
     The observation change is given by properties rather than by a map
     operation, as for SyncStop and ReadEnd.  That is not only for uniformity.

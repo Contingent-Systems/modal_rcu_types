@@ -8,7 +8,7 @@ in the Rocq development it describes, and can be checked.  We have also taken
 into account your comments about the presentation.
 
 > R1: Presentation 
-Thanks for pointing out the detailed presentation issues. We have early versions which capture many those, but we will consider binding T-Replace to Figure 7 carefully. On the ordering point in Section 6: we agree. In the revision the logical state and the observation map are introduced before any invariant that refers to them, and the discussion of the invariants as a group now follows the individual statements rather than preceding them.
+Thanks for pointing out the detailed presentation issues. We have early versions which capture many of those, and we will look carefully at binding T-Replace to Figure 7. On the ordering point in Section 6: we agree. In the revision the logical state and the observation map are introduced before any invariant that refers to them, and the discussion of the invariants as a group now follows the individual statements rather than preceding them.
 
     
 > All reviewers: Mechanization, and corrections to the published invariants
@@ -156,9 +156,11 @@ neither does.
 
 One witness does for both: a state satisfying all nineteen in which the root
 observation sits at a non-root location and a fresh observation belongs to a
-thread that does not hold the lock.  Only the second repair is needed by any
-proof we give, so only it is carried; the first we report, because a reader of
-Unique-Reachable-Tree will assume it.
+thread that does not hold the lock.  The second repair is the obvious conjunct
+and it is carried.  The first, as the bullet above says, we ended up removing
+rather than carrying -- the encoding change makes it true by computation -- and
+we report the witness because a reader of Unique-Reachable-Tree will assume the
+property and the published set does not give it.
 
 There is also a defect in the type rules rather than in an invariant.  Neither
 T-Replace nor T-UnlinkH prevents a rcuFresh reference in the environment from
@@ -381,8 +383,9 @@ the corrected statement, since under the published one the theorem is false.
 That is a fair account of what "trivial" was doing: right about eighteen
 nineteenths of the case and wrong about the part that mattered.
 
-The three heap mutations are the hardest, and for a reason that appears only
-when the action is attempted in full: each writes a field *and* changes the
+Three of the five heap mutations are the hardest -- T-Insert, T-UnlinkH and
+T-Replace -- and for a reason that appears only when the action is attempted in
+full: each writes a field *and* changes the
 writer's observations, so ten of the eleven heap-free invariants, which were
 identities for the other three actions, acquire content.  The revocation an unlink
 performs is of *the writer's* iterator observation and of nothing else -- the
@@ -535,8 +538,8 @@ locations used for anything form a finite set and a location outside it
 satisfies all six at once.  The field-list repair pays twice: it made the heap
 representable, and it made the allocator constructible.
 
-We have also now made a start on the other half, the type environment as a
-resource, and it produced one thing worth reporting.  The obvious reading, one
+We then did the other half, the type environment as a resource, and the start
+of it produced one thing worth reporting.  The obvious reading, one
 resource per variable, does not work: two iterators may name the same node and
 two paths overlap in their prefix, so a per-variable reading would demand two
 exclusive fragments for one location and two owners for one cell.  The aliasing
@@ -563,8 +566,9 @@ variable rebound to rcuFresh.  Nothing new is proved in it -- the step is the
 closed triple's and the environment's survival is the monotonicity lemma -- but
 it is the shape all fifteen should have, and the first of them to have it.
 
-The other seven rules do not grow the maps at a new location; they overwrite an
-entry, so what they need is framing rather than monotonicity: the environment
+Every other rule leaves the maps' domains alone, overwriting an entry rather
+than growing them at a new location, so what they need is framing rather than
+monotonicity: the environment
 survives a step whose footprint it does not read.  There are only three kinds of
 footprint -- a cell, a location's observations, a stack slot -- so there are
 three lemmas rather than seven.  The cell case is where the aliasing side
@@ -841,11 +845,10 @@ test passes; we prove both, and that the last step gives what freeable asks for.
 What is left is fairness -- that a reader inside a critical section eventually
 leaves it -- which is a property of the client, not of the type system, and
 which no invariant of the shared state could supply.  The lock's loop is the
-same shape and shorter: it ends when the holder's critical section does.  WriteBegin's test is decidable the
-same way and is not the obstacle there: it also takes an iterator observation on
-every reachable node, which is a bulk update needing the reachable set
-enumerated, so we record that rather than state a lemma that would claim more
-than it proves.
+same shape and shorter: it ends when the holder's critical section does.  WriteBegin's test is decidable the same way and is not the obstacle there: it
+also takes an iterator observation on every reachable node, which is a bulk
+update needing the reachable set enumerated.  That premise is carried
+explicitly rather than hidden, and we return to it at the end.
 
 Two more things are new since the last draft, and both are about scope rather
 than about a defect.
@@ -886,9 +889,12 @@ compiled against a real RCU is safe only if that RCU refines the model, and
 refinement proved once over an interface is one theorem where refinement argued
 per implementation is one argument per implementation forever.  We now have that
 interface: an implementation is a state space with the four protocol actions on
-it and three observations -- who is reading, who is bounding, what the free list
-says -- and the obligation is five clauses, one per action plus one saying the
-implementation's grace-period guard decides the model's.
+it, reclamation, and three observations -- who is reading, who is bounding, what
+the free list says.  The obligation is one clause per action, saying it moves in
+step with the published model's, together with three that carry the content:
+that the implementation's grace-period guard decides the model's, that it may
+free a node only once the node's entry is empty, and that the grace period waits
+for exactly the threads now reading.
 
 We read the interface off a proof rather than inventing it.  The counter model
 we had already built to settle the equivalence you will find asserted in our
@@ -897,22 +903,20 @@ that relation with the state made abstract, and the first instance is assembled
 from those theorems unchanged.  That the old proof slots into the new interface
 without adjustment is the evidence that the interface is the right shape.
 
-The fifth clause is the one with content.  An implementation can satisfy all
-four step clauses and still be unsafe, because the model's SyncStop does not
-itself check anything -- the checking is in when it is allowed to run.  We give
-the witness: the counter model with its guard replaced by "always" satisfies the
-four step clauses, they being literally the same theorems, and fails only the
-guard.  The condition is the safety property, not tidiness.
+The three content clauses are not decoration, and the guard is the easiest one
+to show that of.  An implementation can satisfy every step clause and still be
+unsafe, because the model's SyncStop does not itself check anything -- the
+checking is in when it is allowed to run.  We give the witness: the counter
+model with its guard replaced by "always" satisfies every step clause, they
+being literally the same theorems, and fails only the guard.  The condition is
+the safety property, not tidiness.
 
-Reclamation is the clause with content.  Two clauses cover it: one is
-bookkeeping, that freeing removes the free-list entry; the other is the first
-requirement stated where it bites, that an implementation may free a node only
-once the node's entry is empty.  Nothing constrains how an implementation
-decides that -- the counter model compares counters, something else may count
-quiescent states -- only when the answer may be yes.  A fifth clause belongs
-with it: the grace period waits for exactly the threads now reading.  One clause
-says when the wait may end, the other says what it was waiting for, and together
-they are the first requirement at this interface.
+The other two are reclamation's, and they are the first fundamental requirement
+stated where it bites.  Nothing constrains how an implementation decides that a
+grace period is over -- the counter model compares counters, something else may
+count quiescent states -- only when the answer may be yes.  One of the two says
+when the wait may end and the other says what it was waiting for; together they
+are that requirement at this interface.
 
 The transfer then follows.  We pair an implementation state with the observation
 bookkeeping, carrying exactly the hypotheses the step relation already had plus
@@ -1169,8 +1173,8 @@ Both of those are invariants the published set already has, which is the right
 outcome: the sixteen we add are not there to prove this, they are there to make
 the fifteen actions preserve the set that does.
 
-Said over a state that is weaker than memory safety asserts, which is about
-runs, and the gap is one induction.  We close it: the invariants are inductive
+Said over a single state, that is weaker than memory safety asserts, which is
+about runs; the gap is one induction, and we close it: the invariants are inductive
 along executions, so at no point in any run from a well-formed start does a
 thread other than the writer hold a live reference to a node the writer is about
 to reclaim.  The relation is written out, one constructor per action carrying that
