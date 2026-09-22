@@ -17,7 +17,7 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
 23,100 lines and 1,116 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 305
+succeed if the development contains an admitted proof, or if any of its 307
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -1013,12 +1013,41 @@ two but a third at the link, where a writer publishes.  It also says what is not
 at risk: the memory-safety argument uses two heap-free invariants, and our
 publish-subscribe proof uses one heap-free and one that survives shrinking.
 
-What this is not is a weak-memory account.  There is no such semantics here and
-no theorem relating a weak run to a sequentially consistent one; reading a view
-as a sub-heap is an assumption about what such a model would supply, right for
-release-acquire and wrong for a model admitting out-of-thin-air reads.  We
-report the partition because it is checkable and because it says where that work
-would go.
+Stating that as an obligation takes one theorem.  A state is a base together
+with a view per thread, each a sub-heap of the base; "published" says every
+thread that can reach a node can see it; and then nineteen of the twenty
+conjuncts transfer from the base to every view with no hypothesis at all, the
+twentieth being exactly that condition.  A weak account does not have to
+re-prove the invariants per thread -- it has to establish one property at the
+link.
+
+The heap is not the only shared state, and the other kind has the opposite
+character.  The registrations are shared too, and they are what our relation
+ties to the reader set.  For the heap a thread that sees less is safe; for the
+registrations a writer that sees fewer than exist concludes a grace period has
+ended when it has not, takes the certificate, and frees a node whose snapshot
+still contains the reader.  We give that state.  Seeing less is the hazard, not
+the safeguard.
+
+That is why the two need synchronisation in different places: the heap at the
+write that publishes, the registrations at the read that decides the wait is
+over.  The relation's first clause is an iff, and a sub-map view gives one
+direction and loses the one the wait depends on, so the weak-memory refinement
+obligation is not a weakened form of the sequentially consistent one but the
+same obligation with the reads that establish it required to be acquires.
+
+Those are three synchronisation points, and they are the three Tassarotti names:
+the link is Release-Acquire-1, the registration write and the scan that reads it
+the second and third.  We arrive at the same three from the invariants rather
+than from the algorithm, which is the check on all of this.
+
+What is still not here is the account itself: an operational model in which
+view, release and acquire are defined rather than assumed, and a theorem that a
+run under it is matched by a run of our step relation.  Everything above is
+about the statement of that theorem -- which invariants it must re-establish
+(one), where it must synchronise (three places), and what it must assume about
+views.  We would rather publish the obligations than an account that quietly
+assumed them.
 
 
 One last thing worth saying about the infinite-heap defect, because it cuts the

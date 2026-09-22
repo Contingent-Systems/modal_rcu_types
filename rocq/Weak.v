@@ -38,7 +38,8 @@
     Checked with Rocq 9.2, axiom-free. *)
 
 From stdpp Require Import gmap sets.
-From RCU Require Import WellFormed HeapPaths Denotations.
+From RCU Require Import WellFormed HeapPaths IrisGhost Denotations Actions
+                        Epochs.
 
 (** ** A thread's view
 
@@ -63,8 +64,8 @@ Proof.
   rewrite (Hsub o f (VLoc o1) E). exact (IH o1 Hp).
 Qed.
 
-Lemma edge_sub s h h' o f o' :
-  sub_heap h h' -> Edge (swap_hp s h) o f o' -> Edge (swap_hp s h') o f o'.
+Lemma edge_sub s h o f o' :
+  sub_heap h (hp (ms s)) -> Edge (swap_hp s h) o f o' -> Edge s o f o'.
 Proof. intros Hsub He. exact (Hsub o f (VLoc o') He). Qed.
 
 (** ** The sixteen that do not mention the heap
@@ -102,38 +103,38 @@ Print Assumptions heap_free_invariants.
     having *fewer* edges is easier: the heap occurs in a hypothesis, or under a
     negation in the conclusion.  So an invariant established of the union holds
     in every thread's view, and a weak reading costs nothing. *)
-Theorem shrinking_is_harmless FType s h h' :
-  sub_heap h h' ->
-  (OW FType (swap_hp s h') -> OW FType (swap_hp s h))
-  /\ (ULKR (swap_hp s h') -> ULKR (swap_hp s h))
-  /\ (FLR (swap_hp s h') -> FLR (swap_hp s h))
-  /\ (FR (swap_hp s h') -> FR (swap_hp s h))
-  /\ (FPI FType (swap_hp s h') -> FPI FType (swap_hp s h))
-  /\ (UNQRT_a (swap_hp s h') -> UNQRT_a (swap_hp s h))
-  /\ (UNQRT_b (swap_hp s h') -> UNQRT_b (swap_hp s h))
-  /\ (UNQR (swap_hp s h') -> UNQR (swap_hp s h))
-  /\ (FRW (swap_hp s h') -> FRW (swap_hp s h)).
+Theorem shrinking_is_harmless FType s h :
+  sub_heap h (hp (ms s)) ->
+  (OW FType s -> OW FType (swap_hp s h))
+  /\ (ULKR s -> ULKR (swap_hp s h))
+  /\ (FLR s -> FLR (swap_hp s h))
+  /\ (FR s -> FR (swap_hp s h))
+  /\ (FPI FType s -> FPI FType (swap_hp s h))
+  /\ (UNQRT_a s -> UNQRT_a (swap_hp s h))
+  /\ (UNQRT_b s -> UNQRT_b (swap_hp s h))
+  /\ (UNQR s -> UNQR (swap_hp s h))
+  /\ (FRW s -> FRW (swap_hp s h)).
 Proof.
   intros Hsub. repeat apply conj.
   - intros H o o' f f' x H1 H2 Hf Hf'.
     exact (H o o' f f' x (Hsub o f _ H1) (Hsub o' f' _ H2) Hf Hf').
   - intros H o o' f' t Hob He.
-    exact (H o o' f' t Hob (edge_sub s h h' o' f' o Hsub He)).
+    exact (H o o' f' t Hob (edge_sub s h o' f' o Hsub He)).
   - intros H o o' f' Tr Hfl He.
-    exact (H o o' f' Tr Hfl (edge_sub s h h' o' f' o Hsub He)).
+    exact (H o o' f' Tr Hfl (edge_sub s h o' f' o Hsub He)).
   - intros H t x o Hstk Hfr. destruct (H t x o Hstk Hfr) as [Hne Hstk'].
     split; [| exact Hstk'].
-    intros o' f' He. exact (Hne o' f' (edge_sub s h h' o' f' o Hsub He)).
+    intros o' f' He. exact (Hne o' f' (edge_sub s h o' f' o Hsub He)).
   - intros H o f o' t lw Hfr He Hft Hlk.
-    exact (H o f o' t lw Hfr (edge_sub s h h' o f o' Hsub He) Hft Hlk).
-  - intros H o f He. exact (H o f (edge_sub s h h' o f _ Hsub He)).
+    exact (H o f o' t lw Hfr (edge_sub s h o f o' Hsub He) Hft Hlk).
+  - intros H o f He. exact (H o f (edge_sub s h o f _ Hsub He)).
   - intros H p o lw Hlk Hr.
-    exact (H p o lw Hlk (hstar_sub h h' _ p o Hsub Hr)).
+    exact (H p o lw Hlk (hstar_sub h (hp (ms s)) _ p o Hsub Hr)).
   - intros H p p' o Hr Hr'.
-    exact (H p p' o (hstar_sub h h' _ p o Hsub Hr)
-             (hstar_sub h h' _ p' o Hsub Hr')).
+    exact (H p p' o (hstar_sub h (hp (ms s)) _ p o Hsub Hr)
+             (hstar_sub h (hp (ms s)) _ p' o Hsub Hr')).
   - intros H o t Hfr o' f' He.
-    exact (H o t Hfr o' f' (edge_sub s h h' o' f' o Hsub He)).
+    exact (H o t Hfr o' f' (edge_sub s h o' f' o Hsub He)).
 Qed.
 
 Print Assumptions shrinking_is_harmless.
@@ -232,3 +233,195 @@ Print Assumptions publication_is_the_obligation.
     model admitting out-of-thin-air reads.  We state the partition because it
     is checkable and because it says where the work goes, not because it is the
     work. *)
+
+(** * Task two: where the synchronisation goes
+
+    Task one said which invariants a per-thread heap endangers, and the answer
+    was one.  This section says what follows: a state in which every thread has
+    its own view, and the single condition under which the whole invariant set
+    holds in every one of them.
+
+    The point of stating it this way is that it is a *closed* obligation.  It
+    does not say "and now re-prove the invariants per thread"; it says the
+    invariants transfer wholesale, given one thing, and names the thing. *)
+
+Record WState := MkW {
+  w_base : LState;                                  (** the union of the views *)
+  w_view : TID -> (Loc -> FName -> option Val);     (** what each thread sees *)
+}.
+
+(** A view is a sub-heap of the union: a thread sees some of the writes that
+    have happened and never one that has not. *)
+Definition w_ok (w : WState) : Prop :=
+  forall t, sub_heap (w_view w t) (hp (ms (w_base w))).
+
+Definition w_at (w : WState) (t : TID) : LState :=
+  swap_hp (w_base w) (w_view w t).
+
+(** The obligation, named.  Every thread that can reach a node can see it. *)
+Definition Published (w : WState) : Prop :=
+  forall t, HD (w_at w t).
+
+(** And the theorem.  Nineteen of the twenty conjuncts of [WellFormed] transfer
+    from the union to every view with no hypothesis at all -- eleven because
+    they never look at a heap, eight because looking at a smaller one is easier
+    -- and the twentieth is [Published].  So a weak-memory account of this
+    system does not have to revisit the invariants; it has to establish one
+    property at the moment a node is linked. *)
+Theorem views_are_well_formed FType w :
+  w_ok w -> Published w -> WellFormed FType (w_base w) ->
+  forall t, WellFormed FType (w_at w t).
+Proof.
+  intros Hok Hpub Hwf t.
+  destruct (shrinking_is_harmless FType (w_base w) (w_view w t) (Hok t))
+    as (HOW' & HULKR' & HFLR' & HFR' & HFPI' & HUa' & HUb' & HUq' & _).
+  destruct Hwf as (HOW & HRWOW & HAWRT & HIFL & HULKR & HFLR & HWULK & HFR
+                   & HWFresh & HFNR & HFPI & HWNR & HRITR & HRINFL & _
+                   & HUa & HUb & HWU & HWI & HUq).
+  repeat apply conj.
+  - exact (HOW' HOW).
+  - exact HRWOW.
+  - exact HAWRT.
+  - exact HIFL.
+  - exact (HULKR' HULKR).
+  - exact (HFLR' HFLR).
+  - exact HWULK.
+  - exact (HFR' HFR).
+  - exact HWFresh.
+  - exact HFNR.
+  - exact (HFPI' HFPI).
+  - exact HWNR.
+  - exact HRITR.
+  - exact HRINFL.
+  - exact (Hpub t).
+  - exact (HUa' HUa).
+  - exact (HUb' HUb).
+  - exact HWU.
+  - exact HWI.
+  - exact (HUq' HUq).
+Qed.
+
+Print Assumptions views_are_well_formed.
+
+(** So the heap's synchronisation is exactly one release-acquire pair, at the
+    link.  Nothing the reader does needs one: a read walks an edge in the
+    reader's own view, and everything the walk relies on -- the free-list
+    chaining that discharges the bounding obligation, the fresh-reachability
+    that says the target is not fresh -- is in the nineteen that transfer.  And
+    reclamation needs none either, which is the part worth noticing: the
+    memory-safety argument uses IFL and RWOW, both of which never look at a
+    heap, so a reader holding a stale view cannot be made unsafe by a free.
+    What it can be made unsafe by is a link it half-sees, which is
+    [Published]. *)
+
+(** * Task three: the protocol state goes the other way
+
+    The heap is not the only shared state.  The registrations are shared too,
+    and [Sim] in [Epochs.v] relates them to the published model's reader set.
+    Restating that against a weak reading turns up the opposite character, and
+    the contrast is the useful part of this section.
+
+    For the heap, a thread that sees less is safe: twenty-five of the
+    twenty-six conjuncts survive shrinking, and the exception is about
+    publication.  For the registrations it is reversed.  A writer that sees
+    *fewer* registrations than exist concludes a grace period has ended when it
+    has not, and frees a node a reader is still holding.  Seeing less is
+    exactly the hazard.
+
+    So the two kinds of shared state in this system need synchronisation for
+    opposite reasons, and that is why they need it at different places: the
+    heap at the write that publishes, the registrations at the read that
+    decides the wait is over. *)
+
+Definition sub_reg (r r' : gmap TID nat) : Prop :=
+  forall t e, r !! t = Some e -> r' !! t = Some e.
+
+(** A reader registered at epoch 0, inside the grace period for a node stamped
+    at 0.  The truth is that the grace period has not ended. *)
+Definition wq_true : EState :=
+  {| egen := 1; ereg := {[ 7%nat := 0 ]}; estamp := {[ 0%nat := 0 ]} |}.
+
+(** The writer's stale view: it has not acquired the reader's registration. *)
+Definition wq_view : EState :=
+  {| egen := 1; ereg := ∅; estamp := {[ 0%nat := 0 ]} |}.
+
+Theorem stale_registrations_are_unsafe :
+  (* the view is a sub-map of the truth: the writer has missed a write *)
+  sub_reg (ereg wq_view) (ereg wq_true)
+  (* and both are well formed, so nothing else is wrong with either *)
+  /\ EWF wq_true /\ EWF wq_view
+  (* the grace period has not ended *)
+  /\ ~ e_quiescent wq_true 0
+  (* the writer's view says it has *)
+  /\ e_quiescent wq_view 0
+  (* so the writer takes the certificate and frees *)
+  /\ e_F wq_view !! 0%nat = Some ∅
+  (* while the node's snapshot really still contains the reader *)
+  /\ e_F wq_true !! 0%nat = Some {[ 7%nat ]}.
+Proof.
+  assert (Hst : estamp wq_true !! 0%nat = Some 0) by apply lookup_singleton_eq.
+  assert (Hsv : estamp wq_view !! 0%nat = Some 0) by apply lookup_singleton_eq.
+  assert (Hstamps : forall (r : gmap TID nat),
+            forall o e, ({[ 0%nat := 0 ]} : gmap Loc nat) !! o = Some e -> e < 1).
+  { intros r o e Ho. destruct (decide (o = 0%nat)) as [-> | Hne].
+    - rewrite lookup_singleton_eq in Ho. injection Ho as <-. apply Nat.lt_0_1.
+    - rewrite lookup_singleton_ne in Ho;
+        [discriminate | exact (fun Hc => Hne (eq_sym Hc))]. }
+  repeat apply conj.
+  - intros t e He. simpl in He. by rewrite lookup_empty in He.
+  - exact (Hstamps ∅).
+  - intros t e Ht. simpl in Ht.
+    destruct (decide (t = 7%nat)) as [-> | Hne].
+    + rewrite lookup_singleton_eq in Ht. injection Ht as <-. apply Nat.le_0_l.
+    + rewrite lookup_singleton_ne in Ht;
+        [discriminate | exact (fun Hc => Hne (eq_sym Hc))].
+  - exact (Hstamps ∅).
+  - intros t e Ht. simpl in Ht. by rewrite lookup_empty in Ht.
+  - intros Hq.
+    assert (Hr : ereg wq_true !! 7%nat = Some 0) by apply lookup_singleton_eq.
+    exact (Nat.lt_irrefl 0 (Hq 7%nat 0 Hr)).
+  - intros t e Ht. simpl in Ht. by rewrite lookup_empty in Ht.
+  - apply (e_free_premise wq_view 0%nat 0 Hsv).
+    intros t e Ht. simpl in Ht. by rewrite lookup_empty in Ht.
+  - unfold e_F. rewrite lookup_fmap. rewrite Hst. simpl.
+    apply f_equal. apply set_eq. intros t. rewrite elem_of_singleton.
+    unfold e_snapshot. rewrite elem_of_dom. split.
+    + intros [e He]. apply map_lookup_filter_Some in He as [He _].
+      simpl in He.
+      destruct (decide (t = 7%nat)) as [-> | Hne]; [reflexivity |].
+      rewrite lookup_singleton_ne in He;
+        [discriminate | exact (fun Hc => Hne (eq_sym Hc))].
+    + intros ->. exists 0.
+      apply map_lookup_filter_Some.
+      split; [apply (lookup_singleton_eq 7%nat 0) |].
+      simpl. apply Nat.le_refl.
+Qed.
+
+Print Assumptions stale_registrations_are_unsafe.
+
+(** ** What that does to [Sim]
+
+    [Sim] says the two models agree on who is reading, who is bounding, and
+    what the free list is, and the first of those is an *iff*.  Under a weak
+    reading that is the whole content: a sub-map view gives one direction of it
+    and not the other, and the direction it loses is the one the wait depends
+    on.  So the refinement obligation under weak memory is not a weakened
+    version of the sequentially consistent one -- it is the same obligation,
+    with the reads that establish it required to be acquires.
+
+    That places the protocol's two synchronisation points exactly where
+    Tassarotti et al. put them, which is the check on this section: the
+    registration write at ReadBegin and ReadEnd must be a release, and the scan
+    that decides the wait must acquire each one, which are their
+    Release-Acquire-2 and Release-Acquire-3.  Their first pair is the link,
+    which is [Published] above.  Three pairs, and we arrive at the same three
+    from the invariants rather than from the algorithm.
+
+    What remains, and it is the part that is genuinely a paper: an operational
+    model in which "view", "release" and "acquire" are defined rather than
+    assumed, and a theorem that a run under it is matched by a run of [lstep].
+    Everything above is about the *statement* of that theorem -- which
+    invariants it would have to re-establish (one), where it would have to
+    synchronise (three places), and what it would have to assume about views (
+    that they are sub-heaps and sub-maps).  We would rather publish the
+    obligations than an account that quietly assumed them. *)

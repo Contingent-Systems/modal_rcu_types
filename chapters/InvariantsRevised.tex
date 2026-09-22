@@ -95,7 +95,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 305 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 307 say \emph{closed under the
 global context}, and none reports an axiom.
 
 That target had the bug it exists to catch, and we report it because the
@@ -2531,13 +2531,43 @@ what is \emph{not} at risk: the memory-safety argument uses \textbf{IFL} and
 \textbf{FNR} and \textbf{FRW}, one heap-free and one that survives shrinking,
 so none of the three has anything to say about views.
 
-What this is not is a weak-memory account.  There is no such semantics here, no
-release and no acquire, and no theorem relating a run under one to a run under
-sequential consistency; reading a view as a sub-heap is an assumption about what
-such a model would supply rather than a consequence of one.  It is the right
-assumption for release-acquire and the wrong one for a model admitting
-out-of-thin-air reads.  We report the partition because it is checkable and
-because it says where that work would go.
+Stating that as an obligation takes one theorem.  A state is a base together
+with a view per thread, each view a sub-heap of the base; \emph{published} says
+every thread that can reach a node can see it; and then nineteen of
+\textsf{WellFormed}'s twenty conjuncts transfer from the base to every view
+with \emph{no hypothesis at all}, the twentieth being exactly that condition.
+So a weak account does not re-prove the invariants per thread.  It establishes
+one property at the link.
+
+The heap is not the only shared state, and the other kind has the opposite
+character.  The registrations are shared too, and it is they that
+\S\ref{sec:inv-readside}'s relation ties to the reader set.  For the heap a
+thread that sees less is safe; for the registrations a writer that sees
+\emph{fewer} than exist concludes a grace period has ended when it has not,
+takes the certificate, and frees a node whose snapshot still contains the
+reader.  We give that state.  Seeing less is the hazard, not the safeguard.
+
+That is why the two need synchronisation in different places: the heap at the
+write that publishes, the registrations at the read that decides the wait is
+over.  The relation's first clause is an \emph{iff}, and a sub-map view gives
+one direction and loses the one the wait depends on --- so the weak-memory
+refinement obligation is not a weakened form of the sequentially consistent one
+but the same obligation, with the reads that establish it required to be
+acquires.
+
+Those are three synchronisation points, and they are the three Tassarotti et
+al.\ name: the link is their Release-Acquire-1, the registration write and the
+scan that reads it their second and third.  We arrive at the same three from the
+invariants rather than from the algorithm, which is the check on all of this.
+
+What is still not here is the account itself: an operational model in which
+view, release and acquire are \emph{defined} rather than assumed, and a theorem
+that a run under it is matched by a run of \S\ref{sec:inv-mech}'s relation.
+Everything above is about the \emph{statement} of that theorem --- which
+invariants it must re-establish (one), where it must synchronise (three places),
+and what it must assume about views (that they are sub-heaps and sub-maps).  We
+would rather publish the obligations than an account that quietly assumed
+them.
 
 \paragraph{What is left, and it is three things.}
 The third of them used to be ``axiom soundness proper'' and is no longer: all

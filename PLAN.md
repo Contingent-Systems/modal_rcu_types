@@ -368,12 +368,46 @@ untouched by any of this.  It uses IFL and RWOW, both heap-free, and
 `readers_cannot_see_unpublished` uses FNR and FRW — one heap-free, one that
 survives shrinking.  None of the three has anything to say about views.
 
-**What task 1 does not settle**, and the file says so: there is no weak-memory
-semantics here, no release or acquire, and no theorem relating a weak run to an
-SC one.  Reading a view as a sub-heap is an *assumption* about what such a model
-would provide — the right one for release-acquire, where a thread's knowledge
-only grows and is always of writes that happened, and the wrong one for a model
-admitting out-of-thin-air reads.  Tasks 2 and 3 remain the paper.
+**Task 2 is done, and it is one theorem.**  `WState` is a base state plus a view
+per thread; `w_ok` says each view is a sub-heap of the base; `Published` says
+every thread that can reach a node can see it.  Then
+`views_are_well_formed`: nineteen of `WellFormed`'s twenty conjuncts transfer
+from the union to every view with *no hypothesis at all*, and the twentieth is
+`Published`.  So a weak account does not re-prove the invariants per thread — it
+establishes one property at the link.  Nothing the reader does needs
+synchronisation, and neither does reclamation, since the memory-safety argument
+never looks at a heap.
+
+**Task 3 is done, and it turned up the useful asymmetry.**  The heap is not the
+only shared state: the registrations are too, and `Sim` relates them to the
+reader set.  For the heap, a thread seeing *less* is safe — twenty-five of
+twenty-six conjuncts survive shrinking.  For the registrations it is exactly
+reversed: `stale_registrations_are_unsafe` gives a writer whose view of `ereg`
+is a sub-map of the truth, which concludes a grace period has ended when it has
+not, takes the certificate, and frees a node whose snapshot still contains the
+reader.  Seeing less is the hazard.
+
+So the two kinds of shared state need synchronisation for opposite reasons, and
+that is why they need it in different places: the heap at the write that
+publishes, the registrations at the read that decides the wait is over.  `Sim`'s
+first clause is an *iff*, and a sub-map view gives one direction and loses the
+one the wait depends on — so the weak-memory refinement obligation is not a
+weakened form of the SC one, it is the same obligation with the reads that
+establish it required to be acquires.
+
+That lands the three synchronisation points exactly where Tassarotti et al. put
+them, which is the check on the whole section: the link is their
+Release-Acquire-1, the registration write and the scan that reads it are their
+-2 and -3.  We arrive at the same three from the invariants rather than from the
+algorithm.
+
+**What remains, and it is genuinely the paper.**  An operational model in which
+"view", "release" and "acquire" are *defined* rather than assumed, and a
+theorem that a run under it is matched by a run of `lstep`.  Everything here is
+about the *statement* of that theorem: which invariants it must re-establish
+(one), where it must synchronise (three places), and what it must assume about
+views (sub-heaps and sub-maps).  Better to publish the obligations than an
+account that quietly assumes them.
 
 ---
 
@@ -399,7 +433,7 @@ existing proof rather than designed, and the five theorems that file already had
 slotted in unchanged — which is what said the record was the right shape before
 any time was spent on the bridge.
 
-**A3's first task is done; its second and third are the paper.**
+**A3's three tasks are done as stated; what remains is the operational model.**
 
 ## Do not
 
