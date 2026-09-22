@@ -94,7 +94,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 287 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 293 say \emph{closed under the
 global context}, and none reports an axiom.
 
 That target had the bug it exists to catch, and we report it because the
@@ -2414,12 +2414,35 @@ replaced by ``always'': it satisfies the four step clauses, they being literally
 the same theorems, and fails only the guard.  The condition is the safety
 property, not a tidiness clause attached to four equations.
 
-What this does not yet do is transfer memory safety.  The paired step relates an
-implementation to the published model's machine state and free list; it does not
-yet touch the observation map, so it does not yet compose with the step relation
-of \S\ref{sec:inv-mech} and the safety theorem stated there.  That composition
-is the remaining research, and we would rather say so than let the interface
-stand in for it.
+Reclamation is the clause with content, and it is the one the protocol exists
+for.  Two clauses cover it: one is bookkeeping, that freeing removes the
+free-list entry; the other is Alglave et al.'s first requirement stated where it
+bites, that an implementation may free a node only once the node's entry is
+empty.  Nothing constrains \emph{how} an implementation decides that --- the
+counter model compares counters, something else may count quiescent states ---
+only \emph{when} the answer may be yes.  A fifth clause belongs with it:
+\texttt{ref\_snapshot}, that the grace period waits for exactly the threads now
+reading.  \texttt{ref\_guard} says when the wait may end; this says what it was
+waiting for, and the two together are requirement~1 at this interface.
+
+The transfer then follows.  \texttt{xstep} pairs an implementation state with
+the observation bookkeeping, carrying exactly the hypotheses the step relation
+of \S\ref{sec:inv-mech} already had plus the implementation's guard, and the
+two halves come from different places: the implementation supplies the protocol
+half and the typing derivation supplies the observation half.
+\texttt{xrun\_WellFormed} runs the pair, and \texttt{xrun\_safe} is the
+payoff --- a run of a conforming implementation reaches only states in which a
+\frbl{} node has no live reference.  \texttt{epoch\_run\_safe} is that at the
+counter model, so the chain is visible end to end: the counter model refines the
+published one, and a client running against it never sees a live reference to a
+node it has reclaimed.
+
+What this does \emph{not} cover is the mutation half.  \texttt{xstep} has the
+five protocol actions and not the ten heap ones, because the heap actions do not
+involve the implementation at all: they are the writer's, they touch the heap
+and the observation map and never the free list or the reader set, and the step
+relation already has them.  Interleaving the two is taking their union; we have
+not checked that composition, so we do not state it.
 
 \paragraph{What is left, and it is three things.}
 The third of them has changed shape since the last draft, and is now a list of

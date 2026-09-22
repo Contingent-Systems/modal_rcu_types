@@ -17,7 +17,7 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
 19,900 lines and 1,033 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 287
+succeed if the development contains an admitted proof, or if any of its 293
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -869,11 +869,30 @@ the witness: the counter model with its guard replaced by "always" satisfies the
 four step clauses, they being literally the same theorems, and fails only the
 guard.  The condition is the safety property, not tidiness.
 
-What this does not yet do is transfer memory safety: the paired step relates an
-implementation to the machine state and the free list, not yet to the
-observation map, so it does not yet compose with the step relation and the
-safety theorem above.  That composition is the remaining research and we would
-rather say so.
+Reclamation is the clause with content.  Two clauses cover it: one is
+bookkeeping, that freeing removes the free-list entry; the other is the first
+requirement stated where it bites, that an implementation may free a node only
+once the node's entry is empty.  Nothing constrains how an implementation
+decides that -- the counter model compares counters, something else may count
+quiescent states -- only when the answer may be yes.  A fifth clause belongs
+with it: the grace period waits for exactly the threads now reading.  One clause
+says when the wait may end, the other says what it was waiting for, and together
+they are the first requirement at this interface.
+
+The transfer then follows.  We pair an implementation state with the observation
+bookkeeping, carrying exactly the hypotheses the step relation already had plus
+the implementation's guard, and the two halves come from different places: the
+implementation supplies the protocol half and the typing derivation supplies the
+observation half.  Running the pair, a conforming implementation reaches only
+states in which a freeable node has no live reference, and we instantiate that
+at the counter model so the chain is visible end to end.
+
+What this does not cover is the mutation half.  The paired relation has the five
+protocol actions and not the ten heap ones, because the heap actions do not
+involve the implementation at all: they are the writer's, and they touch the
+heap and the observation map and never the free list or the reader set.
+Interleaving the two is taking their union; we have not checked that
+composition, so we do not state it.
 
 What is left is three things, and we would rather name them than let the
 invariant work stand in for them.  The third has changed shape since the last

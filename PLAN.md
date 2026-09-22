@@ -224,11 +224,39 @@ itself check anything; the checking is in when it is allowed to run.  So the
 obligation is not four equations with a condition attached for tidiness: the
 condition is the safety property.
 
-**What is left of A1** is task 3 and the bridge.  `pstep` relates an
-implementation state to the published model's `m` and `F`; what it does not yet
-touch is the observation map, so the run-level result does not yet compose with
-`lstep` and therefore does not yet transfer memory safety.  That composition,
-and the reclamation clause (task 3) it needs, is the remaining research.
+**Task 3 and the bridge are done too, so A1 is complete as scoped.**
+
+*Task 3, the reclamation clause.*  Two clauses, and only one has content.
+`ref_free` is bookkeeping — freeing removes the free-list entry, which is what
+the published `Free` does.  `ref_free_quiesced` is Alglave's first requirement
+stated where it bites: an implementation may free a node only when the node's
+entry is empty.  Nothing constrains *how* the implementation decides that — the
+epoch model compares counters, something else may count quiescent states — only
+*when* the answer may be yes.  `refines_free_is_freeable` reads it back: when a
+conforming implementation decides it may reclaim, the model agrees the node is
+`freeable`, which is exactly the conjunct the `freeable` denotation asks for.
+
+A fifth clause came out of the bridge and belongs with it: `ref_snapshot`, that
+the grace period waits for exactly the threads now reading.  `ref_guard` says
+when the wait may *end*; this says what it was waiting *for*, and the two
+together are the whole of requirement 1 at this interface.
+
+*The bridge.*  `Conf`, `xstep`, and three theorems.  `xstep` carries exactly the
+hypotheses of the corresponding `lstep` constructor plus the implementation's
+guard — nothing assumed twice, nothing smuggled — and the two halves come from
+different places: the implementation supplies the protocol half, the typing
+derivation supplies the observation half.  `xstep_ok` is the implementation
+half, `xstep_lstep` the type-system half, `xrun_WellFormed` the two over a run,
+and `xrun_safe` the payoff: a run of a conforming implementation reaches only
+states in which a `freeable` node has no live reference.  `epoch_run_safe` is
+that at `EpochImpl`, so the chain is visible end to end.
+
+**What A1 does not cover, stated rather than implied.**  `xstep` has the five
+protocol actions and not the ten heap ones, because the heap actions do not
+involve the implementation at all — they are the writer's, they touch the heap
+and the observation map and never the free list or the reader set, and `lstep`
+already has them.  Interleaving the two relations is taking their union; we have
+not checked that composition, so we do not state it.
 
 ### A2. Hazard pointers
 
