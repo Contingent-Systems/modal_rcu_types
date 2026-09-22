@@ -342,12 +342,27 @@ operational model.
 
 ## Sequencing
 
-Ship first.  Then R2 (two days, no risk, removes the most obvious reviewer
-question).  Then R4 on a branch, because it also closes the reader's read and
-turns a defect into a non-issue.  Then R1a–R1d as a block, because partial axiom
-soundness is harder to describe than either none or all.  Then A1, rehearsing
-with A2's step (4) first.  A2 can run in parallel with R1 if there are two
-people; it shares no files.
+*As planned:* ship first, then R2, then R4 on a branch, then R1a–R1d as a block,
+then A1 rehearsing at the epoch model first; A2 in parallel if there are two
+people, since it shares no files.
+
+*As it went:* R2, R4, R1a–R1d, A1, A2 — all of Part I and the first two of Part
+II, in that order.  Two things about the order are worth recording.
+
+R4 first was right, and for a reason the plan only half anticipated.  It was
+sequenced early because it closed the reader's read; what it also did was make
+R1a and R1d cheap.  `RootOK` stopped needing an observation, which is why
+WriteBegin's environment half is one lookup; and ReadEnd/WriteEnd started
+deleting rather than blanking, which is why WriteEnd's empty post-environment is
+a statement about resources rather than a convention.  R1 was budgeted at 2.5
+weeks and did not take it, and that is where the difference went.
+
+A1's mitigation earned its keep.  The interface was read off `Epochs.v`'s
+existing proof rather than designed, and the five theorems that file already had
+slotted in unchanged — which is what said the record was the right shape before
+any time was spent on the bridge.
+
+**A3 is the only item left, and it is deliberately not started.**
 
 ## Do not
 
