@@ -17,7 +17,7 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
 19,900 lines and 1,033 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 293
+succeed if the development contains an admitted proof, or if any of its 301
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -845,8 +845,41 @@ every reachable node, which is a bulk update needing the reachable set
 enumerated, so we record that rather than state a lemma that would claim more
 than it proves.
 
-One more thing is new since the last draft, and it is about scope rather than
-about a defect.  Everything above is about one abstract model.  A client
+Two more things are new since the last draft, and both are about scope rather
+than about a defect.
+
+The first is how much of this is about RCU.  The safety property uses two of the
+twenty invariants, and neither of the two theorems mentions a grace period --
+which is worth following up, because the iterator observation, "thread t has
+announced it may access o", is what a hazard pointer *is*.  We first asked how
+much of the system touches reclamation at all, and asked it mechanically: change
+the free list to anything and see which invariants survive.  Twenty-one of the
+twenty-six conjuncts do, and the proof of each is one tactic -- they are not
+preserved by an argument, they are unchanged, because the free list does not
+occur in them.  The five that do not survive are exactly the five that mention
+it, and one witness state breaks all five.
+
+We then abstracted the reclamation discipline: two components, "t is recorded as
+a potential accessor of o" and "o may be reclaimed", and two conditions, that an
+observation is recorded and that the guard means nothing is recorded.  Both
+safety theorems go through against that interface, and they are the same proofs
+with every mention of a free list gone.  RCU is one instance -- the condition at
+it is our fourth invariant exactly, and the original theorem falls back out,
+which is the check that the abstraction weakened nothing.  Hazard pointers are
+the other, and the invariant a hazard-pointer scheme maintains by publishing
+before it dereferences is that same invariant with the indices swapped: ours
+puts the thread in the node's entry, theirs puts the node in the thread's set.
+
+Two cautions, because that is easy to overstate.  It is the safety argument, not
+the whole system: the five free-list invariants do real work elsewhere, and a
+hazard-pointer system would need analogues or would do without the rules that
+use them.  And what carries over is the argument, not the implementation --
+hazard pointers must publish before dereferencing and re-validate after, which
+is a memory-ordering obligation we do not model, and the publication invariant
+is stated over the logical state, which is exactly what a weak-memory account
+would have to earn.
+
+The second is about implementations.  Everything above is about one abstract model.  A client
 compiled against a real RCU is safe only if that RCU refines the model, and
 refinement proved once over an interface is one theorem where refinement argued
 per implementation is one argument per implementation forever.  We now have that

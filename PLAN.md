@@ -287,6 +287,43 @@ Tasks:
 *Effort* 1–2 weeks to a decisive answer either way.  *Risk* low, because both
 outcomes are publishable content.
 
+**Answered, and it is the good outcome.**  `rocq/Reclaim.v`.
+
+*Task 1, the partition, done mechanically rather than by reading.*  Change the
+free list to *anything* and see which invariants survive: twenty-one of the
+twenty-six conjuncts do, and the proof of `free_list_is_local` is twenty-one
+`exact`s — they are not *preserved*, they are *unchanged*, because the free list
+does not occur in them.  The five that do not survive are exactly IFL, FLR,
+RINFL, FLD and SameSnap, and `free_list_is_not_local` gives one witness state
+that breaks all five at once.
+
+*Tasks 2 and 3.*  The discipline is a record with two components — `d_ann`
+("thread `t` is recorded as a potential accessor of `o`") and `d_free` ("`o` may
+be reclaimed") — and two conditions: `Announced`, that an observation is
+recorded, and `Retires`, that the guard means nothing is recorded.
+`reclaim_unobserved` and `reclaim_no_live_reference` are the two safety theorems
+against that interface, and they are *the same proofs* with every mention of a
+free list gone.
+
+`RCU` is one instance: `Announced` at it is IFL (`rcu_Announced`, an iff), and
+`Retires` needs nothing, the free list being a function.  `rcu_no_live_reference`
+recovers the original theorem, which is the check that the abstraction did not
+weaken anything.  `HP` is the other: announcement is set membership, so `Retires`
+holds by construction, and `Publishes` — what a thread observes it has published
+— is IFL's exact analogue with the indices swapped: IFL puts the *thread* in the
+node's entry, `Publishes` puts the *node* in the thread's set.
+
+*Task 4 does not arise*, but two cautions are recorded in the file rather than
+left implicit.  This is the *safety* argument, not the whole system: the five
+free-list invariants do real work elsewhere (FLR and SameSnap discharge the
+reader's read, FLD is SyncStart's, RINFL ties entries to the bounding set), and a
+hazard-pointer system would need analogues or would do without the rules that use
+them.  And what carries over is the argument, not the implementation: hazard
+pointers must publish before dereferencing and re-validate after, which is a
+memory-ordering obligation this development does not model.  `Publishes` is
+stated as an invariant of the logical state and is therefore exactly the thing
+A3 would have to earn.
+
 ### A3. Weak memory
 
 Tassarotti et al. verify under release-acquire; we are sequentially consistent.

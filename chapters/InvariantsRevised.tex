@@ -94,7 +94,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 293 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 301 say \emph{closed under the
 global context}, and none reports an axiom.
 
 That target had the bug it exists to catch, and we report it because the
@@ -2314,6 +2314,49 @@ action's hypotheses, so \texttt{lstep\_preserves} is fifteen applications and
 nothing else; \texttt{system\_is\_safe} is the theorem above stated at it.  That
 is the whole system rather than one action, which is what the parameterisation
 was for.
+
+\paragraph{How much of this is about RCU.}
+The safety property above uses two of the twenty invariants, \textbf{IFL} and
+\textbf{RWOW}, and neither of the two theorems mentions a grace period.  That
+is worth following up, because \itr{} --- ``thread $t$ has announced it may
+access $o$'' --- is what a hazard pointer \emph{is}, and if the argument does
+not know how reclamation is decided then the invariants are not twenty facts
+about RCU.
+
+We first ask how much of the system touches reclamation at all, and the sharpest
+way to ask it is mechanical: change the free list to \emph{anything} and see
+which invariants survive.  Twenty-one of the twenty-six conjuncts do, and the
+proof of each is \texttt{exact} --- they are not preserved by an argument, they
+are unchanged, because the free list does not occur in them.  The five that do
+not survive are exactly \textbf{IFL}, \textbf{FLR}, \textbf{RINFL},
+\textbf{FLD} and \textbf{SameSnap}, and one witness state breaks all five.
+
+Then we abstract the discipline.  It is a record with two components --- ``$t$
+is recorded as a potential accessor of $o$'' and ``$o$ may be reclaimed'' ---
+and two conditions: that an observation is recorded, and that the guard means
+nothing is recorded.  The two safety theorems go through against that interface,
+and they are the \emph{same proofs} with every mention of a free list gone.
+
+RCU is one instance: the recording relation is ``$t$ is in $o$'s entry'', the
+condition is \textbf{IFL} exactly, and the original theorem falls back out,
+which is the check that the abstraction weakened nothing.  Hazard pointers are
+the other: recording is set membership, so the guard condition holds by
+construction, and the invariant a hazard-pointer scheme maintains by publishing
+before it dereferences is \textbf{IFL}'s analogue with the indices swapped ---
+\textbf{IFL} puts the \emph{thread} in the node's entry, this puts the
+\emph{node} in the thread's set.
+
+Two cautions, because the result is easy to overstate.  This is the safety
+argument, not the whole system: the five free-list invariants do real work
+elsewhere --- \textbf{FLR} and \textbf{SameSnap} discharge the reader's read,
+\textbf{FLD} is \textsc{SyncStart}'s, \textbf{RINFL} ties the entries to the
+bounding set --- and a hazard-pointer system would need analogues of those or
+would do without the rules that use them.  And what carries over is the
+argument, not the implementation: hazard pointers must publish before
+dereferencing and re-validate after, which is a memory-ordering obligation this
+development does not model, being sequentially consistent.  The publication
+invariant is stated over the logical state, and is therefore exactly what a
+weak-memory account would have to earn.
 
 Progress deserves a word, because the obvious statement is not the right one.
 ``Some step is always possible'' is false and should be --- a state in which no
