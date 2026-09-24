@@ -17,7 +17,7 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
 23,100 lines and 1,116 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 316
+succeed if the development contains an admitted proof, or if any of its 328
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -1069,14 +1069,40 @@ consistent state whose heap is what has been written does.  Nineteen of the
 twenty conjuncts come free from the partition above; the twentieth is
 publication, and it comes from the semantics.
 
-Three things are still not proved and we would rather name them.  The bridge is
-restricted to write-once cells, which is the right fragment for publication and
-the wrong one for links -- what protects a reader holding a stale link is not
-the memory model but the grace period, which is proved elsewhere and
-sequentially, and joining the two needs the invariants carried along a pair of
-runs, which we have not built.  The semantics is over the heap only, so the
-registrations, which need synchronisation for the opposite reason, are stated
-and not carried.  And it is release-acquire and not weaker.
+The registrations are carried by the same three steps, a registration being a
+cell, and doing so corrected the guess we started with.  A stale generation read
+by a reader is safe: it registers at an earlier generation, so it looks older
+than it is and a grace period that need not have waited for it waits anyway.  A
+stale registration read by the writer is the hazard, and we give that run.  But
+reads only move forward -- coherence is built into the read step -- so a scan
+that keeps reading advances monotonically and all it needs is to reach the last
+message, which is the same fairness assumption we already reduce the wait's
+termination to.  Weak memory adds no new obligation to the grace period.
+
+Reclamation is where the memory model stops being the answer.  A view holds only
+what was written, and a thread that has caught up past the unlink cannot see the
+old link, so reclamation is safe exactly when every thread has caught up.  The
+witness is a reader holding a reference to a node nothing reachable points at
+any more, with both writes releasing -- the strongest thing the model has.  No
+synchronisation helps; only not reclaiming does.
+
+The write-once restriction is lifted, and how is the useful part.  We set out to
+show it was necessary by building a reader whose view had never been the heap,
+and every attempt failed at the same step: the acquire pulls the reader forward
+everywhere, not only at the cell it read.  Under RCU's actual discipline -- one
+writer, every write releasing, readers that only read -- a releasing write
+publishes the writer's whole knowledge, and with a single writer those
+publications are totally ordered, so every reader's view is one of the writer's
+past views.  The bridge then needs nothing about which cells are written twice;
+it assumes only that the states the writer passed through are well formed, which
+is what the rest of the development proves.  Two writers and the publications
+stop being a chain; one relaxed write and the reader acquires nothing -- both
+outside what ToRCUWrite permits, which is to say the type system is what
+enforces that theorem's hypothesis.
+
+What stands is that this is release-acquire and not weaker.  A claim about the
+Linux kernel memory model, where rcu_dereference rests on address dependencies
+rather than on acquire, would be a different piece of work.
 
 What we claim is narrower than "RCU is verified under weak memory" and, we
 think, more useful: the single invariant a weak memory model endangers is

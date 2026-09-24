@@ -95,7 +95,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 316 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 328 say \emph{closed under the
 global context}, and none reports an axiom.
 
 That target had the bug it exists to catch, and we report it because the
@@ -2589,16 +2589,50 @@ sequentially consistent state whose heap is what has been written does.
 Nineteen of the twenty conjuncts come free from the partition above; the
 twentieth is publication, and it comes from the semantics.
 
-Three things are still not proved, and we would rather name them than let the
-model stand in for them.  The bridge is restricted to write-once cells, which
-is the right fragment for publication and the wrong one for links --- and what
-protects a reader holding a stale link is not the memory model but the grace
-period, proved elsewhere and sequentially; joining the two needs the invariants
-carried along a \emph{pair} of runs, and that simulation is not built.  The
-semantics is over the heap only, so the registrations, which need
-synchronisation for the opposite reason, are stated and not carried.  And it is
-release-acquire and not weaker: every read acquires and every view only grows,
-so nothing here would survive a relaxed model unchanged.
+The registrations are carried by the same three steps, a registration being a
+cell, and doing so corrected the guess we started with.  A \emph{stale
+generation} read by a reader is safe --- it registers at an earlier generation,
+so it looks older than it is and a grace period that need not have waited for
+it waits anyway.  A \emph{stale registration} read by the writer is the hazard,
+and we give that run.  But reads only move forward, coherence being built into
+the read step, so a scan that keeps reading advances monotonically and all it
+needs is to reach the last message --- which is the same fairness assumption
+the sequentially consistent development already reduces the wait's
+\emph{termination} to.  Weak memory therefore adds no new obligation to the
+grace period: what makes \textsc{SyncStop} terminate makes it sound.
+
+Reclamation is where the memory model stops being the answer, and that is worth
+seeing rather than arguing.  A view holds only what was written, and a thread
+that has caught up past the unlink cannot see the old link, so reclamation is
+safe exactly when every thread has caught up.  The witness is a reader holding
+a reference to a node nothing reachable points at any more, with \emph{both}
+writes releasing --- the strongest thing the model has.  No synchronisation
+helps; only not reclaiming does.  That is the division of labour the whole
+development is about, in one run.
+
+The write-once restriction is lifted, and how that happened is the useful part.
+We set out to show it was necessary, by building a reader whose view had never
+been the heap.  Every attempt failed at the same step: the acquire pulls the
+reader forward \emph{everywhere}, not only at the cell it read.  Under RCU's
+actual discipline --- one writer, every write releasing, readers that only read
+--- a releasing write publishes the writer's whole knowledge, and with a single
+writer those publications are totally ordered, so \emph{every reader's view is
+one of the writer's past views}.  A reader is always looking at a heap the
+writer really had, and the bridge then needs nothing about which cells are
+written twice; it assumes only that the states the writer passed through are
+well formed, which is what the rest of this appendix proves.  The restriction
+was an artefact of proving the wrong thing.
+
+Two writers and the publications stop being a chain; one relaxed write and the
+reader acquires nothing.  Both are outside what \textsc{ToRCUWrite} permits,
+which is to say the type system is what enforces the hypothesis of that
+theorem.
+
+What stands is that this is release-acquire and not weaker.  Every read
+acquires and every view only grows, so there is nothing out of thin air to rule
+out, and nothing here would survive a relaxed model unchanged.  A claim about
+the Linux kernel memory model, where \texttt{rcu\_dereference} rests on address
+dependencies rather than on acquire, would be a different piece of work.
 
 What we claim is narrower than ``RCU is verified under weak memory'' and, we
 think, more useful: the single invariant a weak memory model endangers is

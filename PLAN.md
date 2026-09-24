@@ -433,19 +433,58 @@ publication, and `publication_holds` gets it from the semantics.
 **What is still not proved**, stated in the file rather than left as "future
 work":
 
-- `weak_run_is_sound` is restricted to write-once cells.  That is the right
-  fragment for publication and the wrong one for links — and the reason a link
-  needs no fragment is the grace period, which is proved elsewhere and
-  sequentially.  Joining the two needs the invariants carried along a *pair* of
-  runs, the weak one and the SC one it refines, and that simulation is not
-  built.
-- The semantics is over the heap only.  The registrations need synchronisation
-  for the opposite reason (`stale_registrations_are_unsafe`); the same three
-  steps would carry them, but the argument that the scan ending a grace period
-  must acquire each registration it reads is stated, not proved.
+- ~~`weak_run_is_sound` is restricted to write-once cells.~~ **Lifted.**  See
+  below.
+- ~~The semantics is over the heap only.~~ **Done.**  See below.
 - It is release-acquire and not weaker.  Every read acquires and every view
   only grows, so there is nothing out of thin air to rule out, and none of it
-  would survive a relaxed model unchanged.
+  would survive a relaxed model unchanged.  This one stands.
+
+### The three items, worked
+
+**(4) The registrations, done — and the guess was wrong in a useful way.**
+A registration is a cell, so the three steps already carry it.  What the
+section settles is which half does the work, and it is not the half the plan
+guessed.  A *stale generation* read by a reader is safe: it registers at an
+earlier generation, so it looks older than it is and a grace period that need
+not have waited for it waits anyway (`stale_generation_is_conservative`).  A
+*stale registration* read by the writer is the hazard, and
+`stale_scan_misses_the_reader` is that run.  But reads only move forward
+(`reads_only_move_forward` — coherence is built into the read step), so a
+scan that keeps reading advances monotonically, and all it needs is to reach
+the last message.  **That is the same fairness assumption the SC development
+already reduces the wait's termination to.**  So weak memory adds no new
+obligation to the grace period: the assumption that makes SyncStop terminate
+makes it sound.
+
+**(3) Reclamation, done — and it is the one place the memory model is not the
+answer.**  A view holds only what was written; a thread that has caught up past
+the unlink cannot see the old link; so reclamation is safe exactly when every
+thread has caught up past every unlink of the node
+(`reclamation_safe_when_caught_up`).  And the witness at the end,
+`the_grace_period_is_what_makes_this_safe`, is a reader holding a reference to
+a node nothing reachable points at any more — with *both* writes releasing,
+the strongest thing the model has.  No amount of synchronisation helps; only
+not reclaiming does.  That is the division of labour the whole development is
+about, in one run.
+
+**(2) The write-once restriction — lifted, not worked around.**  We set out to
+show the restriction was necessary by building a reader whose view was never
+the heap.  Every attempt failed at the same step: the acquire pulled the reader
+forward *everywhere*, not just at the cell it read.  The theorem is why.  Under
+RCU's actual discipline — one writer, every write releasing, readers that only
+read — a releasing write publishes the writer's whole knowledge, and with a
+single writer those publications are totally ordered, so
+`reader_views_are_past_writer_views`: **every reader's view is one of the
+writer's past views.**  A reader is therefore always looking at a heap the
+writer really had, and `weak_run_is_sound_under_the_discipline` needs nothing
+about which cells are written twice.  It assumes only that the states the
+writer passed through are well formed, which is what the SC development proves.
+
+The restriction was an artefact of proving the wrong thing.  Two writers and
+the publications stop being a chain; a relaxed write and the reader acquires
+nothing — and both are outside what ToRCUWrite permits, which is to say the
+type system is what enforces this theorem's hypothesis.
 
 The claim is narrower than "RCU is verified under weak memory" and more useful:
 the single invariant a weak memory model endangers is publication, publication

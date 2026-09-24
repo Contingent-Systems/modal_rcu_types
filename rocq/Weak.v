@@ -538,6 +538,9 @@ Inductive rastep : TID -> RAConf -> RAConf -> Prop :=
 Lemma vle_refl V : vle V V.
 Proof. intros o f. apply Nat.le_refl. Qed.
 
+Lemma vle_trans U V W : vle U V -> vle V W -> vle U W.
+Proof. intros H1 H2 o f. exact (Nat.le_trans _ _ _ (H1 o f) (H2 o f)). Qed.
+
 Lemma vle_bot V : vle bot V.
 Proof. intros o f. apply Nat.le_0_l. Qed.
 
@@ -815,9 +818,13 @@ Print Assumptions release_is_necessary.
     The last step is the one the earlier sections were owed: a theorem relating
     a run of this semantics to the invariants of the rest of the development.
 
-    It needs one restriction, and being exact about it is the point.  A
-    thread's view is a sub-heap of the *current* heap only where nothing has
-    been overwritten since the thread last looked.  For a cell written once ---
+    It needs one restriction.  That restriction is lifted further down, once
+    the *discipline* is in the picture rather than the bare semantics, and the
+    version below is superseded by
+    [weak_run_is_sound_under_the_discipline]; we keep it because the two
+    together say what the discipline is worth.  A thread's view is a sub-heap
+    of the *current* heap only where nothing has been overwritten since the
+    thread last looked.  For a cell written once ---
     a node's fields, which RCU writes while the node is \frsh{} and not after
     --- that holds, and it is exactly the class of cells publication is about.
     For a cell written twice --- a link, which is the operation --- it fails,
@@ -940,3 +947,468 @@ Print Assumptions weak_run_is_sound.
     and, we think, more useful: the single invariant a weak memory model
     endangers is publication, publication is what the releasing write buys, and
     the buying can be written down. *)
+
+(** * The registrations, in the same semantics
+
+    The heap is not the only shared state, and
+    [stale_registrations_are_unsafe] above shows the other kind needs
+    synchronisation for the opposite reason.  A registration is a cell like any
+    other, so the three steps already carry it: the generation counter lives at
+    one cell, each thread's registration at another, a reader publishes its
+    registration with a releasing write, and the writer's scan reads them with
+    acquiring reads.
+
+    What this section settles is which half of that is doing the work.  The
+    answer is not the half we expected when we wrote the guess above, and it is
+    worth stating because it makes the remaining obligation smaller rather than
+    larger. *)
+
+(** Counters live in cells, encoded as locations because that is what a cell
+    holds. *)
+Definition ctr (c : RAConf) (t : TID) (o : Loc) (f : FName) : nat :=
+  match seen c t o f with Some (VLoc k) => k | _ => 0 end.
+
+(** The two cells the protocol uses.  Which they are does not matter; that they
+    are ordinary cells is the point. *)
+Definition gcell : Loc * FName := (100%nat, 0%nat).
+Definition rcell (t : TID) : Loc * FName := (200%nat + t, 0%nat)%nat.
+
+(** A grace period for epoch [e] must wait for a reader that registered at or
+    before [e] and has not left.  This is the published model's bounding set,
+    read off the counters. *)
+Definition overlaps (c : RAConf) (w t : TID) (e : nat) : Prop :=
+  ctr c w (rcell t).1 (rcell t).2 <= e.
+
+(** ** A stale generation read is safe
+
+    A reader reads the generation and registers at what it read.  Under a weak
+    model it may read a stale generation, and the question is which way that
+    errs.  It errs safe: a smaller generation is an *earlier* registration, so
+    the reader looks older than it is and a grace period that need not have
+    waited for it waits anyway.
+
+    This is the first half of the obligation, and it is discharged by the
+    direction of the staleness rather than by any ordering. *)
+Theorem stale_generation_is_conservative (gseen gtrue e : nat) :
+  gseen <= gtrue -> gtrue <= e -> gseen <= e.
+Proof. intros Hle Htrue. exact (Nat.le_trans _ _ _ Hle Htrue). Qed.
+
+Print Assumptions stale_generation_is_conservative.
+
+(** ** A stale registration read is not
+
+    The other direction is the hazard, and it is the operational form of
+    [stale_registrations_are_unsafe].  The reader registers; the writer's view
+    of that cell is still at the message before, which says the reader was not
+    there; the writer concludes the grace period is over.
+
+    The run below is a run of the semantics.  Nothing in the memory model
+    forbids it. *)
+Definition reg_run : RAConf :=
+  (* the reader registers at generation 0 *)
+  step_w ra0 1%nat (rcell 1%nat).1 (rcell 1%nat).2 (VLoc 0%nat) true.
+
+Theorem stale_scan_misses_the_reader :
+  (* it is a run *)
+  rtc rastep_any ra0 reg_run
+  (* the reader has registered at generation 0, which a grace period for 0
+     must wait for *)
+  /\ ctr reg_run 1%nat (rcell 1%nat).1 (rcell 1%nat).2 = 0%nat
+  (* and the writer, which has not caught up, sees the cell as it was *)
+  /\ seen reg_run 0%nat (rcell 1%nat).1 (rcell 1%nat).2 = Some VNull.
+Proof.
+  repeat apply conj.
+  - eapply rtc_l with (y := reg_run); [| apply rtc_refl].
+    exists 1%nat. unfold reg_run. apply step_w_step.
+  - reflexivity.
+  - reflexivity.
+Qed.
+
+Print Assumptions stale_scan_misses_the_reader.
+
+(** ** So the scan has to catch up, and catching up is the assumption we
+       already had
+
+    The writer's position at a cell only ever moves forward --- that is
+    coherence, and it is built into the read step, which requires the new
+    timestamp to be at or after the old.  So a scan that keeps reading has a
+    monotonically advancing position at each registration cell, and the only
+    thing it needs is to reach the last message.
+
+    That is exactly the fairness assumption the sequentially consistent
+    development already reduces the *termination* of the wait to.  So weak
+    memory adds no new obligation here: the same assumption that makes
+    \textsc{SyncStop} terminate makes it sound.  That is the useful outcome of
+    this section, and it is why the earlier guess --- that the registrations
+    would need a synchronisation argument of their own --- was wrong in an
+    informative way. *)
+Theorem reads_only_move_forward t c c' o f :
+  ra_ok c -> rastep t c c' -> ra_v c t o f <= ra_v c' t o f.
+Proof.
+  intros (Hv & _ & _ & _) Hst. destruct Hst; cbn [ra_v]; unfold upd_v;
+    destruct (Nat.eq_dec t t) as [_ | Hne]; try (by destruct Hne).
+  - unfold set_at. case_decide as He;
+      [injection He as -> ->;
+       exact (Nat.le_trans _ _ _ (Hv t o0 f0) (Nat.le_succ_diag_r _))
+      | apply Nat.le_refl].
+  - unfold after_read. case_decide as He;
+      [injection He as -> ->; exact H | apply Nat.le_max_l].
+Qed.
+
+Print Assumptions reads_only_move_forward.
+
+(** And the scan is sound once it has caught up: if the writer's position at a
+    registration cell is the last message, what it reads is what is there. *)
+Theorem scan_is_sound_when_current c w t :
+  ra_v c w (rcell t).1 (rcell t).2 = ra_c c (rcell t).1 (rcell t).2 ->
+  seen c w (rcell t).1 (rcell t).2 = ra_now c (rcell t).1 (rcell t).2.
+Proof. intros Hcur. unfold seen, ra_now. by rewrite Hcur. Qed.
+
+Print Assumptions scan_is_sound_when_current.
+
+(** * Reclamation, and the one place weak memory is not the problem
+
+    The memory-safety property is about references held, not about a node's
+    own cells: reclaiming [n] is safe when no thread's view contains a link to
+    [n].  So the question this semantics has to answer is what it takes for
+    that to be true, and the answer separates cleanly into a part the memory
+    model supplies and a part it cannot.
+
+    What it supplies: a view contains only values that were written, and a
+    thread that has caught up past the unlink does not see the link the unlink
+    replaced.  Both are below and both are small.
+
+    What it cannot: a thread that has *not* caught up does see the old link,
+    and no amount of synchronisation changes that --- the value was really
+    written and the thread really read it.  That is not a defect of the model.
+    It is the situation RCU exists for, and the thing that makes it safe is
+    that reclamation waits.  The witness at the end is that state, and it is
+    worth having because it is the one place in this file where the answer to
+    "what does the release buy" is "nothing, and it should not". *)
+
+(** A view holds only what was written. *)
+Theorem views_hold_only_written c t o f v :
+  ra_ok c -> seen c t o f = Some v ->
+  exists k, k <= ra_c c o f /\ ra_h c o f k = Some v.
+Proof.
+  intros (Hv & _ & _ & _) Hs. exists (ra_v c t o f). split; [apply Hv | exact Hs].
+Qed.
+
+(** No message at or after [k] links [o.f] to [n]: the unlink happened at [k]
+    and has not been undone. *)
+Definition unlinked_since (c : RAConf) (o : Loc) (f : FName) (n : Loc)
+    (k : nat) : Prop :=
+  forall j, k <= j -> j <= ra_c c o f -> ra_h c o f j <> Some (VLoc n).
+
+(** A thread that has caught up past the unlink cannot see the old link. *)
+Theorem caught_up_sees_no_stale_link c t o f n k :
+  ra_ok c -> unlinked_since c o f n k -> k <= ra_v c t o f ->
+  seen c t o f <> Some (VLoc n).
+Proof.
+  intros (Hv & _ & _ & _) Hun Hk. unfold seen. apply Hun; [exact Hk | apply Hv].
+Qed.
+
+Definition NoLinkTo (c : RAConf) (n : Loc) : Prop :=
+  forall t o f, seen c t o f <> Some (VLoc n).
+
+(** And so reclamation is safe exactly when every thread has caught up past
+    every unlink of the node.  This is the weak-memory form of what the grace
+    period is for, and the quantifier over threads is where the waiting lives. *)
+Theorem reclamation_safe_when_caught_up c n (K : Loc -> FName -> nat) :
+  ra_ok c ->
+  (forall o f, unlinked_since c o f n (K o f)) ->
+  (forall t o f, K o f <= ra_v c t o f) ->
+  NoLinkTo c n.
+Proof.
+  intros Hok Hun Hcaught t o f.
+  exact (caught_up_sees_no_stale_link c t o f n (K o f) Hok (Hun o f)
+           (Hcaught t o f)).
+Qed.
+
+Print Assumptions views_hold_only_written.
+Print Assumptions caught_up_sees_no_stale_link.
+Print Assumptions reclamation_safe_when_caught_up.
+
+(** ** The witness: a stale reader really does hold the old link
+
+    The writer links 5 at 3.0 and then replaces it with 6, both with releasing
+    writes --- the strongest thing the model has.  A reader that read the cell
+    before the replacement holds a reference to 5, and 5 is now unreachable
+    from the current heap.  Reclaiming it at this point would be unsafe, and
+    nothing about the memory model says so.
+
+    That is the division of labour the whole development is about, made
+    visible in one run: publication is bought with a release, and reclamation
+    is bought by waiting. *)
+Definition unlink_run : RAConf :=
+  step_w (step_w ra0 0%nat 3%nat 0%nat (VLoc 5%nat) true)
+         0%nat 3%nat 0%nat (VLoc 6%nat) true.
+
+Definition stale_reader : RAConf := step_r unlink_run 1%nat 3%nat 0%nat 1.
+
+Theorem the_grace_period_is_what_makes_this_safe :
+  (* it is a run *)
+  rtc rastep_any ra0 stale_reader
+  (* the current heap has the new link *)
+  /\ ra_now stale_reader 3%nat 0%nat = Some (VLoc 6%nat)
+  (* and the reader is holding the old one *)
+  /\ seen stale_reader 1%nat 3%nat 0%nat = Some (VLoc 5%nat)
+  (* so node 5 is referenced by a thread although nothing reachable points at
+     it, which is precisely the state reclamation must not act on *)
+  /\ ~ NoLinkTo stale_reader 5%nat.
+Proof.
+  repeat apply conj.
+  - eapply rtc_l with (y := step_w ra0 0%nat 3%nat 0%nat (VLoc 5%nat) true);
+      [exists 0%nat; apply step_w_step |].
+    eapply rtc_l with (y := unlink_run);
+      [exists 0%nat; unfold unlink_run; apply step_w_step |].
+    eapply rtc_l with (y := stale_reader); [| apply rtc_refl].
+    exists 1%nat. unfold stale_reader.
+    apply (step_r_step 1%nat unlink_run 3%nat 0%nat 1 (VLoc 5%nat));
+      [apply Nat.le_0_l | apply Nat.le_succ_diag_r | reflexivity].
+  - reflexivity.
+  - reflexivity.
+  - intros H. exact (H 1%nat 3%nat 0%nat eq_refl).
+Qed.
+
+Print Assumptions the_grace_period_is_what_makes_this_safe.
+
+
+(** * The discipline, and what it buys
+
+    [weak_run_is_sound] is restricted to write-once cells, and the obvious next
+    move is to lift the restriction by finding a run whose reader holds a view
+    that was never the heap.  We tried, and it cannot be done --- which is the
+    better outcome, and this section is why.
+
+    A view selects, per cell, one of the values that cell has held, and nothing
+    in the semantics makes that selection coherent across cells.  But the
+    semantics is not what RCU runs under.  RCU runs under a discipline: one
+    writer at a time, holding the lock; every link it writes published with a
+    releasing write; readers that only read, and acquire when they do.  Under
+    that discipline a releasing write publishes the writer's *whole* knowledge,
+    so a reader acquiring any message becomes current on everything the writer
+    knew at that moment --- and since there is only one writer, those moments
+    are totally ordered.
+
+    The consequence is the theorem below: **every reader's view is one of the
+    writer's past views**.  A reader is therefore always looking at a heap the
+    writer really had, not at a mixture, and every invariant transfers with no
+    restriction on which cells are written twice.
+
+    That is what lets the bridge be stated properly.  The write-once
+    restriction was an artefact of proving the wrong thing. *)
+
+Definition veq (V W : View) : Prop := forall o f, V o f = W o f.
+
+(** The discipline as a step relation: writes are the writer's and release,
+    reads are the readers' and acquire. *)
+Inductive dstep (w : TID) : RAConf -> RAConf -> Prop :=
+| D_write o f v c :
+    dstep w c
+      (MkRA (write (ra_h c) o f (S (ra_c c o f)) v)
+            (set_at (ra_c c) o f (S (ra_c c o f)))
+            (upd_v (ra_v c) w (set_at (ra_v c w) o f (S (ra_c c o f))))
+            (upd_m (ra_relm c) o f (S (ra_c c o f))
+               (set_at (ra_v c w) o f (S (ra_c c o f)))))
+| D_read t o f k v c :
+    t <> w ->
+    ra_v c t o f <= k -> k <= ra_c c o f -> ra_h c o f k = Some v ->
+    dstep w c
+      (MkRA (ra_h c) (ra_c c)
+            (upd_v (ra_v c) t
+               (after_read (ra_v c t) (ra_relm c o f k) o f k))
+            (ra_relm c)).
+
+Lemma dstep_rastep w c c' : dstep w c c' -> exists t, rastep t c c'.
+Proof.
+  intros [o f v c0 | t o f k v c0 Hne Hle Hk Hh].
+  - exists w. exact (RA_write w o f v true c0).
+  - exists t. exact (RA_read t o f k v c0 Hle Hk Hh).
+Qed.
+
+Definition dstep_any (w : TID) (c c' : RAConf) : Prop := dstep w c c'.
+
+(** The invariant.  Four clauses, and each is a sentence about the discipline:
+    every published view is one the writer has already reached; the published
+    views are totally ordered, there being one writer; a published view is at
+    its own message; and every reader is at one of them. *)
+Definition Disc (w : TID) (c : RAConf) : Prop :=
+  (forall o f k, vle (ra_relm c o f k) (ra_v c w))
+  /\ (forall o f k o' f' k', vle (ra_relm c o f k) (ra_relm c o' f' k')
+                          \/ vle (ra_relm c o' f' k') (ra_relm c o f k))
+  /\ (forall o f k, k <= ra_c c o f -> ra_relm c o f k o f = k)
+  /\ (forall t, t <> w ->
+        exists o f k, k <= ra_c c o f /\ veq (ra_v c t) (ra_relm c o f k)).
+
+Lemma ra0_disc w : Disc w ra0.
+Proof.
+  repeat apply conj.
+  - intros o f k. apply vle_refl.
+  - intros o f k o' f' k'. left. apply vle_refl.
+  - intros o f k Hk. cbn in Hk |- *. by apply Nat.le_0_r in Hk.
+  - intros t _. exists 0%nat, 0%nat, 0%nat.
+    split; [apply Nat.le_refl | intros o f; reflexivity].
+Qed.
+
+Theorem dstep_disc w c c' :
+  dstep w c c' -> ra_ok c -> Disc w c -> Disc w c'.
+Proof.
+  intros Hst (Hv & Hm & Hself & Hzero) (D1 & D2 & D3 & D4). destruct Hst.
+  - (* the writer publishes *)
+    set (k := S (ra_c c o f)). set (V' := set_at (ra_v c w) o f k).
+    assert (HwV : vle (ra_v c w) V').
+    { apply vle_set_r; [apply vle_refl |].
+      exact (Nat.le_trans _ _ _ (Hv w o f) (Nat.le_succ_diag_r _)). }
+    assert (Hall : forall q g j, vle (upd_m (ra_relm c) o f k V' q g j) V').
+    { intros q g j. unfold upd_m. case_decide as He; [apply vle_refl |].
+      exact (vle_trans _ _ _ (D1 q g j) HwV). }
+    assert (Hgrow : forall q g, ra_c c q g <= set_at (ra_c c) o f k q g).
+    { intros q g. unfold set_at. case_decide as He;
+        [injection He as -> ->; apply Nat.le_succ_diag_r | apply Nat.le_refl]. }
+    repeat apply conj; cbn [ra_v ra_relm ra_c].
+    + intros q g j. unfold upd_v.
+      destruct (Nat.eq_dec w w) as [_ | Hc]; [| by destruct Hc].
+      exact (Hall q g j).
+    + intros q g j q' g' j'. unfold upd_m. case_decide as He1; case_decide as He2.
+      * left. apply vle_refl.
+      * right. exact (vle_trans _ _ _ (D1 q' g' j') HwV).
+      * left. exact (vle_trans _ _ _ (D1 q g j) HwV).
+      * exact (D2 q g j q' g' j').
+    + intros q g j Hj. unfold upd_m. case_decide as He.
+      * injection He as -> -> ->. unfold V'. apply set_at_here.
+      * apply D3. unfold set_at in Hj. case_decide as He2; [| exact Hj].
+        injection He2 as -> ->.
+        assert (Hlt : j < k).
+        { destruct (Nat.lt_ge_cases j k) as [Hl | Hg]; [exact Hl |].
+          exfalso. apply He. by rewrite (Nat.le_antisymm j k Hj Hg). }
+        exact (proj1 (Nat.lt_succ_r j (ra_c c o f)) Hlt).
+    + intros t Hne. unfold upd_v.
+      destruct (Nat.eq_dec t w) as [-> | _]; [by destruct (Hne eq_refl) |].
+      destruct (D4 t Hne) as [q [g [j [Hj Heq]]]].
+      exists q, g, j.
+      assert (Hne' : (q, g, j) <> (o, f, k)).
+      { intros He. injection He as -> -> ->. unfold k in Hj.
+        exact (Nat.nle_succ_diag_l _ Hj). }
+      split; [exact (Nat.le_trans _ _ _ Hj (Hgrow q g)) |].
+      intros a b0. rewrite (Heq a b0). unfold upd_m.
+      by rewrite decide_False.
+  - (* a reader acquires *)
+    repeat apply conj; cbn [ra_v ra_relm ra_c]; [| exact D2 | exact D3 |].
+    + intros q g j. unfold upd_v.
+      destruct (Nat.eq_dec w t) as [-> | _]; [by destruct (H eq_refl) |].
+      exact (D1 q g j).
+    + intros t' Hne'. unfold upd_v.
+      destruct (Nat.eq_dec t' t) as [-> | Hne2]; [| exact (D4 t' Hne')].
+      destruct (D4 t H) as [q [g [j [Hj Heq]]]].
+      destruct (D2 o f k q g j) as [Hle | Hle].
+      * (* the reader was already at least as late as the message *)
+        exists q, g, j. split; [exact Hj |].
+        intros a b0. unfold after_read. case_decide as He.
+        -- injection He as -> ->. rewrite <- (Heq o f).
+           apply Nat.le_antisymm; [| exact H0].
+           rewrite <- (D3 o f k H1). rewrite (Heq o f). exact (Hle o f).
+        -- rewrite <- (Heq a b0). apply Nat.max_l.
+           rewrite (Heq a b0). exact (Hle a b0).
+      * (* the message is at least as late as where the reader was *)
+        exists o, f, k. split; [exact H1 |].
+        intros a b0. unfold after_read. case_decide as He.
+        -- injection He as -> ->. by rewrite (D3 o f k H1).
+        -- apply Nat.max_r. rewrite (Heq a b0). exact (Hle a b0).
+Qed.
+
+Print Assumptions dstep_disc.
+
+Lemma drun_disc w c c' :
+  rtc (dstep w) c c' -> ra_ok c -> Disc w c -> ra_ok c' /\ Disc w c'.
+Proof.
+  induction 1 as [| a b0 d Hab Hbd IH]; intros Hok Hd; [by split |].
+  destruct (dstep_rastep w a b0 Hab) as [t Ht].
+  exact (IH (rastep_ok t a b0 Ht Hok) (dstep_disc w a b0 Hab Hok Hd)).
+Qed.
+
+(** The heap a view is looking at. *)
+Definition heap_at (c : RAConf) (V : View) : Heap :=
+  fun o f => ra_h c o f (V o f).
+
+(** The theorem: under the discipline, a reader is always looking at a heap the
+    writer really had. *)
+Theorem reader_views_are_past_writer_views w c t :
+  rtc (dstep w) ra0 c -> t <> w ->
+  exists o f k, k <= ra_c c o f
+             /\ forall q g, ra_heap c t q g = heap_at c (ra_relm c o f k) q g.
+Proof.
+  intros Hrun Hne.
+  destruct (drun_disc w ra0 c Hrun ra0_ok (ra0_disc w)) as [Hok Hd].
+  destruct Hd as (_ & _ & _ & D4).
+  destruct (D4 t Hne) as [o [f [k [Hk Heq]]]].
+  exists o, f, k. split; [exact Hk |].
+  intros q g. unfold ra_heap, seen, heap_at. by rewrite (Heq q g).
+Qed.
+
+Print Assumptions reader_views_are_past_writer_views.
+
+(** Well-formedness does not distinguish pointwise-equal heaps.  Stated rather
+    than obtained by extensionality, which this development does not assume. *)
+Lemma wf_veq FType s h1 h2 :
+  (forall o f, h1 o f = h2 o f) ->
+  WellFormed FType (swap_hp s h2) -> WellFormed FType (swap_hp s h1).
+Proof.
+  intros Heq Hwf.
+  assert (Hok : w_ok (MkW (swap_hp s h2) (fun _ => h1)))
+    by (intros t' o f v Hv; cbn [w_view w_base]; by rewrite <- Heq).
+  assert (Hpub : Published (MkW (swap_hp s h2) (fun _ => h1))).
+  { intros t' o f o' He Hnd.
+    pose proof Hwf as Hwf2.
+    destruct Hwf2 as (_ & _ & _ & _ & _ & _ & _ & _ & _ & _ & _ & _ & _ & _
+                      & HD & _).
+    destruct (HD o f o') as [g [v Hv]].
+    - unfold Edge in He |- *. cbn in He |- *. by rewrite <- Heq.
+    - exact Hnd.
+    - exists g, v. cbn in Hv |- *. by rewrite Heq. }
+  exact (views_are_well_formed FType (MkW (swap_hp s h2) (fun _ => h1))
+           Hok Hpub Hwf 0%nat).
+Qed.
+
+Print Assumptions wf_veq.
+
+(** And the bridge, without the write-once restriction.  What has to be assumed
+    is that the states the writer passed through are well formed --- which is
+    the sequentially consistent development's business and is what it proves.
+    What is *not* assumed is anything about views. *)
+Theorem weak_run_is_sound_under_the_discipline FType w (s : LState) c t :
+  rtc (dstep w) ra0 c -> t <> w ->
+  (forall o f k, k <= ra_c c o f ->
+     WellFormed FType (swap_hp s (heap_at c (ra_relm c o f k)))) ->
+  WellFormed FType (swap_hp s (ra_heap c t)).
+Proof.
+  intros Hrun Hne Hpast.
+  destruct (reader_views_are_past_writer_views w c t Hrun Hne)
+    as [o [f [k [Hk Heq]]]].
+  exact (wf_veq FType s (ra_heap c t) (heap_at c (ra_relm c o f k)) Heq
+           (Hpast o f k Hk)).
+Qed.
+
+Print Assumptions weak_run_is_sound_under_the_discipline.
+
+(** ** What this replaced
+
+    The earlier bridge asked that no cell be written twice, and said what it
+    could about a fragment.  This one asks nothing about cells at all.  The
+    difference is not a better proof of the same thing; it is a different
+    hypothesis, and the reason the better one is available is that RCU's
+    discipline is stronger than the memory model.  A releasing write publishes
+    the writer's whole knowledge, and with a single writer those publications
+    are totally ordered, so a reader that acquires any of them lands on one of
+    them rather than on a mixture.
+
+    That also explains the counterexample we could not build.  We set out to
+    show a reader holding a view that was never the heap, and every attempt
+    failed at the same step: the acquire pulled the reader forward everywhere,
+    not just at the cell it read.  The theorem is why.
+
+    It is worth being clear about what it does not extend to.  Two writers, and
+    the publications are no longer a chain; a relaxed write, and the reader
+    acquires nothing.  Both are outside the discipline, and both are outside
+    what \textsc{ToRCUWrite} permits --- which is the point.  The type system
+    is what enforces the hypothesis of this theorem. *)
