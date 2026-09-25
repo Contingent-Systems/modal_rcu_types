@@ -95,7 +95,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 331 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 338 say \emph{closed under the
 global context}, and none reports an axiom.
 
 That target had the bug it exists to catch, and we report it because the
@@ -2676,6 +2676,35 @@ What we claim is narrower than ``RCU is verified under weak memory'' and, we
 think, more useful: the single invariant a weak memory model endangers is
 publication, publication is what the releasing write buys, and the buying can
 be written down.
+
+\paragraph{Programs, at last.}
+Everything above relates \emph{states}.  \S\ref{sec:inv-mech}'s relation is
+over \textsf{LState}, the fifteen action theorems are about one state and the
+next, and the safety theorem says ``any state reachable by these steps''.  That
+is weaker than it sounds: there is no command language anywhere in the
+development, no thread pool, and no configurations, so there is no way to
+quantify over the runs of a \emph{program}.
+
+\texttt{rocq/Programs.v} supplies them: a command language whose primitives are
+the fifteen actions, with the two block forms derived rather than primitive, as
+the desugaring says they are; a thread pool; configurations; a thread-local step
+relation and its lift to an interleaving.  The theorem is the one the earlier
+files could not state --- at no point in any interleaving of any program, from
+any well-formed start, does a thread other than the writer hold a live
+reference to a node the writer is about to reclaim.  Typing is structural, with
+the action case a parameter whose hypothesis is exactly axiom soundness, so the
+file does not re-prove the type system but says what its per-action results add
+up to once there are programs; subject reduction holds.
+
+Two abstractions are stated rather than hidden.  Conditions are abstracted, a
+conditional stepping to either branch: there is no expression language here,
+and for safety taking either branch quantifies over \emph{more} runs than a
+real condition would allow.  And the action's effect is a parameter required
+only to be a step of \S\ref{sec:inv-mech}'s relation, which is what lets the
+file be about programs without re-encoding fifteen actions' side conditions.
+One thing it does not claim is pool-level preservation of typing: one thread's
+step changes shared state, and what says the others' environments survive it is
+the framing property, which is where it already was.
 
 \paragraph{What is left, and it is three things.}
 The third of them used to be ``axiom soundness proper'' and is no longer: all

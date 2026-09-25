@@ -17,7 +17,7 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
 23,100 lines and 1,116 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 331
+succeed if the development contains an admitted proof, or if any of its 338
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -941,6 +941,32 @@ What we do not claim is that these are the only steps, or that a scheduler
 exists producing any particular interleaving.  The relation says what may
 happen, not what does; progress and fairness are the same open questions they
 were.
+
+One more thing, and it is the one that changes what the other results mean.
+Everything described so far relates states: our step relation is over logical
+states, the fifteen action theorems are about one state and the next, and the
+safety theorem says "any state reachable by these steps".  There was no command
+language in the development, no thread pool and no configurations, so there was
+no way to quantify over the runs of a program.  We have now added them -- a
+command language whose primitives are the fifteen actions, with the two block
+forms derived rather than primitive as the desugaring says they are, a thread
+pool, configurations, and a thread-local step relation lifted to an
+interleaving -- and with them the statement we could not previously make: at no
+point in any interleaving of any program, from any well-formed start, does a
+thread other than the writer hold a live reference to a node the writer is about
+to reclaim.  Typing is structural, with the action case a parameter whose
+hypothesis is exactly axiom soundness, so this does not re-prove the type system
+but says what its per-action results add up to once there are programs; subject
+reduction holds.
+
+Two abstractions we state rather than hide.  Conditions are abstracted, a
+conditional stepping to either branch: there is no expression language there,
+and for safety taking either branch quantifies over more runs than a real
+condition would.  And the action's effect is a parameter required only to be a
+step of the relation, which is what lets that file be about programs without
+re-encoding fifteen actions' side conditions.  We do not claim pool-level
+preservation of typing: one thread's step changes shared state, and what says
+the others' environments survive it is the framing property.
 
 What is left is three things, and we would rather name them than let the
 invariant work stand in for them.  The third used to be "axiom soundness

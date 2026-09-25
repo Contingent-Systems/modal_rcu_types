@@ -1686,3 +1686,129 @@ Proof.
 Qed.
 
 Print Assumptions dependency_ordering_loses_the_whole_view.
+
+(** * W4: what a reader holds was real
+
+    The bridge from a run to the invariants was stated whole-state, and W2
+    showed that cannot survive dependency ordering: a reader's view is a
+    genuine mixture.  The replacement is the one identified and avoided
+    earlier --- tag each message with the logical state it was written in.  A
+    reader is then not looking at *a* state, but every edge it holds was an
+    edge of one, and every such state was well formed.
+
+    That is weaker than "the view is well formed" and is the right weakening:
+    what a thread does with an edge is follow it, and following it is a
+    per-edge act. *)
+
+Definition upd_st (R : Loc -> FName -> nat -> LState)
+    (o : Loc) (f : FName) (k : nat) (S : LState)
+  : Loc -> FName -> nat -> LState :=
+  fun q g j => if decide ((q, g, j) = (o, f, k)) then S else R q g j.
+
+Record SConf := MkS {
+  s_ra  : RAConf;                          (** the weak state *)
+  s_now : LState;                          (** the logical state now *)
+  s_at  : Loc -> FName -> nat -> LState;   (** and when each message was written *)
+}.
+
+Section tagged.
+  Variable FType : FName -> FieldKind.
+
+  Inductive sstep : TID -> SConf -> SConf -> Prop :=
+  (** A write.  The logical state takes the corresponding step, and the message
+      records it.  The second premise is the link between the two halves: the
+      message's value is what the logical write put there. *)
+  | S_write t o f v (b : bool) sc s' :
+      lstep FType (s_now sc) s' ->
+      hp (ms s') o f = Some v ->
+      sstep t sc
+        (MkS (step_w (s_ra sc) t o f v b) s'
+             (upd_st (s_at sc) o f (S (ra_c (s_ra sc) o f)) s'))
+  (** A dependency-ordered read changes no logical state. *)
+  | S_read t o f k n sc :
+      ra_v (s_ra sc) t o f <= k -> k <= ra_c (s_ra sc) o f ->
+      ra_h (s_ra sc) o f k = Some (VLoc n) ->
+      sstep t sc
+        (MkS (kstep_d (s_ra sc) t o f k n) (s_now sc) (s_at sc)).
+
+  (** Three clauses: the state now is well formed, every recorded state was,
+      and every message holds what its recorded state's heap holds. *)
+  Definition SInv (sc : SConf) : Prop :=
+    WellFormed FType (s_now sc)
+    /\ (forall o f k, k <= ra_c (s_ra sc) o f -> WellFormed FType (s_at sc o f k))
+    /\ (forall o f k, k <= ra_c (s_ra sc) o f ->
+          ra_h (s_ra sc) o f k = hp (ms (s_at sc o f k)) o f).
+
+  Theorem sstep_inv t sc sc' : sstep t sc sc' -> SInv sc -> SInv sc'.
+  Proof.
+    intros Hst (Hnow & Hpast & Hval). destruct Hst; unfold SInv;
+      cbn [s_ra s_now s_at].
+    - (* a write *)
+      unfold step_w; cbn [ra_h ra_c ra_v ra_relm].
+      assert (Hwf' : WellFormed FType s')
+        by exact (lstep_preserves FType (s_now sc) s' H Hnow).
+      set (k := S (ra_c (s_ra sc) o f)).
+      assert (Hidx : forall q g j,
+                j <= set_at (ra_c (s_ra sc)) o f k q g ->
+                (q, g, j) <> (o, f, k) -> j <= ra_c (s_ra sc) q g).
+      { intros q g j Hj He. unfold set_at in Hj.
+        destruct (decide ((q, g) = (o, f))) as [He2 | He2]; [| exact Hj].
+        injection He2 as -> ->.
+        assert (Hlt : j < k).
+        { destruct (Nat.lt_ge_cases j k) as [Hl | Hg];
+            [exact Hl | exfalso; apply He;
+             by rewrite (Nat.le_antisymm _ _ Hj Hg)]. }
+        exact (proj1 (Nat.lt_succ_r j (ra_c (s_ra sc) o f)) Hlt). }
+      split; [exact Hwf' |]. split.
+      + intros q g j Hj. unfold upd_st.
+        destruct (decide ((q, g, j) = (o, f, k))) as [He | He];
+          [exact Hwf' | exact (Hpast q g j (Hidx q g j Hj He))].
+      + intros q g j Hj. unfold upd_st, write.
+        destruct (decide ((q, g, j) = (o, f, k))) as [He | He].
+        * injection He as -> -> ->. exact (eq_sym H0).
+        * exact (Hval q g j (Hidx q g j Hj He)).
+    - (* a read changes nothing recorded *)
+      split; [exact Hnow |]. split; [exact Hpast | exact Hval].
+  Qed.
+
+  Definition sstep_any (sc sc' : SConf) : Prop := exists t, sstep t sc sc'.
+
+  Theorem srun_inv sc sc' : rtc sstep_any sc sc' -> SInv sc -> SInv sc'.
+  Proof.
+    induction 1 as [| a b d [t Hab] Hbd IH]; intros Hinv; [exact Hinv |].
+    exact (IH (sstep_inv t a b Hab Hinv)).
+  Qed.
+
+  (** And the replacement for the whole-state bridge.  Every edge a thread can
+      see was an edge of a well-formed state --- the state the writer was in
+      when it wrote that very message. *)
+  Theorem every_edge_was_real sc t o f n :
+    SInv sc -> ra_v (s_ra sc) t o f <= ra_c (s_ra sc) o f ->
+    seen (s_ra sc) t o f = Some (VLoc n) ->
+    WellFormed FType (s_at sc o f (ra_v (s_ra sc) t o f))
+    /\ Edge (s_at sc o f (ra_v (s_ra sc) t o f)) o f n.
+  Proof.
+    intros (_ & Hpast & Hval) Hle Hsee. split; [exact (Hpast o f _ Hle) |].
+    unfold Edge. rewrite <- (Hval o f _ Hle). exact Hsee.
+  Qed.
+
+End tagged.
+
+Print Assumptions sstep_inv.
+Print Assumptions srun_inv.
+Print Assumptions every_edge_was_real.
+
+(** What that buys, and what it does not.  It buys the per-edge statement the
+    type system's traversals actually use: the node at the end of an edge a
+    reader holds really was at the end of that edge, in a state satisfying all
+    twenty invariants.  Properties of the target that are stable forward in
+    time --- not being \frsh{}, for one, since a node stops being fresh when it
+    is published and does not go back --- therefore still hold when the reader
+    gets there.
+
+    It does not buy the one property that is *not* stable forward, which is not
+    having been reclaimed.  Nothing about memory ordering could: the value was
+    really written and the thread really read it.  That is the grace period's
+    job, it is proved sequentially, and
+    [the_grace_period_is_what_makes_this_safe] above is the run that shows the
+    two halves are genuinely different obligations. *)

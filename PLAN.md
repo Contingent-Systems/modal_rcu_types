@@ -610,6 +610,22 @@ needs that are *stable forward in time* then transfer; the one that is not is
 
 *Effort* the largest item after W5.  *Risk* medium.
 
+**Done.**  `SConf` carries the weak state, the logical state now, and the state
+each message was written in; `sstep` writes both halves at once, with the link
+between them as a premise — the message's value is what the logical write put
+there.  `SInv` has three clauses and `sstep_inv` preserves them.
+`every_edge_was_real`: every edge a thread can see was an edge of a well-formed
+state, the one the writer was in when it wrote that very message.
+
+That is weaker than "the view is well formed" and is the right weakening: what
+a thread does with an edge is follow it, and following it is a per-edge act.
+Properties of the target stable forward in time — not being `fresh`, since a
+node stops being fresh when published and does not go back — therefore still
+hold when the reader gets there.  The one property that is *not* stable forward
+is not having been reclaimed, and nothing about memory ordering could give it:
+the value really was written and the thread really read it.  That is the grace
+period's job.
+
 ### W5. A program semantics
 
 **The prerequisite everything has been borrowing against.**  There is no
@@ -624,6 +640,33 @@ Tasks: commands, a thread pool, configurations, a typing judgement; lift
 `lstep` to configurations; restate progress per thread.
 
 *Effort* weeks.  *Risk* medium-high, and it touches everything.
+
+**Done.**  `rocq/Programs.v`.  A command language whose primitives are the
+fifteen actions, with the two block forms *derived* rather than primitive —
+which is what the desugaring in the paper says they are.  A thread pool,
+configurations, a thread-local step relation and its lift to an interleaving.
+`programs_are_memory_safe`: at no point in any interleaving of any program,
+from any well-formed start, does a thread other than the writer hold a live
+reference to a node the writer is about to reclaim.  That is the statement the
+earlier files could not make.
+
+Typing is structural, with the action case a parameter and the hypothesis tying
+it to the action's effect being exactly axiom soundness — which `Triples.v`
+proves for all fifteen, so it is taken here and discharged there.
+`subject_reduction` holds.
+
+Two abstractions, stated in the file rather than hidden.  Conditions are
+abstracted (`CIf` steps to either branch): there is no expression language, and
+for safety taking either branch quantifies over *more* runs than a real
+condition would.  And the action's effect is a parameter required only to be an
+`lstep`, which is what lets the file be about programs without re-encoding
+fifteen actions' side conditions.
+
+One thing it deliberately does **not** claim: pool-level preservation of
+typing.  One thread's step changes shared state and nothing here says the other
+threads' environments survive it.  That is the framing property, and it is
+`EnvOK_cell` / `EnvOK_obs` / `EnvOK_stack` in `Triples.v` — per-thread readings
+of exactly the condition a frame must satisfy.  Said in the file.
 
 ### W6. The LKMM correspondence
 
@@ -640,6 +683,24 @@ note they chose release-acquire rather than the LKMM precisely to keep it
 tractable.
 
 Do (a), after W5.
+
+**Done, sense (a).**  The LKMM does not derive RCU from anything — it
+*axiomatises* it, and the axiom is that a read-side critical section does not
+span a grace period.  `lkmm_gives_reclamation`: that axiom gives the
+reclamation clause outright.  `lkmm_conformance_is_refinement`: the five-clause
+obligation's two clauses *with content* are the axiom's two halves, and the
+rest is bookkeeping any implementation of the four actions must get right
+whatever model it is verified against.  `epochs_satisfy_the_axiom` checks the
+statement is not vacuous.
+
+So someone who has verified their RCU against the kernel memory model has
+thereby done our work; we are not asking for something extra.
+
+**What is still open, and is named rather than done:** the LKMM is a predicate
+on whole executions and `Impl` is a state machine.  Reading an LKMM execution
+as a run of an `Impl` is a real translation.  Until it is done the claim is
+"an implementation whose guard means what the axiom says satisfies the
+interface", not "any LKMM-conforming execution is one of ours".
 
 ### W7. The dependency the compiler may not preserve
 
