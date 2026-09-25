@@ -4869,11 +4869,14 @@ End writerstate.
     it has one, and the reader holds the fragment.
 
     What is left between this and a Hoare triple for [y := x.f] is not
-    observational at all: a reader must *learn* what the field holds, and the
-    points-to assertion is exclusive.  That is the fractional or snapshot heap
-    recorded elsewhere in this file, and it is orthogonal to everything here --
-    the step below writes no cell and reads none, which is why it needs no
-    fraction. *)
+    observational at all: the edge is a hypothesis here because this lemma is
+    stated over the invariant's *contents* rather than over the invariant.  It
+    was once recorded here that the obstacle was the exclusivity of the
+    points-to assertion, and that was wrong: the authoritative heap is in the
+    invariant, so a reader that opens it learns the edge there and carries no
+    cell out past the closing --- a reader's \itr{} mentions none.  What the
+    closing does need is the *bind*, and the general bind's premises fail for a
+    reader.  [Closed.v] has both. *)
 
 Section reader_read.
   Context `{!rcuG Σ, !heapG Σ, !stackG Σ, !lockG Σ}.
@@ -5050,11 +5053,12 @@ Print Assumptions REnvOK_read.
     and the stack slot it is about to overwrite, and gets back the same with
     one more node in its domain and one more variable typed \itr{}.
 
-    It is not a Hoare triple, for the reason recorded at [read_update]: the
-    edge is a hypothesis because a reader cannot learn a cell's contents while
-    the points-to assertion is exclusive.  Everything else about the rule ---
-    the bounding obligation, the observation grant, the environment on both
-    sides --- is discharged here. *)
+    The edge is a hypothesis here, for the reason recorded at [read_update]:
+    this is the step and the environment over the invariant's contents, not
+    over the invariant.  [read_typed_closed] in [Closed.v] is the same rule
+    against the invariant itself, where the edge is read rather than assumed.
+    Everything else about the rule --- the bounding obligation, the observation
+    grant, the environment on both sides --- is discharged here. *)
 
 Section typed_read.
   Context `{!rcuG Σ, !heapG Σ, !stackG Σ, !lockG Σ}.
@@ -6066,12 +6070,14 @@ Print Assumptions EnvOK_syncstop.
 (** ** The two grace-period rules, with the environment
 
     Neither of these is a Hoare triple, and for once the reason is the same for
-    both and is not a gap in the reading: they are the two bulk updates, and a
-    bulk update needs its set enumerated.  \textsc{SyncStart} stamps every
-    detached node and \textsc{SyncStop} recolours every observation of the
-    writer's, and in each case "every" is a premise no resource carries --- the
-    thread would have to hold the whole column of the observation map, or the
-    whole free list, to know it had them all.  What is stated here is therefore
+    both: they are the two bulk updates, and a bulk update needs its set
+    enumerated.  \textsc{SyncStart} stamps every detached node and
+    \textsc{SyncStop} recolours every observation of the writer's, and in each
+    case "every" is stated here as a premise.  That it is *enumerable* is not
+    an assumption, and [Closed.v] proves it: each of these sets is a set of
+    keys of a finite map the invariant already carries, so the list exists and
+    is constructed there.  What stays a premise is the ownership, which is what
+    ownership is for.  What is stated here is therefore
     the step plus the environment, with the enumeration explicit, which is what
     \texttt{sync\_start\_update} and \texttt{sync\_stop\_update} already did for
     the invariant alone.
@@ -8175,14 +8181,17 @@ Print Assumptions replace_typed.
     everything observational about it is discharged: the bounding obligation
     from FLR, IFL and SameSnap, and the entry it has to create from the
     registration cell, which is only decisive because the root observation
-    stopped living in a thread's entry.  What stops it being a triple is one
-    thing and it is not observational: a reader must *learn* what a field
-    holds, and [pt] is exclusive.  The repair is a fractional or
-    discardable-fraction heap, which is standard and which changes the camera
-    under everything above.  Worth saying plainly: an earlier draft of this
-    file said the read side could not be done without fractions, and that was
-    too strong -- the reader's environment, [reader_env], needs none, and
-    neither does the step; the cell read needs one.
+    stopped living in a thread's entry.  It was said here that what stopped it
+    being a triple was that a reader must *learn* what a field holds and [pt]
+    is exclusive, and that the repair was a fractional heap.  That diagnosis
+    was wrong, and [Closed.v] is where it is corrected: the authoritative heap
+    is in the invariant, the read is one access inside it, and a reader's
+    \itr{} mentions no cell --- so a fraction would buy something only if the
+    reader had to carry a cell out past the closing, and it does not.  What was
+    actually in the way is the bind: the machine's stack has to move with the
+    ghost one, and the general bind asks the bound node to be neither detached
+    nor awaiting reclamation, which is exactly what a reader cannot promise.
+    [read_atomic] and [read_typed_closed] are the rule, closed.
 
     \textsc{WriteBegin} asks that the lock is free and \textsc{SyncStop} that
     no thread is still bounding.  Those are the two points where the protocol

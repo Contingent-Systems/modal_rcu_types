@@ -95,7 +95,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 373 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 395 say \emph{closed under the
 global context}, and none reports an axiom.
 
 That target had the bug it exists to catch, and we report it because the
@@ -1804,8 +1804,9 @@ no cells, which is \texttt{REnvOK} --- and that condition survives the read for
 the same reason the binding rules work: the stack write is at the rebound
 variable's slot and the observation write only grows the entry at the node
 reached, so nothing has to be assumed about aliasing between the environment and
-the node read.  What remains a hypothesis is the edge itself, for the
-fractional-heap reason in \S\ref{sec:inv-readside}.
+the node read.  What remains a hypothesis there is the edge itself, because
+that rule is stated over the invariant's \emph{contents}; stated over the
+invariant it is a triple, and \texttt{read\_typed\_closed} is it.
 
 The last six are the protocol, and their environments are the smallest in the
 file.  \textsc{ReadBegin} and \textsc{ReadEnd} have environments ToRCURead
@@ -2035,11 +2036,13 @@ reader's own registration cell.  That is the second half of removing
 tidying.
 
 What is left between \texttt{read\_update} and a Hoare triple for $y := x.f$ is
-one thing, and it is not observational: a reader must \emph{learn} what the
-field holds, and the points-to assertion is exclusive.  The correction above
-stands --- the reader's environment needs no fraction, and neither does the
-step --- but the cell read does, and that is a fractional or snapshot heap.  It
-is the only obstacle left on the read side, and it is standard.
+not observational, and it is not the cell read either.  An earlier draft said
+it was --- that a reader must \emph{learn} what the field holds and the
+points-to assertion is exclusive --- and that too was wrong, for the reason the
+correction above already gives: the authority is in the invariant, the read is
+one access inside it, and nothing is carried out.  What was actually in the way
+is the \emph{bind}, and \texttt{rocq/Closed.v} closes it; see
+``What is left, and it is one thing'' below.
 
 \textsc{WriteBegin} asks that the lock is free, and \textsc{SyncStop} that no
 thread is still bounding.  Those are the two points where the protocol
@@ -2830,51 +2833,87 @@ effect, a parameter throughout, is instantiated with
 \texttt{real\_programs\_are\_memory\_safe} is about the fifteen actions
 rather than about an abstraction of them.
 
-\paragraph{What is left, and it is three things.}
-The third of them used to be ``axiom soundness proper'' and is no longer: all
-fifteen actions have it.  What is left in its place is narrower and more
-specific, and naming it that way seems more useful than keeping the old
-heading.
+\paragraph{What is left, and it is one thing.}
+It used to be three.  ``Axiom soundness proper'' went first: all fifteen actions
+have it.  The other two are done in \texttt{rocq/Closed.v}, and both turned out
+smaller than they had been stated --- in one case because the diagnosis was
+wrong.
 
-\emph{Fairness.}  That a reader inside a critical section eventually leaves it.
-The wait's termination reduces to it and no further --- it is a property of the
-client, and no invariant of the shared state could supply it.
+\emph{Fairness}, which is what is left.  That a reader inside a critical
+section eventually leaves it.  The wait's termination reduces to it and no
+further --- it is a property of the client, and no invariant of the shared state
+could supply it.
 
-\emph{A fractional heap for the reader's read.}  This is what is left of the
-read after the root observation was moved into the structure.  A reader must
-learn what a field holds, and the points-to assertion is exclusive.  Nothing
-else about the read is open: \texttt{read\_update} discharges the bounding
-obligation and grants the observation, and neither it nor the reader's
-environment uses a heap fragment at all.  The repair is a fractional or
-discardable-fraction points-to, which is standard, and which changes the camera
-under the write side as well --- which is why it is named here rather than done
-in passing.
+\paragraph{The reader's read, and a diagnosis corrected.}
+It was said here that the read was not a Hoare triple because a reader must
+learn what a field holds and the points-to assertion is exclusive, and that the
+repair was a fractional or discardable-fraction heap.  That was the wrong
+obstacle.  The authoritative heap is \emph{in} the invariant, so a reader that
+opens the invariant reads the edge there; and a reader's \itr{} mentions no
+cell, so nothing has to be carried out past the closing.  A fraction buys
+something only if it does.
 
-\emph{The enumeration premises.}  Axiom soundness itself is done: every action
-preserves \textsf{WellFormed}, that is fifteen theorems and now an induction
-over runs, and every action also satisfies the denotation of its post-type
-environment.  Ten of the fifteen are Hoare triples
---- the whole write side, the binding rules, \textsc{T-Free}, and the two
-read-block boundaries, which also compose (\texttt{read\_section\_typed}), so
-re-entry is a fact about resources rather than an argument.  The other five are
-the step plus the environment with a premise made explicit, and the premises are
-of exactly two kinds.
+What was actually in the way is one step further on, and it is specific to RCU.
+The rule moves the reader's stack, so the machine's stack has to move with it,
+and the general binding lemma asks the bound node to be neither detached nor
+awaiting reclamation.  A reader can promise neither: holding a reference to a
+node a writer has already unlinked is not an edge case of RCU but the whole of
+it.  So the reader's bind is a different lemma,
+\texttt{reader\_bind\_preserves\_WellFormed}, and it is a smaller one for a
+reason worth recording.  With the observation already granted by the read, the
+bind changes only the stack and the scope, and exactly four of the twenty
+conjuncts mention those --- \textbf{RWOW}, \textbf{AWRT}, \textbf{FR} and
+\textbf{WFresh}.  The other sixteen are identities, because the observation
+map, the free list, the heap, the lock and the root are untouched.  A reader's
+bind cannot break an invariant about detachment or reclamation, which is why it
+needs no premise about either: the general bind's two premises are not weakened
+here but \emph{absent}, because they were never the bind's business.  They
+belong to the writer's bind, whose post-type is an \itr{} with a path and a
+field map and whose denotation asks for both.
 
-The reader's read has one: the edge it follows, because a reader cannot learn a
-cell's contents while the points-to assertion is exclusive.  That is the
-fractional heap named above.
+\texttt{read\_atomic} is then the rule against the invariant --- the edge read
+rather than assumed, the machine moved by the bind, the invariant
+re-established --- and \texttt{read\_typed\_closed} is it with the reader's
+environment on both sides, where the iterator at $x$ comes out of the
+environment rather than in as a hypothesis about the observation map.
 
-The other four --- \textsc{SyncStart}, \textsc{SyncStop}, \textsc{WriteBegin}
-and \textsc{WriteEnd} --- have an enumeration premise, and it is the same
-premise four times: they are the bulk updates, and a bulk update needs its set
-enumerated.  ``Every detached node is stamped'', ``every entry of the writer's
-is recoloured'', ``every reachable node is observed'', ``every entry is given
-up''.  No resource a thread holds discharges those.  Where it can be stated as a
-fact about the thread's \emph{own} map rather than the shared one we state it
-that way --- the writer holds its whole column --- which is the honest form and
-is what a writer that has tracked its observations since \textsc{WriteBegin}
-actually has.  That is what is left, and it is narrower than ``six rules are
-missing''.
+\paragraph{The enumeration premises, discharged by finiteness.}
+Four rules were stated as a step plus an environment with an enumeration made
+explicit: the bulk updates, where ``every detached node is stamped'', ``every
+reachable node is observed'', ``every entry of the writer's is recoloured'',
+``every entry is given up''.  It was said that no resource a thread holds
+discharges those.  That conflated two things, and only one of them is true.
+
+Whether the thread \emph{owns} the pieces is a resource question and stays one;
+that is what ownership is, and a bulk update that did not have to own what it
+updates would be unsound.  But whether the set is \emph{enumerable} is a
+mathematical question, and the answer is yes in all four cases, for the same
+reason: every one of these sets is a set of keys of a finite map the invariant
+already carries.  The heap is a \texttt{gmap}, the observation map is a
+\texttt{gmap}, and a set carved out of one by a decidable condition is finite.
+
+Two of the three lists are then immediate.  \texttt{detached\_list} is the
+nodes with a detaching observation, read off the observation map, and
+\texttt{column} is the writer's column of it --- so \textsc{SyncStop}'s and
+\textsc{WriteEnd}'s two clauses relating the thread's map to the shared one
+hold by \texttt{column\_lookup}, definitionally.
+
+The third is not immediate.  \textsc{WriteBegin}'s set is the \emph{reachable}
+nodes, and reachability is a closure rather than a lookup, so it has to be
+computed and the computation shown to terminate at the right answer.  It does:
+iterate ``add the successors'' from the root, and iterating it as many times as
+there are locations the heap mentions at all is enough.  That last step is a
+pigeonhole --- the iterates increase, they all live in a finite set, so one of
+the first $n+1$ is a fixed point and nothing changes after one --- and it is
+stated on its own as \texttt{chain\_stabilises}, because it has nothing to do
+with heaps.  With \texttt{reach\_set} in hand, \texttt{wb\_list} is the
+writer's entry at every reachable node and the rule's six enumeration clauses
+are readings of its soundness and completeness.
+
+So the four rules now ask for the conditions the action itself carries, for the
+resources, and for nothing else.  \texttt{sync\_start\_enumerated},
+\texttt{sync\_stop\_enumerated}, \texttt{write\_begin\_enumerated} and
+\texttt{write\_end\_enumerated} are the four, at their own lists.
 
 The read-side denotation is mechanized --- \texttt{D\_rcuItrR}, transcribed from
 the figure --- together with the reader's acquisition

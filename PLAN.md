@@ -812,3 +812,67 @@ prose.
 - Do not start A3 before the paper is out.
 - Do not add `Print Assumptions` inside a `Section`; `make check` now rejects it,
   and the reason is in the appendix.
+
+## Part IV — the two items the response named as open
+
+Both are in `rocq/Closed.v`, after `Triples.v`.
+
+### C1. The reader's read — **done, and the diagnosis was wrong**
+
+The recorded obstacle was that a reader must learn what a field holds and the
+points-to assertion is exclusive, so the repair was a fractional heap.  Wrong
+obstacle.  The authoritative heap is *in* the invariant, so a reader that opens
+it reads the edge there, and a reader's `rcuItr` mentions no cell — so nothing
+is carried out past the closing and a fraction buys nothing.
+
+What was actually in the way is the **bind**.  The rule moves the reader's
+stack, so the machine's stack must move with it, and the general binding lemma
+asks the bound node to be neither detached nor awaiting reclamation — which is
+exactly what a reader cannot promise, since holding a reference to a node a
+writer has already unlinked is the whole of RCU.
+
+`reader_bind_preserves_WellFormed` is the replacement, and it is *smaller* than
+the general bind, which is the part worth recording.  With the observation
+already granted by the read, the bind changes only the stack and the scope, and
+exactly four of the twenty conjuncts mention those — RWOW, AWRT, FR, WFresh.
+The other sixteen are identities.  So a reader's bind cannot break an invariant
+about detachment or reclamation, and the general bind's two premises are not
+weakened here but *absent*: they were never the bind's business, they belong to
+the writer's bind, whose post-type asks for a path and a field map.
+
+`read_atomic`: the rule against the invariant — edge read, machine moved,
+invariant re-established, with the postcondition a disjunction (the field held a
+reference, or it did not and nothing moved).  `read_typed_closed`: the same with
+the reader's environment on both sides, the iterator at `x` coming *out* of the
+environment rather than in as a hypothesis.
+
+### C2. The enumeration premises — **done, by finiteness**
+
+"No resource a thread holds discharges those" conflated two things.  Whether the
+thread *owns* the pieces is a resource question and stays one — that is what
+ownership is.  Whether the set is *enumerable* is mathematics, and the answer is
+yes in all four cases for the same reason: each set is a set of keys of a finite
+map the invariant already carries.
+
+Two lists are immediate.  `detached_list` is the nodes carrying a detaching
+observation, read off the observation map (`detached_list_NoDup` / `_epoch` /
+`_covers` / `_sound` are SyncStart's four premises).  `column` is the writer's
+column of it, so SyncStop's and WriteEnd's two clauses hold by `column_lookup`
+definitionally.
+
+The third is not.  WriteBegin's set is the *reachable* nodes, and reachability
+is a closure rather than a lookup.  `reach_upto` iterates "add the successors";
+`reach_upto_sound` and `reach_upto_complete` are the two directions;
+`chain_stabilises` is the pigeonhole that says iterating as many times as there
+are locations the heap mentions is enough, stated on its own because it has
+nothing to do with heaps.  `wb_list` is then the writer's entry at every
+reachable node and the rule's six enumeration clauses are readings of it.
+
+`sync_start_enumerated`, `sync_stop_enumerated`, `write_begin_enumerated` and
+`write_end_enumerated` are the four rules at their own lists, asking for the
+conditions the action carries, for the resources, and for nothing else.
+
+### What is left
+
+Fairness — that a reader inside a critical section eventually leaves it.  It is
+a property of the client and no invariant of the shared state could supply it.

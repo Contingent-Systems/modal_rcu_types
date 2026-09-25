@@ -17,7 +17,7 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
 23,100 lines and 1,116 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 373
+succeed if the development contains an admitted proof, or if any of its 395
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -663,8 +663,10 @@ reader's types are read on a smaller condition than the writer's -- no paths, no
 cells -- and that condition survives the read for the same reason the binding
 rules work: the stack write is at the rebound variable's slot and the
 observation write only grows the entry at the node reached, so nothing has to be
-assumed about aliasing between the environment and the node read.  What remains
-a hypothesis is the edge itself, for the fractional-heap reason above.
+assumed about aliasing between the environment and the node read.  The edge
+remains a hypothesis at that point because the rule is stated over the
+invariant's contents rather than over the invariant; stated over the invariant
+it is a triple, and we do that below.
 
 The last six are the protocol, and their environments are the smallest in the
 development.  ReadBegin and ReadEnd have environments the block structure fixes
@@ -820,11 +822,11 @@ observation behind.  Reading that observation off the root pointer instead lets
 ReadEnd delete its keys, makes the clause relating entries to registrations a
 statement about entries, and closes the question: a node outside the cell's
 domain has no entry of the reader's.  The reader's read is now a step on the
-invariant's contents with nothing observational left open.  What is left of it
-is the cell read itself: a reader must learn what the field holds, and the
-points-to assertion is exclusive.  That is a fractional or snapshot heap -- the
-correction above still stands, since neither the reader's environment nor the
-step uses a heap fragment, but the read of the cell does.
+invariant's contents with nothing observational left open.  We had said that
+what was left of it was the cell read itself -- that a reader must learn what
+the field holds and the points-to assertion is exclusive, so a fractional heap
+was needed.  That was the wrong obstacle, and we say what the right one was, and
+close the rule, below.
 
 WriteBegin asks whether the lock is free and SyncStop whether any thread is
 still bounding: the two points where the protocol tests or waits on shared state
@@ -1019,47 +1021,60 @@ a guard and never a third thing.  And the action's effect, which was a
 parameter, is instantiated with the relation itself, so the safety theorem is
 about the fifteen actions rather than about an abstraction of them.
 
-What is left is three things, and we would rather name them than let the
-invariant work stand in for them.  The third used to be "axiom soundness
-proper" and is no longer: all fifteen actions have it.  What is left in its
-place is narrower and more specific, and naming it that way seems more useful
-than keeping the old heading.
+What is left is one thing, and it is not ours.
 
 Fairness: that a reader inside a critical section eventually leaves it.  The
 wait's termination reduces to that and no further; it is a property of the
 client, and no invariant of the shared state could supply it.
 
-A fractional heap for the reader's read.  This is what is left of the read now
-that the root observation is derived from the structure rather than stored in a
-thread's entry.  A reader must learn what a field holds and the points-to
-assertion is exclusive; nothing else about the read is open.  The repair is
-standard and it changes the camera under the write side as well, which is why
-we name it rather than do it in passing.
+The other two we named in an earlier draft are now done, and both turned out to
+be smaller than we had said -- in one case because the diagnosis was wrong.
 
-The enumeration premises.  Axiom soundness itself is done: every action
-preserves WellFormed, that is fifteen theorems and now an induction over runs,
-and every action also satisfies the denotation of its post-type environment.
-Ten of the fifteen are Hoare triples -- the whole write side, the binding rules,
-Free, and the two read-block boundaries.  The other five are the step plus the
-environment with a premise made explicit, and those premises are what is left.
-They are of exactly two kinds.
+The reader's read.  We had said it was not a Hoare triple because a reader must
+learn what a field holds and the points-to assertion is exclusive, and that the
+repair was a fractional heap.  That was the wrong obstacle.  The authoritative
+heap is in the invariant; a reader that opens the invariant reads the edge
+there, and a reader's iterator type mentions no cell at all, so nothing has to
+be carried out past the closing.  A fraction would buy something only if it did.
+What was actually in the way is one step further on: the rule moves the
+reader's stack, so the machine's stack has to move with it, and the general
+binding lemma asks the bound node to be neither detached nor awaiting
+reclamation -- which is exactly what a reader cannot promise, since holding a
+reference to a node a writer has already unlinked is not an edge case of RCU but
+the whole of it.  So the reader's bind is a different lemma.  It is also a
+smaller one, and the reason is worth recording: with the observation already
+granted by the read, the bind changes only the stack and the scope, and exactly
+four of the twenty conjuncts mention those.  The other sixteen are identities.
+A reader's bind cannot break an invariant about detachment or reclamation, which
+is why it needs no premise about either -- the two premises the general bind
+carries are not weakened, they are absent, because they were never the bind's
+business.  They belong to the writer's bind, whose post-type is an iterator with
+a path and a field map and whose denotation asks for both.  The rule is now
+stated against the invariant, with the edge read rather than assumed, and with
+the reader's environment on both sides.
 
-The reader's read has one: the edge it follows, because a reader cannot learn a
-cell's contents while the points-to assertion is exclusive.  That is the
-fractional heap named above.
-
-The other four -- SyncStart, SyncStop, WriteBegin, WriteEnd -- have an
-enumeration premise, and it is the same premise four times: they are the bulk
-updates, and a bulk update needs its set enumerated.  "Every detached node is
-stamped", "every entry of the writer's is recoloured", "every reachable node is
-observed", "every entry is given up".  No resource a thread holds discharges
-those.  Where it can be stated as a fact about the thread's *own* map rather
-than the shared one we state it that way -- the writer holds its whole column --
-which is the honest form and is what a writer that has tracked its observations
-since WriteBegin actually has.  We would rather name that than dress it up: it
-is the shape of what is left, and it is narrower than "six rules are missing".
-
-
+The enumeration premises.  Four rules were stated as a step plus an environment
+with an enumeration made explicit: the bulk updates, where "every detached node
+is stamped", "every reachable node is observed", "every entry of the writer's is
+recoloured", "every entry is given up".  We had said no resource a thread holds
+discharges those.  That conflated two things, and only one of them is true.
+Whether the thread *owns* the pieces is a resource question and stays one; that
+is what ownership is, and a bulk update that did not have to own what it updates
+would be unsound.  But whether the set is *enumerable* is a mathematical
+question, and the answer is yes in all four cases, for the same reason: every
+one of these sets is a set of keys of a finite map the invariant already
+carries.  The heap is a finite map, the observation map is a finite map, and a
+set carved out of one by a decidable condition is finite.  So we construct the
+three lists and prove they cover.  Two are immediate -- the detached nodes are
+entries of the observation map, and the writer's column is a column of it.  The
+third is not: WriteBegin's set is the *reachable* nodes, and reachability is a
+closure rather than a lookup, so it has to be computed and the computation shown
+to terminate at the right answer.  It does: iterate "add the successors" from
+the root, and iterating it as many times as there are locations the heap
+mentions is enough, by a pigeonhole on an increasing chain in a finite set.  We
+state that argument on its own, because it has nothing to do with heaps.  With
+the lists supplied, the four rules ask for the four conditions the action itself
+carries, and for the resources, and for nothing else.
 
 A third thing about scope, and it is about the memory model.  We are
 sequentially consistent; Tassarotti et al. verify under release-acquire, where a
