@@ -223,15 +223,250 @@ Section typing.
     forall t c, P !! t = Some c ->
       Typed (E t) c (Ef t) /\ D_env FType s t (E t).
 
-  (** ...which is not preserved as stated, and the reason is worth recording:
-      one thread's step can change the shared state, and nothing here says the
-      *other* threads' environments survive it.  That is the framing property,
-      and it is [Triples.v]'s [EnvOK_cell], [EnvOK_obs] and [EnvOK_stack] --- a
-      per-thread reading of exactly the condition a frame must satisfy.  What
-      this file can say without them is the single-threaded case, which is
-      subject reduction above, and the safety of any interleaving, which needs
-      no environment at all. *)
+  (** Whether that is preserved *pool-wide* is the framing question, and it is
+      answered below rather than deferred: [Frames] says what a step must leave
+      alone for another thread's environment to survive it, [Frames_D_env]
+      proves that list is the right one, and [pool_ok_preserved] puts the two
+      together.  The list is read off the denotations, so the proof is a
+      transcription; the content is that nothing else in a logical state is
+      mentioned by a type. *)
 
 End typing.
 
 Print Assumptions subject_reduction.
+
+(** ** Framing
+
+    Subject reduction is single-threaded: it advances the environment of the
+    thread that stepped.  A pool has other threads, and their environments
+    mention the same shared state.  So a pool-level preservation theorem needs
+    to know what one thread's step may *not* do to another thread's types, and
+    that is not a matter of taste --- the denotations say it exactly.
+
+    Reading them off: a type's meaning for a thread [t] mentions [t]'s own stack
+    slots, the observations tagged [t], the root observation, [t]'s scope [U],
+    the free list, the heap, the lock and the root.  Nothing else.  [Frames] is
+    that list.  It is deliberately *not* minimal per type --- a [TUndef]
+    reference needs far less --- because a frame condition has to cover the
+    environment, which may hold any of the six.
+
+    Two things are worth noticing about the list.  It constrains the heap, the
+    lock and the root as wholes, which is what makes the writer's actions
+    non-framing and is correct: an unlink really can invalidate another
+    writer's path, and that is why the lock exists.  And it constrains the free
+    list as a whole rather than at [t]'s nodes, because [D_undef] and
+    [D_freeable] quantify over entries the thread does not name. *)
+
+Definition Frames (s s' : LState) (t : TID) : Prop :=
+  (forall x, stk (ms s') x t = stk (ms s) x t)
+  /\ (forall x, undf s' x t <-> undf s x t)
+  /\ (forall o ob, obs_tid ob = Some t -> (obsv s o ob <-> obsv s' o ob))
+  /\ (forall o, obsv s o Oroot <-> obsv s' o Oroot)
+  /\ (forall o, flist s' o = flist s o)
+  /\ hp (ms s') = hp (ms s)
+  /\ lk (ms s') = lk (ms s)
+  /\ rt (ms s') = rt (ms s).
+
+Lemma Frames_refl s t : Frames s s t.
+Proof.
+  repeat apply conj; try reflexivity; intros; reflexivity.
+Qed.
+
+Lemma Frames_trans s1 s2 s3 t :
+  Frames s1 s2 t -> Frames s2 s3 t -> Frames s1 s3 t.
+Proof.
+  intros (A1 & B1 & C1 & D1 & E1 & F1 & G1 & H1)
+         (A2 & B2 & C2 & D2 & E2 & F2 & G2 & H2).
+  repeat apply conj.
+  - intros x. by rewrite A2, A1.
+  - intros x. by rewrite B2, B1.
+  - intros o ob Hob. by rewrite (C1 o ob Hob), (C2 o ob Hob).
+  - intros o. by rewrite D1, D2.
+  - intros o. by rewrite E2, E1.
+  - by rewrite F2, F1.
+  - by rewrite G2, G1.
+  - by rewrite H2, H1.
+Qed.
+
+Section framing.
+  Variable FType : FName -> FieldKind.
+
+  (** The transcription.  Every conjunct of every denotation is one of the eight
+      components, so each case is a rewrite. *)
+  Lemma Frames_D_env s s' t G :
+    Frames s s' t -> D_env FType s t G -> D_env FType s' t G.
+  Proof.
+    intros (Hstk & Hundf & Hobs & Hroot & Hfl & Hhp & Hlk & Hrt) Henv x T Hin.
+    pose proof (Henv x T Hin) as Hty.
+    assert (Hfield : forall o f v, FieldHolds s t o f v -> FieldHolds s' t o f v).
+    { intros o f [y |] Hf; simpl in Hf |- *; [| by rewrite Hhp].
+      destruct Hf as (oy & Hsy & Hcy & Hoy & Hfy).
+      exists oy. rewrite Hstk, Hhp, Hfl.
+      repeat apply conj; try assumption.
+      by apply (Hobs oy (Oiter t) eq_refl). }
+    destruct T; simpl in Hty |- *.
+    - destruct Hty as [o (Hs & Ho & Hu & Hf & Hpre & Hpath & Hl & Hfo)].
+      exists o. rewrite Hstk, Hhp, Hrt, Hlk, Hfl.
+      repeat apply conj; try assumption.
+      + by apply (Hobs o (Oiter t) eq_refl).
+      + intros Hc. by apply Hu, Hundf.
+      + intros f v Hv. exact (Hfield o f v (Hf f v Hv)).
+      + intros rho1 rho2 Happ. destruct (Hpre rho1 rho2 Happ) as [o' [Hp Ho']].
+        exists o'. split; [exact Hp |].
+        by apply (Hobs o' (Oiter t) eq_refl).
+    - destruct Hty as [o (Hs & Ho & Hu & Hfo & Hf & Hnull)].
+      exists o. rewrite Hstk, Hhp, Hfl.
+      repeat apply conj; try assumption.
+      + by apply (Hobs o (Ofresh t) eq_refl).
+      + intros Hc. by apply Hu, Hundf.
+      + intros f v Hv. exact (Hfield o f v (Hf f v Hv)).
+    - destruct Hty as [o (Hs & Ho & Hl & Hu)].
+      exists o. rewrite Hstk, Hlk. repeat apply conj; try assumption.
+      + by apply (Hobs o (Ounlk t) eq_refl).
+      + intros Hc. by apply Hu, Hundf.
+    - destruct Hty as [o (Hs & Ho & Hl & Hu & Hfo)].
+      exists o. rewrite Hstk, Hlk, Hfl. repeat apply conj; try assumption.
+      + by apply (Hobs o (Ofree t) eq_refl).
+      + intros Hc. by apply Hu, Hundf.
+    - destruct Hty as [Hu Hfo]. split; [by apply Hundf |].
+      intros o Ho. rewrite Hstk in Ho. rewrite Hfl. exact (Hfo o Ho).
+    - destruct Hty as [Hs Ho]. split.
+      + rewrite Hstk, Hrt. exact Hs.
+      + rewrite Hrt. by apply Hroot.
+  Qed.
+
+End framing.
+
+Print Assumptions Frames_D_env.
+
+(** ** The pool, typed
+
+    The step relation is now indexed by the thread performing it, which the
+    earlier sections did not need and this one does: soundness is about the
+    stepping thread's environment, framing is about everybody else's, and
+    saying so needs the two to be distinguishable.
+
+    Both hypotheses have the same standing as [Step_lstep] and [Act_sound]
+    before them --- properties of what the fifteen actions do, discharged where
+    the actions are defined.  [Act_frames] is the per-action framing obligation,
+    and it is [Triples.v]'s [EnvOK_cell], [EnvOK_obs], [EnvOK_stack],
+    [EnvOK_fl], [EnvOK_scope], [EnvOK_free] and [EnvOK_syncstop] --- those
+    lemmas are exactly the components of [Frames], proved one action at a
+    time. *)
+
+Section pool.
+  Variable FType : FName -> FieldKind.
+  Variable Step : TID -> act -> LState -> LState -> Prop.
+  Variable ActTyped : Env -> act -> Env -> Prop.
+
+  Hypothesis Step_lstep : forall t a s s', Step t a s s' -> lstep FType s s'.
+  Hypothesis Act_sound : forall G a G' s s' t,
+    ActTyped G a G' -> Step t a s s' -> D_env FType s t G -> D_env FType s' t G'.
+  Hypothesis Act_frames : forall t a s s' t',
+    Step t a s s' -> t' <> t -> Frames s s' t'.
+
+  (** An interleaving in which each thread's actions are its own. *)
+  Inductive pool_step : Conf -> Conf -> Prop :=
+  | PS (t : TID) (P : Pool) (s : LState) (c c' : cmd) (s' : LState) :
+      P !! t = Some c -> tstep (Step t) c s c' s' ->
+      pool_step (P, s) (<[t := c']> P, s').
+
+  (** A thread's step frames every other thread.  The control constructs do not
+      touch the state at all, so only the action case has content. *)
+  Lemma tstep_frames t c s c' s' t' :
+    tstep (Step t) c s c' s' -> t' <> t -> Frames s s' t'.
+  Proof.
+    induction 1 as [a s0 s0' Ha | | | | | ]; intros Hne;
+      try apply Frames_refl.
+    - exact (Act_frames t a s0 s0' t' Ha Hne).
+    - by apply IHtstep.
+  Qed.
+
+  (** Subject reduction for a named thread.  The sectioned version above
+      quantifies its soundness hypothesis over all threads, which is more than
+      a thread-indexed [Step] supplies; the induction is the same. *)
+  Lemma tstep_typed t c s c' s' G G' :
+    tstep (Step t) c s c' s' -> Typed ActTyped G c G' -> D_env FType s t G ->
+    exists G2, Typed ActTyped G2 c' G' /\ D_env FType s' t G2.
+  Proof.
+    intros Hst. revert G G'.
+    induction Hst as [a s0 s0' Ha | c1 s0 c1' s0' c2 Hst IH | c0 s0 | c1 c2 s0
+                      | c1 c2 s0 | c0 s0];
+      intros G G' Hty Henv.
+    - inversion Hty as [| G0 a0 G1 Hact | | |]; subst.
+      eexists. split;
+        [apply TySkip | exact (Act_sound G a G' s0 s0' t Hact Ha Henv)].
+    - inversion Hty as [| | G1 d1 Gm d2 G3 H1 H2 | |]; subst.
+      destruct (IH G Gm H1 Henv) as [G2 [Hty2 Henv2]].
+      exists G2. split; [exact (TySeq ActTyped G2 c1' Gm c2 G' Hty2 H2) | exact Henv2].
+    - inversion Hty as [| | G1 d1 Gm d2 G3 H1 H2 | |]; subst.
+      inversion H1; subst. eexists. split; [exact H2 | exact Henv].
+    - inversion Hty as [| | | G0 d1 d2 G1 H1 H2 |]; subst.
+      eexists. split; [exact H1 | exact Henv].
+    - inversion Hty as [| | | G0 d1 d2 G1 H1 H2 |]; subst.
+      eexists. split; [exact H2 | exact Henv].
+    - inversion Hty as [| | | | G0 d0 H1]; subst.
+      eexists. split; [| exact Henv].
+      apply TyIf; [| apply TySkip].
+      eapply TySeq; [exact H1 | apply TyWhile; exact H1].
+  Qed.
+
+  (** Every thread's command is typed from its current environment to the final
+      one it was typed to reach, and the state satisfies every thread's current
+      environment.  The final environments are shared across the step: a thread
+      that steps does not change where it is going, and a thread that does not
+      step does not change at all. *)
+  Definition PoolOK (P : Pool) (E Ef : TID -> Env) (s : LState) : Prop :=
+    forall t c, P !! t = Some c ->
+      Typed ActTyped (E t) c (Ef t) /\ D_env FType s t (E t).
+
+  Theorem pool_ok_preserved P E Ef s P' s' :
+    pool_step (P, s) (P', s') -> PoolOK P E Ef s ->
+    exists E', PoolOK P' E' Ef s'.
+  Proof.
+    intros Hst Hok.
+    inversion Hst as [t0 P0 s0 c c' s0' Hlk Ht Heq1 Heq2]; subst.
+    destruct (Hok t0 c Hlk) as [Hty Henv].
+    destruct (tstep_typed t0 c s c' s' (E t0) (Ef t0) Ht Hty Henv)
+      as [G2 [Hty2 Henv2]].
+    exists (fun t => if Nat.eq_dec t t0 then G2 else E t).
+    intros t d Hd. destruct (Nat.eq_dec t t0) as [-> | Hne].
+    - rewrite (lookup_insert_eq P t0 c') in Hd. injection Hd as <-. by split.
+    - rewrite (lookup_insert_ne P t0 t c') in Hd;
+        [| exact (fun Hc => Hne (eq_sym Hc))].
+      destruct (Hok t d Hd) as [Hty' Henv'].
+      split; [exact Hty' |].
+      exact (Frames_D_env FType s s' t (E t)
+               (tstep_frames t0 c s c' s' t Ht Hne) Henv').
+  Qed.
+
+  (** ...and over a whole run.  This is the statement [PoolTyped] was a
+      placeholder for: from a typed pool, every reachable configuration is a
+      typed pool, with every thread still heading for the same final
+      environment. *)
+  Theorem pool_run_ok cf cf' E Ef :
+    rtc pool_step cf cf' -> PoolOK (fst cf) E Ef (snd cf) ->
+    exists E', PoolOK (fst cf') E' Ef (snd cf').
+  Proof.
+    intros Hrun. revert E. induction Hrun as [| a b d Hab _ IH]; intros E Hok.
+    - by exists E.
+    - destruct a as [Pa sa], b as [Pb sb].
+      destruct (pool_ok_preserved Pa E Ef sa Pb sb Hab Hok) as [E1 Hok1].
+      exact (IH E1 Hok1).
+  Qed.
+
+  (** And safety, for the same interleaving: every thread's step is an [lstep],
+      so [WellFormed] holds throughout regardless of typing. *)
+  Theorem pool_run_preserves cf cf' :
+    rtc pool_step cf cf' -> WellFormed FType (snd cf) -> WellFormed FType (snd cf').
+  Proof.
+    induction 1 as [| a b d Hab _ IH]; intros Hwf; [exact Hwf |].
+    apply IH. destruct Hab as [t P s0 c c' s0' Hlk Ht]. cbn in Hwf |- *.
+    exact (tstep_preserves FType (Step t) (Step_lstep t) c s0 c' s0' Ht Hwf).
+  Qed.
+
+End pool.
+
+Print Assumptions pool_ok_preserved.
+Print Assumptions pool_run_ok.
+Print Assumptions pool_run_preserves.

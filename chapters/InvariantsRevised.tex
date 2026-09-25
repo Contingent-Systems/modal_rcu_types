@@ -95,7 +95,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 338 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 351 say \emph{closed under the
 global context}, and none reports an axiom.
 
 That target had the bug it exists to catch, and we report it because the
@@ -2497,6 +2497,55 @@ scheduler exists producing any particular interleaving.  The relation says what
 may happen, not what does; progress and fairness are the same open questions
 they were.
 
+\paragraph{What the kernel memory model's RCU axiom is, at this interface.}
+Two projects hide under ``verify against the LKMM'', and they have quite
+different answers.  One is to implement RCU from counters and verify that
+implementation under the model; that is the larger project, and it is worth
+noting that Tassarotti et al.\ chose release-acquire over the LKMM precisely to
+keep it tractable.  The other is to take the model's RCU guarantees as given
+and ask what they buy a client of the interface above.  This is the second.
+
+The LKMM does not \emph{derive} RCU from anything: it axiomatises it, and the
+axiom is that a read-side critical section does not span a grace period ---
+Alglave et al.'s requirement~1, and already a theorem of the epoch model.  So
+the question is not whether the axiom proves something but which part of the
+obligation it is, and the answer is a split, stated as an iff so that it says
+both halves.  Of the thirteen clauses of \texttt{Refines}, ten are
+bookkeeping: they say the four actions move the three observable components the
+way the published model's do, and no implementation of RCU can get them wrong
+and still be an implementation of RCU.  The other three are the axiom read
+three ways --- a grace period waits for the sections in progress when it
+begins, it is over only when every one of them has ended, and therefore a node
+detached before it began may be reclaimed after it ends.
+\texttt{refines\_split} is that iff, \texttt{lkmm\_conformance\_is\_refinement}
+the direction a reviewer asks for, and
+\texttt{epochs\_satisfy\_the\_axiom} the check that the statement is not
+vacuous.
+
+That leaves a translation, and it is a real one rather than a formality.  The
+LKMM is a predicate on whole \emph{executions} and \texttt{Impl} is a state
+machine.  An execution, at this interface, is the sequence of RCU events it
+contains --- section entries and exits, grace-period starts and stops,
+reclamations --- and conformance enters as a guard on each: an execution that
+reclaims a node with a section still standing is one whose reclamation event is
+not \emph{enabled}, and the axiom is what rules those out.
+\texttt{execution\_replays}: an execution all of whose events are enabled
+replays as a run of the paired step relation.  \texttt{lkmm\_execution\_is\_a\_run}:
+so any execution of a conforming implementation keeps the published model in
+step, which is the claim ``an implementation whose guard means what the axiom
+says satisfies the interface'' was short of.  And
+\texttt{executions\_free\_only\_quiesced\_nodes} says it at every
+reclamation in the execution rather than only at its end.
+
+Two things are explicit rather than assumed away.  Reading an execution as a
+\emph{sequence} assumes a total order, which is not free in a weak memory
+model; what makes it available is that all five events touch the protocol's own
+state, so the model's coherence on that state orders them.  And the hypothesis
+is a conjunction of guards, which could be unsatisfiable, so
+\texttt{around\_enabled} exhibits a whole round at the counter implementation
+--- a reader enters and leaves, a writer detaches a node, waits, reclaims it ---
+end to end.
+
 \paragraph{How much of this is about sequential consistency.}
 The same question can be asked of the memory model, and it has a sharper
 answer.  We are sequentially consistent; Tassarotti et al. verify under
@@ -2702,9 +2751,29 @@ and for safety taking either branch quantifies over \emph{more} runs than a
 real condition would allow.  And the action's effect is a parameter required
 only to be a step of \S\ref{sec:inv-mech}'s relation, which is what lets the
 file be about programs without re-encoding fifteen actions' side conditions.
-One thing it does not claim is pool-level preservation of typing: one thread's
-step changes shared state, and what says the others' environments survive it is
-the framing property, which is where it already was.
+Pool-level preservation of typing needs one thing more.  One thread's step
+changes shared state, so something must say the other threads' environments
+survive it, and that condition is read off the denotations rather than guessed:
+a type's meaning for a thread mentions that thread's own stack slots, the
+observations tagged with it, the root observation, its scope, the free list,
+the heap, the lock and the root, and nothing else.  \texttt{Frames} is those
+eight components and \texttt{Frames\_D\_env} is the proof that the list is
+complete, one case per type.  It is deliberately not minimal per type --- an
+\undf{} reference needs far less --- because a frame condition has to cover an
+\emph{environment}, which may hold any of the six.
+
+What it constrains says two things.  The heap, the lock and the root are
+constrained as wholes, which makes the writer's own actions non-framing; that
+is correct rather than a weakness, since an unlink really can invalidate
+another writer's path, and preventing exactly that is what the lock is for.
+And the free list is constrained as a whole rather than at the thread's own
+nodes, because \undf{} and \frbl{} quantify over entries the thread does not
+name.  With it, \texttt{pool\_run\_ok}: from a typed pool, every reachable
+configuration is a typed pool, with every thread still heading for the final
+environment its type gave it.  The per-action obligation this leaves has the
+same standing as ``every action is a step of the relation'' --- it is
+discharged where the actions are, by the framing lemmas of
+\S\ref{sec:inv-mech}, which are exactly its components.
 
 \paragraph{What is left, and it is three things.}
 The third of them used to be ``axiom soundness proper'' and is no longer: all

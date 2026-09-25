@@ -662,11 +662,32 @@ condition would.  And the action's effect is a parameter required only to be an
 `lstep`, which is what lets the file be about programs without re-encoding
 fifteen actions' side conditions.
 
-One thing it deliberately does **not** claim: pool-level preservation of
-typing.  One thread's step changes shared state and nothing here says the other
-threads' environments survive it.  That is the framing property, and it is
-`EnvOK_cell` / `EnvOK_obs` / `EnvOK_stack` in `Triples.v` — per-thread readings
-of exactly the condition a frame must satisfy.  Said in the file.
+**And pool-level typing, which the first pass left open.**  One thread's step
+changes shared state and something has to say the *other* threads' environments
+survive it.  `Frames s s' t` is that condition, and it is read off the
+denotations rather than guessed: eight components — `t`'s stack slots, the
+observations tagged `t`, the root observation, `t`'s scope, the free list, the
+heap, the lock, the root — and `Frames_D_env` is the proof that the list is
+complete, one case per type.  It is deliberately not minimal per type, because a
+frame condition has to cover an environment, which may hold any of the six.
+
+Two things it says by what it constrains.  The heap, the lock and the root are
+constrained *as wholes*, which makes the writer's actions non-framing — correct,
+since an unlink really can invalidate another writer's path, and that is what
+the lock is for.  And the free list is constrained as a whole rather than at
+`t`'s own nodes, because `undef` and `freeable` quantify over entries the thread
+does not name.
+
+`pool_step` indexes the step by the thread performing it, which the earlier
+sections did not need and this one does: soundness is about the stepping
+thread's environment and framing is about everybody else's, and saying so needs
+the two distinguishable.  `pool_ok_preserved` and `pool_run_ok`: from a typed
+pool, every reachable configuration is a typed pool with every thread still
+heading for the same final environment.  `Act_frames` has the same standing as
+`Step_lstep` — a per-action obligation discharged where the actions are, by
+`EnvOK_cell` / `EnvOK_obs` / `EnvOK_stack` / `EnvOK_fl` / `EnvOK_scope` /
+`EnvOK_free` / `EnvOK_syncstop` in `Triples.v`, which are exactly the components
+of `Frames`.
 
 ### W6. The LKMM correspondence
 
@@ -696,11 +717,33 @@ statement is not vacuous.
 So someone who has verified their RCU against the kernel memory model has
 thereby done our work; we are not asking for something extra.
 
-**What is still open, and is named rather than done:** the LKMM is a predicate
-on whole executions and `Impl` is a state machine.  Reading an LKMM execution
-as a run of an `Impl` is a real translation.  Until it is done the claim is
-"an implementation whose guard means what the axiom says satisfies the
-interface", not "any LKMM-conforming execution is one of ours".
+The split is stated as an iff, `refines_split`, so it says both things: the
+obligation contains the axiom and nothing about reclamation beyond it, and
+conformance discharges the obligation.
+
+**And the bridge, which the first pass named rather than did.**  The LKMM is a
+predicate on whole *executions* and `Impl` is a state machine, so reading an
+execution as a run is a real translation.  `ev` is the five RCU events an
+execution contains at this interface — section entries and exits,
+grace-period starts and stops, reclamations — `ev_enabled` is what each
+requires of the state it happens in, and `Enabled` is where conformance enters:
+an execution that reclaims a node with a section still standing is one whose
+`EFree` is not enabled, and `ns_free` is the axiom that rules those out.
+`execution_replays`: an execution all of whose events are enabled replays as a
+run of `pstep`.  `lkmm_execution_is_a_run`: therefore any execution of a
+conforming implementation keeps the published model in step — which is the claim
+the first pass was short of, "any conforming execution is one of ours" rather
+than "an implementation whose guard means what the axiom says satisfies the
+interface".  `executions_free_only_quiesced_nodes` says it at every reclamation
+in the execution rather than only at its end.
+
+Two things are explicit rather than assumed away.  Reading an execution as a
+*sequence* assumes a total order, which is not free in a weak memory model; what
+makes it available is that all five events touch the protocol's own state, so
+the model's coherence on that state orders them.  And `Enabled` is a conjunction
+of guards, which can be unsatisfiable, so `around_enabled` exhibits a whole
+round — a reader enters and leaves, a writer detaches a node, waits, reclaims
+it — at the counter implementation, end to end.
 
 ### W7. The dependency the compiler may not preserve
 

@@ -17,7 +17,7 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
 23,100 lines and 1,116 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 338
+succeed if the development contains an admitted proof, or if any of its 351
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -964,9 +964,30 @@ conditional stepping to either branch: there is no expression language there,
 and for safety taking either branch quantifies over more runs than a real
 condition would.  And the action's effect is a parameter required only to be a
 step of the relation, which is what lets that file be about programs without
-re-encoding fifteen actions' side conditions.  We do not claim pool-level
-preservation of typing: one thread's step changes shared state, and what says
-the others' environments survive it is the framing property.
+re-encoding fifteen actions' side conditions.
+
+Pool-level preservation of typing needed one thing more, and it is worth saying
+what.  One thread's step changes shared state, so something has to say the
+other threads' environments survive it.  That condition is read off the
+denotations rather than guessed: a type's meaning for a thread mentions that
+thread's own stack slots, the observations tagged with it, the root
+observation, its scope, the free list, the heap, the lock and the root, and
+nothing else.  Eight components, and the proof that the list is complete is one
+case per type.  It is not minimal per type -- an undef reference needs far less
+-- because a frame condition has to cover an environment, which may hold any of
+the six.
+
+Two things that condition says by what it constrains.  It constrains the heap,
+the lock and the root as wholes, which makes the writer's own actions
+non-framing; that is correct rather than a weakness, since an unlink really can
+invalidate another writer's path, and preventing exactly that is what the lock
+is for.  And it constrains the free list as a whole rather than at the thread's
+own nodes, because undef and freeable quantify over entries the thread does not
+name.  With it, from a typed pool every reachable configuration is a typed pool
+with every thread still heading for the same final environment.  The per-action
+obligation it leaves has the same standing as "every action is a step of the
+relation": it is discharged where the actions are, by the framing lemmas, which
+are exactly its components.
 
 What is left is three things, and we would rather name them than let the
 invariant work stand in for them.  The third used to be "axiom soundness
@@ -1161,6 +1182,48 @@ compiler may break them -- so the kernel memory model formalises the kernel's
 assumptions about its toolchain rather than standard C semantics, and a proof
 against it is a proof against a model in which the compiler is trusted, not
 proven, to respect dependencies.
+
+There is a second question hiding under "verify against the kernel memory
+model", and it is worth separating from the first because the answer is quite
+different.  One project is to implement RCU from counters and verify that
+implementation under the LKMM; that is the larger, Tassarotti-shaped project,
+and it is worth noting they chose release-acquire over the LKMM precisely to
+keep it tractable.  The other is to take the model's RCU guarantees as given
+and ask what they buy a client of our refinement interface.  We have done the
+second.
+
+The thing to see first is that the LKMM does not derive RCU from anything.  It
+axiomatises it, and the axiom is that a read-side critical section does not span
+a grace period -- which is Alglave et al.'s first requirement and, in our epoch
+model, is already a theorem.  So the question is not whether the axiom proves
+something but what part of the obligation it is.  The answer is a split, and we
+state it as an iff so that it says both halves.  Of the thirteen clauses of the
+refinement obligation, ten are bookkeeping: they say the four protocol actions
+move the three observable components the way the published model's do, and no
+implementation of RCU can get them wrong and still be an implementation of RCU.
+The other three are the axiom read three ways -- a grace period waits for the
+sections in progress when it begins, it is over only when every one of them has
+ended, and therefore a node detached before it began may be reclaimed after it
+ends.  So someone who has verified their RCU against the kernel memory model has
+thereby discharged our obligation; we are not asking for something extra.
+
+That left a translation we would rather name than skip, and have since done.
+The LKMM is a predicate on whole executions and our interface is a state
+machine, so reading an execution as a run of the interface is a real step.  An
+execution, at this interface, is the sequence of RCU events it contains --
+section entries and exits, grace-period starts and stops, reclamations -- and
+conformance enters as a guard on each: an execution that reclaims a node with a
+section still standing is one whose reclamation event is not enabled, and the
+axiom is what rules those out.  An execution all of whose events are enabled
+replays as a run, so any execution of a conforming implementation keeps the
+published model in step, and at every reclamation in it -- not only at its end
+-- the model's free list says the node is freeable.  Reading an execution as a
+sequence assumes a total order, which is not free in a weak memory model; what
+makes it available is that all five events touch the protocol's own state, so
+the model's coherence on that state orders them.  And since the hypothesis is a
+conjunction of guards, which could be unsatisfiable, we exhibit a whole round at
+the counter implementation -- a reader enters and leaves, a writer detaches a
+node, waits, reclaims it -- end to end.
 
 What we claim is narrower than "RCU is verified under weak memory" and, we
 think, more useful: the single invariant a weak memory model endangers is

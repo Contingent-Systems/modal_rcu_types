@@ -631,3 +631,340 @@ Corollary epoch_run_safe FType (c c' : Conf EpochImpl) tw x o :
 Proof. exact (xrun_safe EpochImpl epochs_refine FType c c' tw x o). Qed.
 
 Print Assumptions epoch_run_safe.
+
+(** * The kernel memory model's RCU axiom
+
+    Milestone 8, second half.  A reviewer's question about the Linux kernel
+    memory model hides two different projects.  One is to implement RCU from
+    counters and verify *that* under the LKMM; that is the Tassarotti-shaped
+    project, and note they chose release-acquire over the LKMM precisely to
+    keep it tractable.  The other is to take the LKMM's RCU guarantees as given
+    and ask what they buy a client of this interface.  This section is the
+    second.
+
+    The thing to see first is that the LKMM does not *derive* RCU from
+    anything.  It axiomatises it: the model's RCU axiom is that a read-side
+    critical section does not span a grace period, which is Alglave et al.'s
+    first requirement and, in the epoch model, is
+    [no_section_spans_a_grace_period] in [Epochs.v].  So the question is not
+    whether the axiom is strong enough to prove something --- it is what part
+    of the obligation it is.
+
+    The answer is a split.  Of the thirteen clauses of [Refines], ten are
+    bookkeeping: they say the four actions move the three observable components
+    the way the published model's do, and no implementation of RCU can get them
+    wrong and still be an implementation of RCU.  The other three are the
+    axiom, in its two halves --- what a grace period waits for, and what
+    follows for reclamation. *)
+
+Record Bookkeeping (I : Impl) : Prop := {
+  bk_wf_begin : forall (i : I) t,
+    i_wf i -> i_can_begin i t -> i_wf (i_read_begin i t);
+  bk_wf_end : forall (i : I) t, i_wf i -> i_wf (i_read_end i t);
+  bk_wf_start : forall (i : I) ds, i_wf i -> i_wf (i_sync_start i ds);
+  bk_wf_stop : forall (i : I), i_wf i -> i_wf (i_sync_stop i);
+  bk_wf_free : forall (i : I) o, i_wf i -> i_can_free i o -> i_wf (i_free i o);
+  bk_read_begin : forall (i : I) m F t,
+    i_wf i -> i_can_begin i t -> ISim i m F ->
+    ISim (i_read_begin i t) (read_begin_ms m t) F;
+  bk_read_end : forall (i : I) m F t,
+    i_wf i -> ISim i m F ->
+    ISim (i_read_end i t) (read_end_ms m t) (read_end_F F t);
+  bk_sync_start : forall (i : I) m F ds,
+    i_wf i -> ISim i m F ->
+    ISim (i_sync_start i ds) (sync_start_ms m) (i_ss_F i F ds);
+  bk_sync_stop : forall (i : I) m F,
+    i_wf i -> i_quiet i -> ISim i m F ->
+    ISim (i_sync_stop i) (sync_stop_ms m) F;
+  bk_free : forall (i : I) m F o,
+    i_wf i -> i_can_free i o -> ISim i m F ->
+    ISim (i_free i o) (free_ms m o) (delete o F);
+}.
+
+(** And the axiom.  Three clauses, and they are one sentence read three ways:
+    a grace period waits for the sections in progress when it begins
+    ([ns_snapshot]), it is over only when every one of them has ended
+    ([ns_quiet]), and therefore a node detached before it began may be
+    reclaimed after it ends ([ns_free]).
+
+    [ns_free] is stated as "no thread is still waited for" rather than as an
+    equality with the empty set, for the same reason the \frbl{} denotation is:
+    the extensional form is what an implementation can establish without
+    functional extensionality. *)
+Record NoSectionSpansAGracePeriod (I : Impl) : Prop := {
+  ns_snapshot : forall (i : I) m F,
+    i_wf i -> ISim i m F -> (forall t, t ∈ i_snapshot i <-> rds m t);
+  ns_quiet : forall (i : I) m F,
+    i_wf i -> ISim i m F -> (i_quiet i <-> forall t, ~ bnd m t);
+  ns_free : forall (i : I) o, i_wf i -> i_can_free i o ->
+    exists s, i_F i !! o = Some s /\ forall t, t ∉ s;
+}.
+
+(** The reclamation clause, outright.  This is the one place the axiom does
+    work rather than bookkeeping: it is what licenses a free. *)
+Theorem lkmm_gives_reclamation (I : Impl) (HA : NoSectionSpansAGracePeriod I)
+    (i : I) o :
+  i_wf i -> i_can_free i o -> i_F i !! o = Some ∅.
+Proof.
+  intros Hwf Hfree.
+  destruct (ns_free I HA i o Hwf Hfree) as [s [Hlk Hns]].
+  rewrite Hlk. f_equal. apply set_eq. intros t. split.
+  - intros Hc. destruct (Hns t Hc).
+  - intros Hc. by apply not_elem_of_empty in Hc.
+Qed.
+
+(** The split, both ways.  Left to right it says the obligation contains the
+    axiom and nothing about reclamation beyond it; right to left it is the
+    statement a reviewer asks for --- someone who has verified their RCU
+    against the kernel memory model has thereby discharged our obligation, and
+    we are not asking for something extra. *)
+Theorem refines_split (I : Impl) :
+  Refines I <-> Bookkeeping I /\ NoSectionSpansAGracePeriod I.
+Proof.
+  split.
+  - intros HR. split.
+    + constructor; intros; by eapply HR.
+    + constructor.
+      * intros i m F Hwf HS. exact (ref_snapshot I HR i m F Hwf HS).
+      * intros i m F Hwf HS. exact (ref_guard I HR i m F Hwf HS).
+      * intros i o Hwf Hfree. exists ∅.
+        split; [exact (ref_free_quiesced I HR i o Hwf Hfree) |].
+        intros t. by apply not_elem_of_empty.
+  - intros [HB HA]. constructor; try (intros; by eapply HB).
+    + intros i m F Hwf HS. exact (ns_quiet I HA i m F Hwf HS).
+    + intros i o Hwf Hfree. exact (lkmm_gives_reclamation I HA i o Hwf Hfree).
+    + intros i m F Hwf HS. exact (ns_snapshot I HA i m F Hwf HS).
+Qed.
+
+Theorem lkmm_conformance_is_refinement (I : Impl) :
+  Bookkeeping I -> NoSectionSpansAGracePeriod I -> Refines I.
+Proof. intros HB HA. by apply refines_split. Qed.
+
+(** ...and that the statement is not vacuous: the epoch model satisfies it,
+    which it must, since [Epochs.v] proved Alglave's clause directly. *)
+Theorem epochs_satisfy_the_axiom : NoSectionSpansAGracePeriod EpochImpl.
+Proof. by apply refines_split, epochs_refine. Qed.
+
+Print Assumptions lkmm_gives_reclamation.
+Print Assumptions refines_split.
+Print Assumptions lkmm_conformance_is_refinement.
+Print Assumptions epochs_satisfy_the_axiom.
+
+(** ** The bridge the claim was missing
+
+    The split above is a statement about implementations, and it is stated in
+    the interface's own terms --- a state, a guard, a step.  The LKMM is not
+    that kind of object.  It is a predicate on whole *executions*: a finite set
+    of memory events with relations over them, and conformance is a property of
+    the graph, not of a state at a moment.  So "an implementation whose guard
+    means what the axiom says satisfies the interface" is not yet "any
+    conforming execution is a run of ours"; getting from one to the other is a
+    translation, and this is it.
+
+    An execution, at this interface, is the sequence of RCU events it
+    contains --- section entries and exits, grace-period starts and stops, and
+    reclamations --- in the order the model's coherence puts them.  Nothing
+    else in an LKMM execution is visible to the protocol, which is the point:
+    the loads and stores are the client's business and are what [xstep] below
+    already carries.
+
+    Two things are worth being explicit about.  The order is total, which is
+    what reading an execution as a *sequence* assumes; that is not free in a
+    weak memory model in general, and what makes it available here is that
+    these five events all touch the protocol's own state, so the model's
+    coherence order on that state orders them.  And [Enabled] is where
+    conformance enters: an execution in which a reclamation happens with a
+    section still standing is one whose [EFree] is not enabled, and the axiom
+    is exactly what rules those out. *)
+
+Inductive ev :=
+| EBegin (t : TID)
+| EEnd (t : TID)
+| EStart (ds : gset Loc)
+| EStop
+| EFree (o : Loc).
+
+Definition Exec := list ev.
+
+Definition PConf (I : Impl) : Type := (I * MState * gmap Loc (gset TID))%type.
+
+(** What each event requires of the state it happens in.  Three of the five are
+    unconditional; the two that are not are the two the protocol is about. *)
+Definition ev_enabled {I : Impl} (e : ev) (c : PConf I) : Prop :=
+  match e with
+  | EBegin t => i_can_begin c.1.1 t
+  | EEnd _   => True
+  | EStart _ => True
+  | EStop    => i_quiet c.1.1
+  | EFree o  => i_can_free c.1.1 o
+  end.
+
+(** ...and what it does.  This is [pstep] written as a function, which is
+    possible precisely because the events name their own arguments. *)
+Definition ev_apply {I : Impl} (e : ev) (c : PConf I) : PConf I :=
+  match e with
+  | EBegin t  => (i_read_begin c.1.1 t, read_begin_ms c.1.2 t, c.2)
+  | EEnd t    => (i_read_end c.1.1 t, read_end_ms c.1.2 t, read_end_F c.2 t)
+  | EStart ds => (i_sync_start c.1.1 ds, sync_start_ms c.1.2, i_ss_F c.1.1 c.2 ds)
+  | EStop     => (i_sync_stop c.1.1, sync_stop_ms c.1.2, c.2)
+  | EFree o   => (i_free c.1.1 o, free_ms c.1.2 o, delete o c.2)
+  end.
+
+Lemma ev_pstep (I : Impl) (e : ev) (c : PConf I) :
+  ev_enabled e c -> pstep c (ev_apply e c).
+Proof.
+  destruct c as [[i m] F]. destruct e; simpl; intros He.
+  - by apply P_begin.
+  - by apply P_end.
+  - by apply P_start.
+  - by apply P_stop.
+  - by apply P_free.
+Qed.
+
+Fixpoint Enabled {I : Impl} (es : Exec) (c : PConf I) : Prop :=
+  match es with
+  | nil => True
+  | e :: rest => ev_enabled e c /\ Enabled rest (ev_apply e c)
+  end.
+
+Fixpoint replay {I : Impl} (es : Exec) (c : PConf I) : PConf I :=
+  match es with
+  | nil => c
+  | e :: rest => replay rest (ev_apply e c)
+  end.
+
+Lemma replay_app (I : Impl) es1 es2 (c : PConf I) :
+  replay (es1 ++ es2) c = replay es2 (replay es1 c).
+Proof.
+  revert c. induction es1 as [| e es1 IH]; intros c; [reflexivity |].
+  simpl. by rewrite IH.
+Qed.
+
+Lemma Enabled_app (I : Impl) es1 es2 (c : PConf I) :
+  Enabled (es1 ++ es2) c <-> Enabled es1 c /\ Enabled es2 (replay es1 c).
+Proof.
+  revert c. induction es1 as [| e es1 IH]; intros c; simpl.
+  - split; [by intros H | by intros [_ H]].
+  - split.
+    + intros [He Hrest]. apply IH in Hrest as [H1 H2]. by repeat split.
+    + intros [[He H1] H2]. split; [exact He |]. by apply IH.
+Qed.
+
+(** The translation.  An execution all of whose events are enabled replays as a
+    run of the paired step relation --- so it is a run of the interface, and
+    everything the interface proves about runs is available to it. *)
+Theorem execution_replays (I : Impl) es (c : PConf I) :
+  Enabled es c -> rtc pstep c (replay es c).
+Proof.
+  revert c. induction es as [| e es IH]; intros c; simpl; [by intros _ |].
+  intros [He Hrest].
+  eapply rtc_l; [exact (ev_pstep I e c He) | exact (IH _ Hrest)].
+Qed.
+
+(** ...and therefore any conforming execution keeps the published model in
+    step.  This is the statement the earlier claim was short of: not "an
+    implementation whose guard means what the axiom says satisfies the
+    interface", but "any execution of one is a run of ours". *)
+Theorem lkmm_execution_is_a_run (I : Impl)
+    (HB : Bookkeeping I) (HA : NoSectionSpansAGracePeriod I) es (c : PConf I) :
+  IOK c -> Enabled es c -> IOK (replay es c).
+Proof.
+  intros Hok Hen.
+  exact (refines_run I (lkmm_conformance_is_refinement I HB HA) c _
+           (execution_replays I es c Hen) Hok).
+Qed.
+
+(** And the payoff, at every reclamation in the execution rather than only at
+    its end: wherever a conforming execution frees a node, the published
+    model's free list says at that point that the node is \frbl{} --- its entry
+    exists and no thread is still waited for.  [Denotations.v] is what turns
+    that into "nobody holds a live reference", and [refines_free_is_freeable]
+    is the same sentence one step further on.
+
+    The hypothesis is only that the execution's events are enabled.  That is
+    where conformance to the LKMM enters and it is the whole of what is used:
+    an execution that reclaims a node while a section that could hold it is
+    still standing is one whose [EFree] is not enabled, and [ns_free] is the
+    axiom that says so. *)
+Theorem executions_free_only_quiesced_nodes (I : Impl)
+    (HB : Bookkeeping I) (HA : NoSectionSpansAGracePeriod I)
+    es1 es2 (c : PConf I) o :
+  IOK c -> Enabled (es1 ++ EFree o :: es2) c ->
+  (replay es1 c).2 !! o = Some ∅.
+Proof.
+  intros Hok Hen. apply Enabled_app in Hen as [H1 H2].
+  destruct H2 as [Hfree _].
+  pose proof (lkmm_execution_is_a_run I HB HA es1 c Hok H1) as [Hwf HS].
+  destruct HS as (_ & _ & HF). rewrite HF.
+  exact (lkmm_gives_reclamation I HA _ o Hwf Hfree).
+Qed.
+
+Print Assumptions execution_replays.
+Print Assumptions lkmm_execution_is_a_run.
+Print Assumptions executions_free_only_quiesced_nodes.
+
+(** *** That the hypothesis is satisfiable
+
+    [Enabled] is a conjunction of guards, and a conjunction of guards can be
+    unsatisfiable.  Two of the five events are guarded, and the guarded ones
+    are the two the protocol is about, so a reader would be right to ask
+    whether any execution containing an [EFree] is enabled at all.  One is:
+    a reader enters and leaves, a writer detaches a node, waits, and reclaims
+    it --- a whole round, at the counter implementation, end to end. *)
+
+Definition ebase : EState := {| egen := 0; ereg := ∅; estamp := ∅ |}.
+
+Definition mbase : MState :=
+  {| stk := fun _ _ => None; hp := fun _ _ => None; lk := None; rt := 0;
+     rds := fun _ => False; bnd := fun _ => False |}.
+
+Definition cbase : PConf EpochImpl := (ebase, mbase, e_F ebase).
+
+Definition around : Exec :=
+  EBegin 9 :: EEnd 9 :: EStart {[ 1%nat ]} :: EStop :: EFree 1%nat :: nil.
+
+Lemma around_ereg (t : TID) : delete 9 (<[9 := 0]> (∅ : gmap TID nat)) !! t = None.
+Proof.
+  rewrite (delete_insert_eq (∅ : gmap TID nat) 9 0), delete_empty.
+  apply lookup_empty.
+Qed.
+
+Lemma cbase_ok : IOK cbase.
+Proof.
+  split.
+  - split; simpl.
+    + intros o e Ho. by rewrite lookup_empty in Ho.
+    + intros t e Ht. by rewrite lookup_empty in Ht.
+  - repeat apply conj; [| | reflexivity].
+    + intros t. simpl. unfold e_rds. simpl. rewrite lookup_empty.
+      split; [by intros [] | by intros [e He]].
+    + intros t. simpl. unfold e_bnd. simpl. rewrite lookup_empty.
+      split; [by intros [] | by intros [e [He _]]].
+Qed.
+
+Lemma around_enabled : Enabled around cbase.
+Proof.
+  repeat apply conj.
+  - simpl. by rewrite lookup_empty.
+  - exact I.
+  - exact I.
+  - (* the wait may end: after the reader has left, nothing is registered *)
+    simpl. intros t e Ht. by rewrite around_ereg in Ht.
+  - (* and the node may be reclaimed: it is stamped, and nobody is behind *)
+    simpl. exists 0. split.
+    + apply lookup_union_Some_l, lookup_gset_to_gmap_Some.
+      split; [by apply elem_of_singleton | reflexivity].
+    + intros t e' Ht. simpl in Ht. by rewrite around_ereg in Ht.
+  - exact I.
+Qed.
+
+Theorem a_whole_round_is_an_enabled_execution :
+  IOK (replay around cbase).
+Proof.
+  exact (lkmm_execution_is_a_run EpochImpl
+           (proj1 (proj1 (refines_split EpochImpl) epochs_refine))
+           epochs_satisfy_the_axiom around cbase cbase_ok around_enabled).
+Qed.
+
+Print Assumptions around_enabled.
+Print Assumptions a_whole_round_is_an_enabled_execution.
