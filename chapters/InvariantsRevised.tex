@@ -95,7 +95,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 351 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 373 say \emph{closed under the
 global context}, and none reports an axiom.
 
 That target had the bug it exists to catch, and we report it because the
@@ -2546,6 +2546,26 @@ is a conjunction of guards, which could be unsatisfiable, so
 --- a reader enters and leaves, a writer detaches a node, waits, reclaims it ---
 end to end.
 
+The same translation runs once more at the client's level, which is where the
+safety theorem lives.  The protocol-level reading is the right object for an
+axiom about grace periods, and it is not yet the statement a client wants,
+because a client's execution contains its own loads and stores.  So an event
+there is one of the five protocol events or one heap mutation, carrying what the
+corresponding \texttt{xstep} constructor leaves existential --- not a
+weakening, since an execution \emph{is} a record of what happened, so an event
+that names its own outcome is the faithful reading and enabledness is then
+exactly the constructor's premises.  \texttt{xexecution\_replays} and
+\texttt{conforming\_executions\_are\_memory\_safe}: any execution of any
+client against an implementation conforming to the axiom, all of whose events
+are enabled, reaches only states in which no thread but the writer holds a live
+reference to a node the writer may reclaim.  Conformance enters in one place ---
+the reclamation event's guard --- and nothing else about the implementation is
+used.  \texttt{epoch\_executions\_are\_memory\_safe} is that chain from the
+axiom to the client in one statement, and \texttt{xround\_enabled} is the
+non-vacuity check again, a whole client round with the writer's unlinked
+observation recoloured by \textsc{SyncStop}, so that the reclamation guard is
+reached rather than assumed.
+
 \paragraph{How much of this is about sequential consistency.}
 The same question can be asked of the memory model, and it has a sharper
 answer.  We are sequentially consistent; Tassarotti et al. verify under
@@ -2766,14 +2786,49 @@ What it constrains says two things.  The heap, the lock and the root are
 constrained as wholes, which makes the writer's own actions non-framing; that
 is correct rather than a weakness, since an unlink really can invalidate
 another writer's path, and preventing exactly that is what the lock is for.
-And the free list is constrained as a whole rather than at the thread's own
-nodes, because \undf{} and \frbl{} quantify over entries the thread does not
-name.  With it, \texttt{pool\_run\_ok}: from a typed pool, every reachable
-configuration is a typed pool, with every thread still heading for the final
-environment its type gave it.  The per-action obligation this leaves has the
-same standing as ``every action is a step of the relation'' --- it is
-discharged where the actions are, by the framing lemmas of
-\S\ref{sec:inv-mech}, which are exactly its components.
+And the free list is constrained twice and weakly --- entries that are absent
+stay absent, entries with nobody left to wait for keep having nobody --- rather
+than by an equality, because those are the only two things the denotations ask
+of it and an equality would exclude \textsc{ReadEnd}, which does nothing to the
+free list but shrink its entries.  With it, \texttt{pool\_run\_ok}: from a
+typed pool, every reachable configuration is a typed pool, with every thread
+still heading for the final environment its type gave it.
+
+The per-action obligation is then discharged rather than left a hypothesis, and
+the answer is not uniform, which is the part worth reporting.
+\texttt{Frames\_machine}: a step that changes only the reader or bounding set
+frames \emph{every} thread, because neither set is mentioned by any denotation
+--- \textsc{ReadBegin}, and the machine halves of \textsc{SyncStart} and
+\textsc{SyncStop}.  \texttt{frames\_read}: a reader's read extends its own
+column of the observation map, so it frames every other thread, and the
+well-formedness condition on that map is exactly what separates the columns.
+\texttt{frames\_bind}: \textsc{Bind} writes one stack slot.
+\texttt{frames\_read\_end} frames too, and needs one hypothesis the abstract
+step does not supply --- that the other threads' scopes are unchanged.  That is
+an under-specification of the action rather than a gap in the frame condition,
+and it is better as a hypothesis in a theorem than as a remark.
+
+The writer's ten do not frame, and \texttt{heap\_changes\_do\_not\_frame}
+is the witness rather than the assertion.  That is correct, and
+\texttt{heap\_types\_need\_the\_lock} and
+\texttt{heap\_types\_are\_exclusive} say why: every type whose denotation
+constrains the heap requires the lock, so no two threads hold one at the same
+time, and a writer's mutation therefore has no \emph{other} thread's path type
+to invalidate --- the thread that could hold one is the writer itself.  The
+protocol's answer to framing is the lock, and the frame condition is where that
+becomes visible instead of assumed.
+
+Two smaller things in the same file.  Safety and progress are separate and both
+are now stated: \texttt{tstep\_progress}, that a non-skip command steps unless
+the action it is about to perform cannot.  That is the right statement rather
+than a weak one, because an action whose guard is false genuinely blocks and
+should --- a writer waiting on the lock, a grace period waiting on a reader ---
+and with \texttt{finished\_pools\_are\_stuck} a stuck configuration is
+finished or blocked on a guard and never a third thing.  And the action's
+effect, a parameter throughout, is instantiated with
+\S\ref{sec:inv-mech}'s relation itself, so
+\texttt{real\_programs\_are\_memory\_safe} is about the fifteen actions
+rather than about an abstraction of them.
 
 \paragraph{What is left, and it is three things.}
 The third of them used to be ``axiom soundness proper'' and is no longer: all

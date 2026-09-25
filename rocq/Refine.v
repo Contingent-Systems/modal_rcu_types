@@ -968,3 +968,366 @@ Qed.
 
 Print Assumptions around_enabled.
 Print Assumptions a_whole_round_is_an_enabled_execution.
+
+(** ** The client's executions, not only the protocol's
+
+    The bridge above reads an execution as a run of [pstep], which is the
+    protocol's bookkeeping.  That is the right object for the LKMM's axiom,
+    which is about grace periods and nothing else, but it is not yet the
+    statement a client wants: a client's execution contains its own loads and
+    stores, and the safety theorem is about those.
+
+    So the same translation again, one level up.  An event here is one of the
+    five protocol events or one heap mutation, and it carries what the
+    corresponding [xstep] constructor leaves existential --- the observation
+    map a ReadEnd produces, the state a mutation produces.  That is not a
+    weakening: an execution *is* a record of what happened, so an event that
+    names its own outcome is the faithful reading, and enabledness is then
+    exactly the constructor's premises.
+
+    The payoff is the one the development exists for, now said of executions:
+    any execution of any client against a conforming implementation, all of
+    whose events are enabled, reaches only states in which a node about to be
+    reclaimed has no live reference anywhere. *)
+
+Inductive xev : Type :=
+| XFree (d : Loc) (t : TID)
+| XBegin (t : TID)
+| XEnd (t : TID) (Og' : ObsMap) (U' : Var -> TID -> Prop)
+| XStart (ds : gset Loc)
+| XStop
+| XMutate (m' : MState) (Og' : ObsMap) (U' : Var -> TID -> Prop) (T' : gset TID).
+
+Definition XExec : Type := list xev.
+
+Definition xev_apply {I : Impl} (e : xev) (c : Conf I) : Conf I :=
+  match e with
+  | XFree d t => MkConf (i_free (c_i c) d) (free_ms (c_m c) d)
+                        (c_Og c) (c_U c) (c_T c) (delete d (c_F c))
+  | XBegin t => MkConf (i_read_begin (c_i c) t) (read_begin_ms (c_m c) t)
+                       (c_Og c) (c_U c) (c_T c) (c_F c)
+  | XEnd t Og' U' => MkConf (i_read_end (c_i c) t) (read_end_ms (c_m c) t)
+                            Og' U' (c_T c) (read_end_F (c_F c) t)
+  | XStart ds => MkConf (i_sync_start (c_i c) ds) (sync_start_ms (c_m c))
+                        (c_Og c) (c_U c) (c_T c) (i_ss_F (c_i c) (c_F c) ds)
+  | XStop => MkConf (i_sync_stop (c_i c)) (sync_stop_ms (c_m c))
+                    (sync_stop_Og (c_Og c)) (c_U c) (c_T c) (c_F c)
+  | XMutate m' Og' U' T' => MkConf (c_i c) m' Og' U' T' (c_F c)
+  end.
+
+(** What each event requires of the state it happens in: verbatim the premises
+    of the [xstep] constructor it names.  The reclamation event is where the
+    kernel memory model's axiom enters, through [i_can_free]. *)
+Definition xev_enabled {I : Impl} (FType : FName -> FieldKind)
+    (e : xev) (c : Conf I) : Prop :=
+  match e with
+  | XFree d t =>
+      obsv (c_L c) d (Ofree t) /\ i_can_free (c_i c) d
+  | XBegin t =>
+      i_can_begin (c_i c) t
+      /\ (forall lw, lk (c_m c) = Some lw -> lw <> t)
+      /\ (forall o, ~ obsv (c_L c) o (Ounlk t)
+                 /\ ~ obsv (c_L c) o (Ofree t)
+                 /\ ~ obsv (c_L c) o (Ofresh t))
+  | XEnd t Og' U' =>
+      let c' := xev_apply (XEnd t Og' U') c in
+      (forall o ob, obs_tid ob = Some t -> ~ obsv (c_L c') o ob)
+      /\ (forall o ob, obsv (c_L c) o ob -> obs_tid ob <> Some t ->
+            obsv (c_L c') o ob)
+      /\ (forall o ob, obsv (c_L c') o ob -> obsv (c_L c) o ob)
+      /\ (forall x, undf (c_L c') x t)
+      /\ (forall x t', undf (c_L c) x t' -> undf (c_L c') x t')
+      /\ rds (c_m c) t
+  | XStart ds =>
+      (forall o s0, i_ss_F (c_i c) (c_F c) ds !! o = Some s0 ->
+         s0 = i_snapshot (c_i c))
+      /\ (forall o t, obsv (c_L c) o (Ounlk t) \/ obsv (c_L c) o (Ofree t) ->
+            exists s0, i_ss_F (c_i c) (c_F c) ds !! o = Some s0)
+      /\ (forall o s0, i_ss_F (c_i c) (c_F c) ds !! o = Some s0 ->
+            exists t, obsv (c_L c) o (Ounlk t) \/ obsv (c_L c) o (Ofree t))
+  | XStop => i_quiet (c_i c)
+  | XMutate m' Og' U' T' =>
+      lstep FType (c_L c) (to_LState_t m' Og' U' T' (c_F c))
+      /\ (forall t, rds m' t <-> rds (c_m c) t)
+      /\ (forall t, bnd m' t <-> bnd (c_m c) t)
+  end.
+
+Lemma xev_xstep (I : Impl) FType (e : xev) (c : Conf I) :
+  xev_enabled FType e c -> xstep FType c (xev_apply e c).
+Proof.
+  destruct c as [i m Og U T F]. destruct e; simpl; unfold c_L; simpl.
+  - intros [H1 H2]. eapply X_free; [exact H1 | exact H2].
+  - intros (H1 & H2 & H3). by apply X_read_begin.
+  - intros (H1 & H2 & H3 & H4 & H5 & H6). by apply X_read_end.
+  - intros (H1 & H2 & H3). by apply X_sync_start.
+  - intros H1. by apply X_sync_stop.
+  - intros (H1 & H2 & H3). by apply X_heap.
+Qed.
+
+Fixpoint XEnabled {I : Impl} (FType : FName -> FieldKind)
+    (es : XExec) (c : Conf I) : Prop :=
+  match es with
+  | nil => True
+  | e :: rest => xev_enabled FType e c /\ XEnabled FType rest (xev_apply e c)
+  end.
+
+Fixpoint xreplay {I : Impl} (es : XExec) (c : Conf I) : Conf I :=
+  match es with
+  | nil => c
+  | e :: rest => xreplay rest (xev_apply e c)
+  end.
+
+Lemma xreplay_app (I : Impl) es1 es2 (c : Conf I) :
+  xreplay (es1 ++ es2) c = xreplay es2 (xreplay es1 c).
+Proof.
+  revert c. induction es1 as [| e es1 IH]; intros c; [reflexivity |].
+  simpl. by rewrite IH.
+Qed.
+
+Lemma XEnabled_app (I : Impl) FType es1 es2 (c : Conf I) :
+  XEnabled FType (es1 ++ es2) c
+  <-> XEnabled FType es1 c /\ XEnabled FType es2 (xreplay es1 c).
+Proof.
+  revert c. induction es1 as [| e es1 IH]; intros c; simpl.
+  - split; [by intros H | by intros [_ H]].
+  - split.
+    + intros [He Hrest]. apply IH in Hrest as [H1 H2]. by repeat split.
+    + intros [[He H1] H2]. split; [exact He |]. by apply IH.
+Qed.
+
+Theorem xexecution_replays (I : Impl) FType es (c : Conf I) :
+  XEnabled FType es c -> rtc (xstep FType) c (xreplay es c).
+Proof.
+  revert c. induction es as [| e es IH]; intros c; simpl; [by intros _ |].
+  intros [He Hrest].
+  eapply rtc_l; [exact (xev_xstep I FType e c He) | exact (IH _ Hrest)].
+Qed.
+
+(** And the statement the development exists for, said of executions: any
+    execution of any client against an implementation that conforms to the
+    kernel memory model's RCU axiom, all of whose events are enabled, reaches
+    only states in which no thread but the writer holds a live reference to a
+    node the writer may reclaim.
+
+    Conformance enters in one place and one place only --- the reclamation
+    event's guard --- which is the point.  Nothing else about the
+    implementation is used, and nothing about the client is assumed beyond its
+    steps being steps. *)
+Theorem conforming_executions_are_memory_safe (I : Impl)
+    (HB : Bookkeeping I) (HA : NoSectionSpansAGracePeriod I)
+    FType es (c : Conf I) tw x o :
+  c_ok c -> WellFormed FType (c_L c) -> XEnabled FType es c ->
+  D_freeable (c_L (xreplay es c)) tw x ->
+  stk (ms (c_L (xreplay es c))) x tw = Some o ->
+  forall y t', t' <> tw -> stk (ms (c_L (xreplay es c))) y t' = Some o ->
+    ~ undf (c_L (xreplay es c)) y t' -> False.
+Proof.
+  intros Hok Hwf Hen.
+  exact (xrun_safe I (lkmm_conformance_is_refinement I HB HA) FType
+           c (xreplay es c) tw x o (xexecution_replays I FType es c Hen)
+           Hok Hwf).
+Qed.
+
+(** The reclamation half of it, at every reclamation in the execution rather
+    than only at its end --- the client-level twin of
+    [executions_free_only_quiesced_nodes], and the same one-line use of the
+    axiom. *)
+Lemma xrun_ok (I : Impl) (HR : Refines I) FType (c c' : Conf I) :
+  rtc (xstep FType) c c' -> c_ok c -> c_ok c'.
+Proof.
+  induction 1 as [| a b d Hab _ IH]; intros Hok; [exact Hok |].
+  exact (IH (xstep_ok I HR FType a b Hab Hok)).
+Qed.
+
+Theorem client_executions_free_only_quiesced_nodes (I : Impl)
+    (HB : Bookkeeping I) (HA : NoSectionSpansAGracePeriod I)
+    FType es1 es2 (c : Conf I) d t :
+  c_ok c -> XEnabled FType (es1 ++ XFree d t :: es2) c ->
+  c_F (xreplay es1 c) !! d = Some ∅.
+Proof.
+  intros Hok Hen. apply XEnabled_app in Hen as [H1 H2].
+  destruct H2 as [[_ Hfree] _].
+  pose proof (xrun_ok I (lkmm_conformance_is_refinement I HB HA) FType
+                c (xreplay es1 c)
+                (xexecution_replays I FType es1 c H1) Hok) as [Hwf HS].
+  destruct HS as (_ & _ & HF). rewrite HF.
+  exact (lkmm_gives_reclamation I HA _ d Hwf Hfree).
+Qed.
+
+(** ...and at the counter model, so the chain is visible from the axiom to the
+    client in one statement. *)
+Corollary epoch_executions_are_memory_safe FType es (c : Conf EpochImpl) tw x o :
+  c_ok c -> WellFormed FType (c_L c) -> XEnabled FType es c ->
+  D_freeable (c_L (xreplay es c)) tw x ->
+  stk (ms (c_L (xreplay es c))) x tw = Some o ->
+  forall y t', t' <> tw -> stk (ms (c_L (xreplay es c))) y t' = Some o ->
+    ~ undf (c_L (xreplay es c)) y t' -> False.
+Proof.
+  exact (conforming_executions_are_memory_safe EpochImpl
+           (proj1 (proj1 (refines_split EpochImpl) epochs_refine))
+           epochs_satisfy_the_axiom FType es c tw x o).
+Qed.
+
+Print Assumptions xev_xstep.
+Print Assumptions xexecution_replays.
+Print Assumptions xrun_ok.
+Print Assumptions client_executions_free_only_quiesced_nodes.
+Print Assumptions conforming_executions_are_memory_safe.
+Print Assumptions epoch_executions_are_memory_safe.
+
+(** *** That this hypothesis is satisfiable too
+
+    [around_enabled] showed the protocol-level guards can all hold at once.
+    The client-level ones are those plus the observation conditions, and the
+    reclamation event's is the conjunction that matters: a node the writer has
+    detached, a grace period that has run, and an implementation that says the
+    node may be freed.  So the same round again, with a writer holding an
+    unlinked observation that SyncStop recolours --- which is the protocol
+    rather than a convenient starting state. *)
+
+Definition xbase_Og : ObsMap := {[ (1%nat, 0%nat) := {[ Ounlk 0%nat ]} ]}.
+
+(** A state whose observation map is a single entry has exactly one
+    observation, which is what makes the negative guards checkable. *)
+Lemma single_obs (Og : ObsMap) q r ob0 m U T F o ob :
+  Og = {[ (q, r) := {[ ob0 ]} ]} -> obs_tid ob <> None ->
+  obsv (to_LState_t m Og U T F) o ob -> o = q /\ ob = ob0.
+Proof.
+  intros -> Hnr Hob.
+  assert (Hex : exists (q0 : TID) (s0 : gset obs),
+            ({[ (q, r) := ({[ ob0 ]} : gset obs) ]} : ObsMap)
+              !! (o, q0) = Some s0
+            /\ ob ∈ s0).
+  { destruct ob; simpl in Hnr, Hob;
+      try (exfalso; apply Hnr; reflexivity); exact Hob. }
+  destruct Hex as [q0 [s0 [Hl Hin]]].
+  apply lookup_singleton_Some in Hl as [Heq <-].
+  apply elem_of_singleton in Hin.
+  assert (Ho : q = o) by exact (f_equal fst Heq).
+  split; [by rewrite Ho | exact Hin].
+Qed.
+
+Lemma xbase_obs m U T F o ob :
+  obs_tid ob <> None ->
+  obsv (to_LState_t m xbase_Og U T F) o ob -> o = 1%nat /\ ob = Ounlk 0%nat.
+Proof. exact (single_obs xbase_Og 1%nat 0%nat _ m U T F o ob eq_refl). Qed.
+
+(** ...and the same read off a configuration, which is the form the guards
+    below take. *)
+Lemma xbase_obs_c (c : Conf EpochImpl) o ob :
+  obsv (c_L c) o ob -> c_Og c = xbase_Og -> obs_tid ob <> None ->
+  o = 1%nat /\ ob = Ounlk 0%nat.
+Proof.
+  intros Hob HOg Hnr. unfold c_L in Hob. rewrite HOg in Hob.
+  exact (xbase_obs (c_m c) (c_U c) (c_T c) (c_F c) o ob Hnr Hob).
+Qed.
+
+(** SyncStop recolours the writer's unlinked observation to freeable, which is
+    the step the reclamation guard is waiting for --- [sync_stop_Og_map] in
+    [Actions.v] is that recolouring, and this is it at the one entry. *)
+Lemma xbase_unlk m U T F :
+  obsv (to_LState_t m xbase_Og U T F) 1%nat (Ounlk 0%nat).
+Proof.
+  exists 0%nat, ({[ Ounlk 0%nat ]} : gset obs).
+  split; [apply lookup_singleton_eq | by apply elem_of_singleton].
+Qed.
+
+Lemma xfree_obs m U T F :
+  obsv (to_LState_t (sync_stop_ms m) (sync_stop_Og xbase_Og) U T F)
+       1%nat (Ofree 0%nat).
+Proof.
+  exact (sync_stop_Og_map m xbase_Og U T F 1%nat (Ounlk 0%nat)
+           (xbase_unlk m U T F)).
+Qed.
+
+(** The free list is empty throughout the round until SyncStart stamps the
+    detached node, which is what makes the stamping guards decidable here. *)
+Lemma xF_none (o : Loc) :
+  read_end_F (∅ : gmap Loc (gset TID)) 9 !! o = None.
+Proof. unfold read_end_F. by rewrite lookup_fmap, lookup_empty. Qed.
+
+Definition xbase : Conf EpochImpl :=
+  MkConf (I := EpochImpl) ebase mbase xbase_Og (fun _ _ => False) ∅ ∅.
+
+Definition xround : XExec :=
+  XBegin 9 :: XEnd 9 xbase_Og (fun _ t => t = 9%nat)
+        :: XStart {[ 1%nat ]} :: XStop :: XFree 1%nat 0%nat :: nil.
+
+Lemma xbase_ok : c_ok xbase.
+Proof.
+  split.
+  - split; simpl.
+    + intros o e Ho. by rewrite lookup_empty in Ho.
+    + intros t e Ht. by rewrite lookup_empty in Ht.
+  - repeat apply conj; simpl.
+    + intros t. unfold e_rds. simpl. rewrite lookup_empty.
+      split; [by intros [] | by intros [e He]].
+    + intros t. unfold e_bnd. simpl. rewrite lookup_empty.
+      split; [by intros [] | by intros [e [He _]]].
+    + unfold e_F, ebase. simpl. by rewrite fmap_empty.
+Qed.
+
+Lemma xround_enabled : XEnabled (fun _ => RCUField) xround xbase.
+Proof.
+  repeat apply conj.
+  (* the reader may enter: registered nowhere, the lock free, and it holds
+     none of the writer's observations *)
+  - simpl. by rewrite lookup_empty.
+  - simpl. intros lw Hc. discriminate.
+  - intros o. repeat apply conj.
+    + intros Hc. destruct (xbase_obs_c _ o (Ounlk 9) Hc eq_refl
+        ltac:(intros Hd; discriminate)) as [_ Hb]. discriminate.
+    + intros Hc. destruct (xbase_obs_c _ o (Ofree 9) Hc eq_refl
+        ltac:(intros Hd; discriminate)) as [_ Hb]. discriminate.
+    + intros Hc. destruct (xbase_obs_c _ o (Ofresh 9) Hc eq_refl
+        ltac:(intros Hd; discriminate)) as [_ Hb]. discriminate.
+  (* and may leave: it holds nothing, so nothing of its own survives, and the
+     writer's observation is untouched *)
+  - intros o ob Hob Hc.
+    destruct (xbase_obs_c _ o ob Hc eq_refl
+      ltac:(rewrite Hob; intros Hd; discriminate)) as [_ ->].
+    simpl in Hob. discriminate.
+  - intros o ob Hc _. exact Hc.
+  - intros o ob Hc. exact Hc.
+  - by intros x.
+  - by intros x t' [].
+  - by right.
+  (* the grace period stamps the detached node, and only it *)
+  - intros o s0 Hlk. unfold i_ss_F, ss_F in Hlk.
+    apply lookup_union_Some_raw in Hlk as [Hg | [_ Hf]].
+    + by apply lookup_gset_to_gmap_Some in Hg as [_ <-].
+    + rewrite xF_none in Hf. discriminate.
+  - intros o t [Hc | Hc];
+      destruct (xbase_obs_c _ o _ Hc eq_refl ltac:(intros Hd; discriminate))
+        as [-> _];
+      eexists; unfold i_ss_F, ss_F;
+      apply lookup_union_Some_l, lookup_gset_to_gmap_Some;
+      split; [by apply elem_of_singleton | reflexivity ..].
+  - intros o s0 Hlk. unfold i_ss_F, ss_F in Hlk.
+    apply lookup_union_Some_raw in Hlk as [Hg | [_ Hf]];
+      [| rewrite xF_none in Hf; discriminate].
+    apply lookup_gset_to_gmap_Some in Hg as [Ho _].
+    apply elem_of_singleton in Ho as ->.
+    exists 0%nat. left. apply xbase_unlk.
+  (* the wait may end *)
+  - simpl. intros t e Ht. by rewrite around_ereg in Ht.
+  (* and the node may be reclaimed: SyncStop has recoloured it, and the
+     implementation's own guard agrees *)
+  - apply xfree_obs.
+  - simpl. exists 0. split.
+    + apply lookup_union_Some_l, lookup_gset_to_gmap_Some.
+      split; [by apply elem_of_singleton | reflexivity].
+    + intros t e' Ht. simpl in Ht. by rewrite around_ereg in Ht.
+  - exact I.
+Qed.
+
+Theorem a_whole_client_round_is_an_enabled_execution :
+  c_ok (xreplay xround xbase).
+Proof.
+  exact (xrun_ok EpochImpl epochs_refine (fun _ => RCUField) xbase _
+           (xexecution_replays EpochImpl (fun _ => RCUField) xround xbase
+              xround_enabled) xbase_ok).
+Qed.
+
+Print Assumptions xround_enabled.
+Print Assumptions a_whole_client_round_is_an_enabled_execution.

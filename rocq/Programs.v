@@ -61,6 +61,17 @@ Definition CWriteBlock (c : cmd) : cmd :=
 Definition Pool := gmap TID cmd.
 Definition Conf : Type := Pool * LState.
 
+(** The action a command is about to perform, if it is about to perform one.
+    Everything else in the language steps on its own, which is what makes the
+    progress theorem below say something about the protocol rather than about
+    the control constructs. *)
+Fixpoint head_act (c : cmd) : option act :=
+  match c with
+  | CAct a    => Some a
+  | CSeq c1 _ => head_act c1
+  | _         => None
+  end.
+
 Section semantics.
   Variable FType : FName -> FieldKind.
 
@@ -131,11 +142,74 @@ Section semantics.
              HIFL HRWOW Hfree Hstk).
   Qed.
 
+  (** ** Progress
+
+      Safety says nothing goes wrong; progress says something can happen.  The
+      two are separate here and have to be, because the language has a
+      construct that can genuinely block: an action whose guard is false.  So
+      the theorem is not "a non-skip command steps" --- that is false, and it
+      should be --- but "a non-skip command steps unless the action it is about
+      to perform cannot".  [head_act] is what makes that statable: it names the
+      action a command is about to perform, and the control constructs have
+      none. *)
+  Theorem tstep_progress c s :
+    c <> CSkip ->
+    (forall a, head_act c = Some a -> exists s', Step a s s') ->
+    exists c' s', tstep c s c' s'.
+  Proof.
+    revert s. induction c as [| a | c1 IH1 c2 IH2 | c1 IH1 c2 IH2 | c IH];
+      intros s Hne Hen.
+    - by destruct Hne.
+    - destruct (Hen a eq_refl) as [s' Hs']. exists CSkip, s'. by apply T_act.
+    - destruct c1 as [| a | d1 d2 | d1 d2 | d].
+      + exists c2, s. apply T_seq_skip.
+      + destruct (Hen a eq_refl) as [s' Hs'].
+        exists (CSeq CSkip c2), s'. apply T_seq. by apply T_act.
+      + assert (Hnd : CSeq d1 d2 <> CSkip) by discriminate.
+        destruct (IH1 s Hnd Hen) as [c1' [s' Hs']].
+        exists (CSeq c1' c2), s'. by apply T_seq.
+      + exists (CSeq d1 c2), s. apply T_seq, T_if_l.
+      + exists (CSeq (CIf (CSeq d (CWhile d)) CSkip) c2), s.
+        apply T_seq, T_while.
+    - exists c1, s. apply T_if_l.
+    - exists (CIf (CSeq c (CWhile c)) CSkip), s. apply T_while.
+  Qed.
+
+  (** ...and for the pool: a configuration in which some thread has work to do
+      advances, unless that thread is blocked on its action's guard.  The
+      remaining stuck configurations are exactly the ones the protocol intends
+      --- a writer waiting on the lock, a grace period waiting on a reader ---
+      and distinguishing them from a type error is the point of stating
+      progress at all. *)
+  Theorem pool_progress (P : Pool) s t c :
+    P !! t = Some c -> c <> CSkip ->
+    (forall a, head_act c = Some a -> exists s', Step a s s') ->
+    exists P' s', cstep (P, s) (P', s').
+  Proof.
+    intros Hlk Hne Hen.
+    destruct (tstep_progress c s Hne Hen) as [c' [s' Hst]].
+    exists (<[t := c']> P), s'. exact (CS t P s c c' s' Hlk Hst).
+  Qed.
+
+  (** The converse shape, so that "stuck" means one thing: a pool every thread
+      of which is [CSkip] takes no step at all.  Together with the theorem
+      above this says a stuck configuration is either finished or blocked on a
+      guard, and never a third thing. *)
+  Theorem finished_pools_are_stuck (P : Pool) s cf' :
+    (forall t c, P !! t = Some c -> c = CSkip) -> ~ cstep (P, s) cf'.
+  Proof.
+    intros Hall Hst. inversion Hst as [t P0 s0 c c' s0' Hlk Ht Heq1 Heq2]; subst.
+    rewrite (Hall t c Hlk) in Ht. inversion Ht.
+  Qed.
+
 End semantics.
 
 Print Assumptions cstep_preserves.
 Print Assumptions crun_preserves.
 Print Assumptions programs_are_memory_safe.
+Print Assumptions tstep_progress.
+Print Assumptions pool_progress.
+Print Assumptions finished_pools_are_stuck.
 
 (** ** Typing, and subject reduction
 
@@ -216,20 +290,13 @@ Section typing.
       eapply TySeq; [exact H1 | apply TyWhile; exact H1].
   Qed.
 
-  (** A well-typed pool: every thread's command is typed, and the state
-      satisfies each thread's environment. *)
-  Definition PoolTyped (P : Pool) (E : TID -> Env) (Ef : TID -> Env)
-      (s : LState) : Prop :=
-    forall t c, P !! t = Some c ->
-      Typed (E t) c (Ef t) /\ D_env FType s t (E t).
-
-  (** Whether that is preserved *pool-wide* is the framing question, and it is
-      answered below rather than deferred: [Frames] says what a step must leave
-      alone for another thread's environment to survive it, [Frames_D_env]
-      proves that list is the right one, and [pool_ok_preserved] puts the two
-      together.  The list is read off the denotations, so the proof is a
-      transcription; the content is that nothing else in a logical state is
-      mentioned by a type. *)
+  (** A well-typed *pool* --- every thread's command typed and every thread's
+      environment satisfied --- is [PoolOK] below.  It is stated there rather
+      than here because saying it is preserved needs the step indexed by the
+      thread that takes it, which this section does not do: [Frames] says what
+      a step must leave alone for another thread's environment to survive it,
+      [Frames_D_env] proves that list is the right one, and
+      [pool_ok_preserved] puts the two together. *)
 
 End typing.
 
@@ -253,36 +320,52 @@ Print Assumptions subject_reduction.
     Two things are worth noticing about the list.  It constrains the heap, the
     lock and the root as wholes, which is what makes the writer's actions
     non-framing and is correct: an unlink really can invalidate another
-    writer's path, and that is why the lock exists.  And it constrains the free
-    list as a whole rather than at [t]'s nodes, because [D_undef] and
-    [D_freeable] quantify over entries the thread does not name. *)
+    writer's path, and that is why the lock exists.  And the free list is
+    constrained twice and weakly --- entries that are absent stay absent, and
+    entries with nobody left to wait for keep having nobody --- rather than by
+    an equality, because those are the only two things the denotations ask of
+    it and an equality would exclude ReadEnd, which does nothing to the free
+    list but shrink its entries.  [frames_read_end] below is that case. *)
 
 Definition Frames (s s' : LState) (t : TID) : Prop :=
   (forall x, stk (ms s') x t = stk (ms s) x t)
   /\ (forall x, undf s' x t <-> undf s x t)
   /\ (forall o ob, obs_tid ob = Some t -> (obsv s o ob <-> obsv s' o ob))
   /\ (forall o, obsv s o Oroot <-> obsv s' o Oroot)
-  /\ (forall o, flist s' o = flist s o)
+  /\ (forall o, flist s o = None -> flist s' o = None)
+  /\ (forall o Tr, flist s o = Some Tr -> (forall q, ~ Tr q) ->
+        exists Tr', flist s' o = Some Tr' /\ forall q, ~ Tr' q)
   /\ hp (ms s') = hp (ms s)
   /\ lk (ms s') = lk (ms s)
   /\ rt (ms s') = rt (ms s).
 
 Lemma Frames_refl s t : Frames s s t.
 Proof.
-  repeat apply conj; try reflexivity; intros; reflexivity.
+  unfold Frames. repeat apply conj.
+  - intros x. reflexivity.
+  - intros x. reflexivity.
+  - intros o ob _. reflexivity.
+  - intros o. reflexivity.
+  - intros o Ho. exact Ho.
+  - intros o Tr Hlk Hne. by exists Tr.
+  - reflexivity.
+  - reflexivity.
+  - reflexivity.
 Qed.
 
 Lemma Frames_trans s1 s2 s3 t :
   Frames s1 s2 t -> Frames s2 s3 t -> Frames s1 s3 t.
 Proof.
-  intros (A1 & B1 & C1 & D1 & E1 & F1 & G1 & H1)
-         (A2 & B2 & C2 & D2 & E2 & F2 & G2 & H2).
+  intros (A1 & B1 & C1 & D1 & E1 & E1' & F1 & G1 & H1)
+         (A2 & B2 & C2 & D2 & E2 & E2' & F2 & G2 & H2).
   repeat apply conj.
   - intros x. by rewrite A2, A1.
   - intros x. by rewrite B2, B1.
   - intros o ob Hob. by rewrite (C1 o ob Hob), (C2 o ob Hob).
   - intros o. by rewrite D1, D2.
-  - intros o. by rewrite E2, E1.
+  - intros o Ho. by apply E2, E1.
+  - intros o Tr Hlk Hne. destruct (E1' o Tr Hlk Hne) as [Tr1 [H1' Hn1]].
+    exact (E2' o Tr1 H1' Hn1).
   - by rewrite F2, F1.
   - by rewrite G2, G1.
   - by rewrite H2, H1.
@@ -296,17 +379,19 @@ Section framing.
   Lemma Frames_D_env s s' t G :
     Frames s s' t -> D_env FType s t G -> D_env FType s' t G.
   Proof.
-    intros (Hstk & Hundf & Hobs & Hroot & Hfl & Hhp & Hlk & Hrt) Henv x T Hin.
+    intros (Hstk & Hundf & Hobs & Hroot & HflN & HflE & Hhp & Hlk & Hrt)
+           Henv x T Hin.
     pose proof (Henv x T Hin) as Hty.
     assert (Hfield : forall o f v, FieldHolds s t o f v -> FieldHolds s' t o f v).
     { intros o f [y |] Hf; simpl in Hf |- *; [| by rewrite Hhp].
       destruct Hf as (oy & Hsy & Hcy & Hoy & Hfy).
-      exists oy. rewrite Hstk, Hhp, Hfl.
+      exists oy. rewrite Hstk, Hhp.
       repeat apply conj; try assumption.
-      by apply (Hobs oy (Oiter t) eq_refl). }
+      + by apply (Hobs oy (Oiter t) eq_refl).
+      + by apply HflN. }
     destruct T; simpl in Hty |- *.
     - destruct Hty as [o (Hs & Ho & Hu & Hf & Hpre & Hpath & Hl & Hfo)].
-      exists o. rewrite Hstk, Hhp, Hrt, Hlk, Hfl.
+      exists o. rewrite Hstk, Hhp, Hrt, Hlk.
       repeat apply conj; try assumption.
       + by apply (Hobs o (Oiter t) eq_refl).
       + intros Hc. by apply Hu, Hundf.
@@ -314,22 +399,25 @@ Section framing.
       + intros rho1 rho2 Happ. destruct (Hpre rho1 rho2 Happ) as [o' [Hp Ho']].
         exists o'. split; [exact Hp |].
         by apply (Hobs o' (Oiter t) eq_refl).
+      + by apply HflN.
     - destruct Hty as [o (Hs & Ho & Hu & Hfo & Hf & Hnull)].
-      exists o. rewrite Hstk, Hhp, Hfl.
+      exists o. rewrite Hstk, Hhp.
       repeat apply conj; try assumption.
       + by apply (Hobs o (Ofresh t) eq_refl).
       + intros Hc. by apply Hu, Hundf.
+      + by apply HflN.
       + intros f v Hv. exact (Hfield o f v (Hf f v Hv)).
     - destruct Hty as [o (Hs & Ho & Hl & Hu)].
       exists o. rewrite Hstk, Hlk. repeat apply conj; try assumption.
       + by apply (Hobs o (Ounlk t) eq_refl).
       + intros Hc. by apply Hu, Hundf.
     - destruct Hty as [o (Hs & Ho & Hl & Hu & Hfo)].
-      exists o. rewrite Hstk, Hlk, Hfl. repeat apply conj; try assumption.
+      exists o. rewrite Hstk, Hlk. repeat apply conj; try assumption.
       + by apply (Hobs o (Ofree t) eq_refl).
       + intros Hc. by apply Hu, Hundf.
+      + destruct Hfo as [Tr [HTr Hno]]. exact (HflE o Tr HTr Hno).
     - destruct Hty as [Hu Hfo]. split; [by apply Hundf |].
-      intros o Ho. rewrite Hstk in Ho. rewrite Hfl. exact (Hfo o Ho).
+      intros o Ho. rewrite Hstk in Ho. exact (HflN o (Hfo o Ho)).
     - destruct Hty as [Hs Ho]. split.
       + rewrite Hstk, Hrt. exact Hs.
       + rewrite Hrt. by apply Hroot.
@@ -440,10 +528,9 @@ Section pool.
                (tstep_frames t0 c s c' s' t Ht Hne) Henv').
   Qed.
 
-  (** ...and over a whole run.  This is the statement [PoolTyped] was a
-      placeholder for: from a typed pool, every reachable configuration is a
-      typed pool, with every thread still heading for the same final
-      environment. *)
+  (** ...and over a whole run: from a typed pool, every reachable
+      configuration is a typed pool, with every thread still heading for the
+      same final environment. *)
   Theorem pool_run_ok cf cf' E Ef :
     rtc pool_step cf cf' -> PoolOK (fst cf) E Ef (snd cf) ->
     exists E', PoolOK (fst cf') E' Ef (snd cf').
@@ -470,3 +557,268 @@ End pool.
 Print Assumptions pool_ok_preserved.
 Print Assumptions pool_run_ok.
 Print Assumptions pool_run_preserves.
+
+(** ** The framing hypothesis, discharged
+
+    [Act_frames] is a hypothesis, and a hypothesis nothing satisfies proves
+    nothing.  So here it is, action by action, over the machine-state
+    transformers the fifteen actions are built from.  The answer is not uniform
+    and the shape of the non-uniformity is the interesting part.
+
+    Three of the protocol's actions frame every thread outright, because what
+    they touch is not in [Frames] at all: the reader set and the bounding set
+    are not mentioned by any type's denotation.  Two more frame every thread
+    but the one taking them, because what they touch is that thread's own
+    column of the observation map or its own stack slot.  ReadEnd frames too,
+    and is the one whose framing is partly the action's business: it needs a
+    clause the abstract step does not carry, which appears below as the one
+    hypothesis a caller must supply rather than as a remark.  The writer's ten
+    do not frame, and cannot: they change the heap, which is what a path type
+    is about.
+
+    That last is not a weakness, and the last two results here say why.  Every
+    type whose denotation constrains the heap requires the lock, so no two
+    threads hold one at the same time; a writer's mutation has no other
+    thread's path type to invalidate, because the thread that could hold one is
+    the writer itself.  The protocol's answer to framing is the lock, and the
+    frame condition is where that becomes visible rather than assumed. *)
+
+Section discharge.
+  Variable FType : FName -> FieldKind.
+
+  (** A step that changes only the machine state, and there only the reader or
+      bounding set, frames every thread: neither set is mentioned by any type's
+      denotation.  The three protocol actions below are instances. *)
+  Lemma Frames_machine m m' Og U T F t :
+    (forall x, stk m' x t = stk m x t) ->
+    hp m' = hp m -> lk m' = lk m -> rt m' = rt m ->
+    Frames (to_LState_t m Og U T F) (to_LState_t m' Og U T F) t.
+  Proof.
+    intros Hstk Hhp Hlk Hrt. repeat apply conj; simpl; try assumption.
+    - intros x. reflexivity.
+    - intros o ob Hob. destruct ob; try reflexivity. discriminate.
+    - intros o. simpl. by rewrite Hrt.
+    - intros o Ho. exact Ho.
+    - intros o Tr Hf Hno. by exists Tr.
+  Qed.
+
+  (** ReadBegin touches the reader set and nothing else. *)
+  Lemma frames_read_begin m Og U T F t t' :
+    Frames (to_LState_t m Og U T F)
+           (to_LState_t (read_begin_ms m t) Og U T F) t'.
+  Proof. by apply Frames_machine. Qed.
+
+  (** SyncStart's machine step sets the bounding set to the reader set, and
+      that is all it does to the machine.  Its free list is where it stops
+      framing --- it stamps the detached nodes --- and a thread whose type
+      names one of those nodes is the writer that detached it. *)
+  Lemma frames_sync_start_ms m Og U T F t' :
+    Frames (to_LState_t m Og U T F)
+           (to_LState_t (sync_start_ms m) Og U T F) t'.
+  Proof. by apply Frames_machine. Qed.
+
+  (** SyncStop empties the bounding set. *)
+  Lemma frames_sync_stop_ms m Og U T F t' :
+    Frames (to_LState_t m Og U T F)
+           (to_LState_t (sync_stop_ms m) Og U T F) t'.
+  Proof. by apply Frames_machine. Qed.
+
+  (** A reader's Read extends its own column of the observation map.  [ObsWF]
+      is what separates the columns: without it an observation tagged [t']
+      could live in [t]'s entry, and then a thread's read would be another
+      thread's business. *)
+  Lemma obsv_insert_other m Og U T F z t sz o ob :
+    ObsWF Og -> (forall q, q ∈ sz -> obs_tid q = Some t) ->
+    obs_tid ob <> Some t ->
+    (obsv (to_LState_t m Og U T F) o ob
+     <-> obsv (to_LState_t m (<[(z, t) := sz]> Og) U T F) o ob).
+  Proof.
+    intros HWF Hsz Hob.
+    destruct ob; simpl in Hob |- *; try reflexivity;
+      (split;
+       [ intros [q0 [s0 [Hl Hin]]];
+         pose proof (HWF o q0 s0 _ Hl Hin) as Ht0;
+         simpl in Ht0; injection Ht0 as Ht0;
+         exists q0, s0; split; [| exact Hin];
+         rewrite (lookup_insert_ne Og (z, t) (o, q0) sz); [exact Hl |];
+         intros Hc; injection Hc as _ Hc;
+         apply Hob; rewrite Ht0, <- Hc; reflexivity
+       | intros [q0 [s0 [Hl Hin]]];
+         destruct (decide ((o, q0) = (z, t))) as [Heq | Hne'];
+         [ rewrite Heq, (lookup_insert_eq Og (z, t) sz) in Hl;
+           injection Hl as <-; destruct (Hob (Hsz _ Hin))
+         | rewrite (lookup_insert_ne Og (z, t) (o, q0) sz) in Hl;
+           [ by exists q0, s0 | exact (fun Hc => Hne' (eq_sym Hc)) ]]]).
+  Qed.
+
+  Lemma frames_read m Og U T F t z sz t' :
+    ObsWF Og -> (forall ob, ob ∈ sz -> obs_tid ob = Some t) -> t' <> t ->
+    Frames (to_LState_t m Og U T F)
+           (to_LState_t m (<[(z, t) := sz]> Og) U T F) t'.
+  Proof.
+    intros HWF Hsz Hne. repeat apply conj.
+    - intros x. reflexivity.
+    - intros x. reflexivity.
+    - intros o ob Hob. apply (obsv_insert_other m Og U T F z t sz o ob HWF Hsz).
+      rewrite Hob. intros Hc. injection Hc as Hc. exact (Hne Hc).
+    - intros o. reflexivity.
+    - intros o Ho. exact Ho.
+    - intros o Tr Hf Hno. by exists Tr.
+    - reflexivity.
+    - reflexivity.
+    - reflexivity.
+  Qed.
+
+  (** Bind writes one stack slot, the binding thread's. *)
+  Lemma frames_bind m Og U T F y t o t' :
+    t' <> t ->
+    Frames (to_LState_t m Og U T F)
+           (to_LState_t (bind_ms m y t o) Og U T F) t'.
+  Proof.
+    intros Hne. repeat apply conj.
+    - intros x. simpl. destruct (decide ((x, t') = (y, t))) as [Heq | _];
+        [| reflexivity].
+      injection Heq as _ Hc. by destruct (Hne Hc).
+    - intros x. reflexivity.
+    - intros o0 ob Hob. reflexivity.
+    - intros o0. reflexivity.
+    - intros o0 Ho. exact Ho.
+    - intros o0 Tr Hf Hno. by exists Tr.
+    - reflexivity.
+    - reflexivity.
+    - reflexivity.
+  Qed.
+
+  (** ReadEnd is the one whose framing is partly the action's business.  Its
+      free list only shrinks entries, which is exactly the two clauses [Frames]
+      asks of a free list, and the observation clauses are the ones the step
+      relation already carries.  The scope is the exception: the step says the
+      ending thread's scope becomes everything and that scopes only grow, but
+      not that the *other* threads' scopes are unchanged.  That is an
+      under-specification of the action rather than a gap in the frame
+      condition, so it appears here as the one hypothesis a caller must
+      supply. *)
+  Lemma frames_read_end m Og Og' U U' T F t t' :
+    (forall o ob, obsv (to_LState_t m Og U T F) o ob -> obs_tid ob <> Some t ->
+       obsv (to_LState_t (read_end_ms m t) Og' U' T (read_end_F F t)) o ob) ->
+    (forall o ob,
+       obsv (to_LState_t (read_end_ms m t) Og' U' T (read_end_F F t)) o ob ->
+       obsv (to_LState_t m Og U T F) o ob) ->
+    t' <> t ->
+    (forall x, U' x t' <-> U x t') ->
+    Frames (to_LState_t m Og U T F)
+           (to_LState_t (read_end_ms m t) Og' U' T (read_end_F F t)) t'.
+  Proof.
+    intros Hkeep Hback Hne Hscope. repeat apply conj.
+    - intros x. reflexivity.
+    - intros x. exact (Hscope x).
+    - intros o ob Hob. split.
+      + intros Hin. apply Hkeep; [exact Hin |].
+        rewrite Hob. intros Hc. injection Hc as Hc. exact (Hne Hc).
+      + intros Hin. exact (Hback o ob Hin).
+    - intros o. reflexivity.
+    - intros o Ho. simpl in Ho |- *. unfold read_end_F.
+      rewrite lookup_fmap. by destruct (F !! o) as [s0 |].
+    - intros o Tr Hlk Hno. simpl in Hlk |- *. unfold read_end_F.
+      rewrite lookup_fmap.
+      destruct (F !! o) as [s0 |] eqn:Hf; [| discriminate].
+      injection Hlk as <-. simpl. eexists. split; [reflexivity |].
+      intros q Hq. apply (Hno q). by apply elem_of_difference in Hq as [Hq _].
+    - reflexivity.
+    - reflexivity.
+    - reflexivity.
+  Qed.
+
+  (** And what does not frame, with a witness rather than an assertion.  Every
+      heap action changes the heap, and [Frames] constrains it as a whole. *)
+  Definition m_nil : MState :=
+    {| stk := fun _ _ => None; hp := fun _ _ => None; lk := None; rt := 0;
+       rds := fun _ => False; bnd := fun _ => False |}.
+
+  Definition m_one : MState :=
+    {| stk := fun _ _ => None; hp := fun _ _ => Some VNull; lk := None;
+       rt := 0; rds := fun _ => False; bnd := fun _ => False |}.
+
+  Theorem heap_changes_do_not_frame :
+    ~ Frames (to_LState_t m_nil ∅ (fun _ _ => False) ∅ ∅)
+             (to_LState_t m_one ∅ (fun _ _ => False) ∅ ∅) 0.
+  Proof.
+    intros (_ & _ & _ & _ & _ & _ & Hhp & _).
+    assert (Hc : Some VNull = None)
+      by exact (f_equal (fun h => h 0%nat 0%nat) Hhp).
+    discriminate.
+  Qed.
+
+  (** ...and why that is the right answer rather than a defect.  The three
+      types whose denotations constrain the heap all require the lock. *)
+  Definition heap_type (T : Ty) : bool :=
+    match T with
+    | TItr _ _ => true
+    | TUnlinked => true
+    | TFreeable => true
+    | _ => false
+    end.
+
+  Theorem heap_types_need_the_lock s t x T :
+    heap_type T = true -> D_ty FType s t x T -> lk (ms s) = Some t.
+  Proof.
+    destruct T; simpl; intros Hh Hty; try discriminate.
+    - by destruct Hty as [o (_ & _ & _ & _ & _ & _ & Hlk & _)].
+    - by destruct Hty as [o (_ & _ & Hlk & _)].
+    - by destruct Hty as [o (_ & _ & Hlk & _)].
+  Qed.
+
+  (** So no two threads hold one at the same time: a writer's mutation has at
+      most one other thread's path type to invalidate, and there is none,
+      because the thread that could hold one is the writer itself. *)
+  Corollary heap_types_are_exclusive s t t' x x' T T' :
+    heap_type T = true -> heap_type T' = true ->
+    D_ty FType s t x T -> D_ty FType s t' x' T' -> t = t'.
+  Proof.
+    intros Hh Hh' Hty Hty'.
+    pose proof (heap_types_need_the_lock s t x T Hh Hty) as Hlk.
+    pose proof (heap_types_need_the_lock s t' x' T' Hh' Hty') as Hlk'.
+    rewrite Hlk in Hlk'. by injection Hlk' as <-.
+  Qed.
+
+End discharge.
+
+Print Assumptions Frames_machine.
+Print Assumptions frames_read_begin.
+Print Assumptions frames_sync_start_ms.
+Print Assumptions frames_sync_stop_ms.
+Print Assumptions frames_read.
+Print Assumptions frames_bind.
+Print Assumptions frames_read_end.
+Print Assumptions heap_changes_do_not_frame.
+Print Assumptions heap_types_need_the_lock.
+Print Assumptions heap_types_are_exclusive.
+
+(** ** The parameter, instantiated
+
+    [Step] has been a parameter throughout, required only to be a step of
+    [Actions.v]'s relation.  That is what let this file be about programs
+    without re-encoding fifteen actions' side conditions, but a parameter
+    nothing satisfies proves nothing, so here it is discharged: the relation
+    itself is such a [Step], and the safety theorem at it is a statement about
+    the real actions rather than about an abstraction of them.
+
+    It is the coarsest instance --- it says only that whatever the action was,
+    the state moved by a legal step --- and that is all safety needs, because
+    safety is about the states a run passes through and not about which action
+    produced which.  Typing needs more, and that is [Act_sound]. *)
+Definition RealStep (FType : FName -> FieldKind)
+    (a : act) (s s' : LState) : Prop := lstep FType s s'.
+
+Corollary real_programs_are_memory_safe FType cf cf' tw x o :
+  rtc (cstep (RealStep FType)) cf cf' -> WellFormed FType (snd cf) ->
+  D_freeable (snd cf') tw x ->
+  stk (ms (snd cf')) x tw = Some o ->
+  forall y t', t' <> tw -> stk (ms (snd cf')) y t' = Some o ->
+    ~ undf (snd cf') y t' -> False.
+Proof.
+  exact (programs_are_memory_safe FType (RealStep FType)
+           (fun a s s' H => H) cf cf' tw x o).
+Qed.
+
+Print Assumptions real_programs_are_memory_safe.

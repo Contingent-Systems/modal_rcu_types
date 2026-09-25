@@ -17,7 +17,7 @@ Thanks for pointing out the detailed presentation issues. We have early versions
 Since submission we have mechanized the global invariants, the reachability core
 of the soundness argument, and every atomic action in full, in Rocq (about
 23,100 lines and 1,116 lemmas and theorems, axiom-free).  The build refuses to
-succeed if the development contains an admitted proof, or if any of its 351
+succeed if the development contains an admitted proof, or if any of its 373
 assumption checks reports an axiom rather than closed under the
 global context;
 we mention this because a Rocq file that compiles proves considerably less than
@@ -981,13 +981,43 @@ Two things that condition says by what it constrains.  It constrains the heap,
 the lock and the root as wholes, which makes the writer's own actions
 non-framing; that is correct rather than a weakness, since an unlink really can
 invalidate another writer's path, and preventing exactly that is what the lock
-is for.  And it constrains the free list as a whole rather than at the thread's
-own nodes, because undef and freeable quantify over entries the thread does not
-name.  With it, from a typed pool every reachable configuration is a typed pool
-with every thread still heading for the same final environment.  The per-action
-obligation it leaves has the same standing as "every action is a step of the
-relation": it is discharged where the actions are, by the framing lemmas, which
-are exactly its components.
+is for.  And it constrains the free list twice and weakly -- entries that are
+absent stay absent, entries with nobody left to wait for keep having nobody --
+rather than by an equality, because those are the only two things the
+denotations ask of it and an equality would exclude ReadEnd, which does nothing
+to the free list but shrink its entries.  With it, from a typed pool every
+reachable configuration is a typed pool with every thread still heading for the
+same final environment.
+
+We then discharge that per-action obligation rather than leave it a hypothesis,
+and the answer is not uniform, which is the part worth reporting.  A step that
+changes only the reader or bounding set frames every thread, because neither set
+is mentioned by any denotation -- that is ReadBegin, and the machine halves of
+SyncStart and SyncStop.  A reader's read extends its own column of the
+observation map, so it frames every other thread, and the well-formedness
+condition on that map is exactly what separates the columns.  Bind writes one
+stack slot.  ReadEnd frames too, and needs one hypothesis the abstract step does
+not supply -- that the other threads' scopes are unchanged; that is an
+under-specification of the action rather than a gap in the frame condition, and
+we would rather it appear as a hypothesis in a theorem than as a remark.
+
+The writer's ten do not frame, and we give the witness rather than assert it.
+That is correct, and the reason is a small structural fact we had not written
+down before: every type whose denotation constrains the heap requires the lock,
+so no two threads hold one at the same time, and a writer's mutation therefore
+has no other thread's path type to invalidate -- the thread that could hold one
+is the writer itself.  The protocol's answer to framing is the lock, and the
+frame condition is where that becomes visible instead of assumed.
+
+Two smaller things in the same file.  Safety and progress are separate, and we
+now state both: a non-skip command steps unless the action it is about to
+perform cannot, which is the right statement rather than a weak one, because an
+action whose guard is false genuinely blocks and should -- a writer waiting on
+the lock, a grace period waiting on a reader.  With the converse (a pool of
+finished threads takes no step) a stuck configuration is finished or blocked on
+a guard and never a third thing.  And the action's effect, which was a
+parameter, is instantiated with the relation itself, so the safety theorem is
+about the fifteen actions rather than about an abstraction of them.
 
 What is left is three things, and we would rather name them than let the
 invariant work stand in for them.  The third used to be "axiom soundness
@@ -1224,6 +1254,24 @@ the model's coherence on that state orders them.  And since the hypothesis is a
 conjunction of guards, which could be unsatisfiable, we exhibit a whole round at
 the counter implementation -- a reader enters and leaves, a writer detaches a
 node, waits, reclaims it -- end to end.
+
+The same translation then runs at the client's level, which is where the safety
+theorem lives.  The protocol-level reading is the right object for an axiom
+about grace periods, and it is not yet the statement a client wants, because a
+client's execution contains its own loads and stores.  So an event there is one
+of the five protocol events or one heap mutation, carrying what the
+corresponding step leaves existential.  That is not a weakening: an execution is
+a record of what happened, so an event that names its own outcome is the
+faithful reading, and enabledness is then exactly the step's premises.  The
+result is the statement the development exists for, said of executions: any
+execution of any client against an implementation conforming to the axiom, all
+of whose events are enabled, reaches only states in which no thread but the
+writer holds a live reference to a node the writer may reclaim.  Conformance
+enters in one place, the reclamation event's guard, and nothing else about the
+implementation is used.  At the counter model that is one statement from the
+axiom to the client, and the same non-vacuity check applies: we exhibit a whole
+client round, the writer's unlinked observation recoloured by the grace period's
+end, so the reclamation guard is reached rather than assumed.
 
 What we claim is narrower than "RCU is verified under weak memory" and, we
 think, more useful: the single invariant a weak memory model endangers is

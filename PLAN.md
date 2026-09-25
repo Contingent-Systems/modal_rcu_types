@@ -683,11 +683,39 @@ sections did not need and this one does: soundness is about the stepping
 thread's environment and framing is about everybody else's, and saying so needs
 the two distinguishable.  `pool_ok_preserved` and `pool_run_ok`: from a typed
 pool, every reachable configuration is a typed pool with every thread still
-heading for the same final environment.  `Act_frames` has the same standing as
-`Step_lstep` — a per-action obligation discharged where the actions are, by
-`EnvOK_cell` / `EnvOK_obs` / `EnvOK_stack` / `EnvOK_fl` / `EnvOK_scope` /
-`EnvOK_free` / `EnvOK_syncstop` in `Triples.v`, which are exactly the components
-of `Frames`.
+heading for the same final environment.
+
+**The framing hypothesis is discharged, action by action, and the answer is not
+uniform.**  `Frames_machine`: a step that changes only the reader or bounding
+set frames *every* thread, because neither set is mentioned by any denotation —
+`frames_read_begin`, `frames_sync_start_ms`, `frames_sync_stop_ms`.
+`frames_read`: a reader's Read extends its own column of the observation map,
+so it frames every other thread, and `ObsWF` is exactly what separates the
+columns.  `frames_bind`: Bind writes one stack slot.  `frames_read_end`: its
+free list only *shrinks* entries, which is why the free-list clauses of `Frames`
+are two weak conditions rather than an equality; the one hypothesis it needs is
+that the other threads' scopes are unchanged, which the abstract step does not
+say — an under-specification of the action, visible as a hypothesis rather than
+as prose.
+
+`heap_changes_do_not_frame`: the writer's ten do not frame, with a witness.
+That is correct rather than a weakness, and `heap_types_need_the_lock` /
+`heap_types_are_exclusive` are why: every type whose denotation constrains the
+heap requires the lock, so no two threads hold one, and a writer's mutation has
+no *other* thread's path type to invalidate.  The protocol's answer to framing
+is the lock, and the frame condition is where that becomes visible.
+
+**Progress, which the task list above asked for and the first pass skipped.**
+`head_act` names the action a command is about to perform; the control
+constructs have none.  `tstep_progress`: a non-skip command steps unless the
+action it is about to perform cannot — which is the right statement, because an
+action whose guard is false genuinely blocks and should.  `pool_progress` lifts
+it, and `finished_pools_are_stuck` closes the other side, so a stuck
+configuration is finished or blocked on a guard and never a third thing.
+
+**And the parameter instantiated.**  `RealStep` is the action relation itself,
+so `real_programs_are_memory_safe` is a statement about the fifteen actions
+rather than about an abstraction of them.
 
 ### W6. The LKMM correspondence
 
@@ -744,6 +772,26 @@ the model's coherence on that state orders them.  And `Enabled` is a conjunction
 of guards, which can be unsatisfiable, so `around_enabled` exhibits a whole
 round — a reader enters and leaves, a writer detaches a node, waits, reclaims
 it — at the counter implementation, end to end.
+
+**And the same translation at the client's level, which is where the safety
+theorem lives.**  The protocol-level bridge reads an execution as a run of
+`pstep`, which is the right object for an axiom about grace periods and is not
+yet the statement a client wants: a client's execution contains its own loads
+and stores.  So `xev` is one of the five protocol events or one heap mutation,
+carrying what the corresponding `xstep` constructor leaves existential — which
+is not a weakening, since an execution *is* a record of what happened, so an
+event that names its own outcome is the faithful reading and enabledness is then
+exactly the constructor's premises.  `xexecution_replays`,
+`conforming_executions_are_memory_safe`: any execution of any client against an
+implementation conforming to the axiom, all of whose events are enabled, reaches
+only states in which no thread but the writer holds a live reference to a node
+the writer may reclaim.  Conformance enters in one place — the reclamation
+event's guard — and nothing else about the implementation is used.
+`client_executions_free_only_quiesced_nodes` is the reclamation half at every
+reclamation; `epoch_executions_are_memory_safe` is the chain from the axiom to
+the client in one statement; and `xround_enabled` exhibits a whole client round,
+the writer's unlinked observation recoloured by SyncStop, so that the
+reclamation guard is reached rather than assumed.
 
 ### W7. The dependency the compiler may not preserve
 
