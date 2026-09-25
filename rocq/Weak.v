@@ -1412,3 +1412,277 @@ Print Assumptions weak_run_is_sound_under_the_discipline.
     acquires nothing.  Both are outside the discipline, and both are outside
     what \textsc{ToRCUWrite} permits --- which is the point.  The type system
     is what enforces the hypothesis of this theorem. *)
+
+(** * The kernel's read: dependency ordering rather than acquire
+
+    The semantics above is stronger than Linux, and the difference is not a
+    simplification but a defect, so this section repairs it.
+
+    [RA_read] unconditionally unions in the message's release view: every read
+    acquires, and there is no relaxed load in the model at all.  Linux is not
+    that.  [rcu_assign_pointer] *is* a release store, so the publishing half
+    matches; but [rcu_dereference] is [READ_ONCE] plus a compiler barrier, and
+    what orders the access is the **address dependency** between loading the
+    pointer and loading through it.  An acquire orders the load against
+    everything the publisher knew.  A dependency orders it only against
+    accesses that use the value --- which is to say, against the target's own
+    cells and nothing else.
+
+    So the relation below has three steps: the same releasing write, a relaxed
+    read, and a dependency-ordered read that acquires *at the target only*.
+    The release-acquire relation is kept beside it rather than replaced,
+    because having both is what lets the difference be stated.
+
+    A relaxed read here is of a non-pointer.  That is the discipline, not a
+    limitation of the model: reading a pointer without [rcu_dereference] is the
+    bug [rcu_dereference] exists to prevent, and in a language with scalars the
+    condition would read "scalars may be loaded relaxed, pointers may not". *)
+
+(** Acquire, restricted to one node's cells. *)
+Definition at_node (V W : View) (n : Loc) : View :=
+  fun q g => if decide (q = n) then Nat.max (V q g) (W q g) else V q g.
+
+Inductive kstep : TID -> RAConf -> RAConf -> Prop :=
+(** The same write, releasing or not. *)
+| K_write t o f v (b : bool) c :
+    kstep t c
+      (MkRA (write (ra_h c) o f (S (ra_c c o f)) v)
+            (set_at (ra_c c) o f (S (ra_c c o f)))
+            (upd_v (ra_v c) t (set_at (ra_v c t) o f (S (ra_c c o f))))
+            (upd_m (ra_relm c) o f (S (ra_c c o f))
+               (if b then set_at (ra_v c t) o f (S (ra_c c o f)) else bot)))
+(** [READ_ONCE] of a non-pointer: the position moves and nothing is acquired. *)
+| K_rlx t o f k c :
+    ra_v c t o f <= k -> k <= ra_c c o f -> ra_h c o f k = Some VNull ->
+    kstep t c
+      (MkRA (ra_h c) (ra_c c)
+            (upd_v (ra_v c) t (set_at (ra_v c t) o f k))
+            (ra_relm c))
+(** [rcu_dereference]: the position moves, and the accesses that depend on the
+    value --- the target's own cells --- are ordered after the publication.
+    Nothing else is. *)
+| K_dep t o f k n c :
+    ra_v c t o f <= k -> k <= ra_c c o f ->
+    ra_h c o f k = Some (VLoc n) ->
+    kstep t c
+      (MkRA (ra_h c) (ra_c c)
+            (upd_v (ra_v c) t
+               (at_node (set_at (ra_v c t) o f k) (ra_relm c o f k) n))
+            (ra_relm c)).
+
+Theorem kstep_ok t c c' : kstep t c c' -> ra_ok c -> ra_ok c'.
+Proof.
+  intros Hst (Hv & Hm & Hself & Hzero). destruct Hst; unfold ra_ok;
+    cbn [ra_h ra_c ra_v ra_relm]; unfold upd_v.
+  - (* a write: the same argument as for the release-acquire relation *)
+    assert (Hlt : forall (W : View), vle W (ra_c c) -> W o f <= S (ra_c c o f))
+      by (intros W Hle; exact (Nat.le_trans _ _ _ (Hle o f)
+                                 (Nat.le_succ_diag_r _))).
+    repeat apply conj.
+    + intros t'. destruct (Nat.eq_dec t' t) as [-> | Hne];
+        [exact (vle_set_both _ _ o f _ (Hv t))
+         | exact (vle_set_r _ _ o f _ (Hv t') (Hlt _ (Hv t')))].
+    + intros q g j. unfold upd_m. case_decide as He.
+      * destruct b; [exact (vle_set_both _ _ o f _ (Hv t)) | apply vle_bot].
+      * exact (vle_set_r _ _ o f _ (Hm q g j) (Hlt _ (Hm q g j))).
+    + intros q g j. unfold upd_m. case_decide as He; [| exact (Hself q g j)].
+      injection He as -> -> ->.
+      destruct b; [rewrite set_at_here; apply Nat.le_refl | apply Nat.le_0_l].
+    + intros q g. unfold upd_m. case_decide as He; [| exact (Hzero q g)].
+      exfalso. injection He as -> -> Hk.
+      exact (Nat.neq_succ_0 _ (eq_sym Hk)).
+  - (* a relaxed read *)
+    repeat apply conj; [| exact Hm | exact Hself | exact Hzero].
+    intros t'. destruct (Nat.eq_dec t' t) as [-> | Hne]; [| exact (Hv t')].
+    intros q g. unfold set_at. case_decide as He;
+      [injection He as -> ->; exact H0 | apply Hv].
+  - (* a dependency-ordered read *)
+    repeat apply conj; [| exact Hm | exact Hself | exact Hzero].
+    intros t'. destruct (Nat.eq_dec t' t) as [-> | Hne]; [| exact (Hv t')].
+    intros q g. unfold at_node. case_decide as Hn.
+    + apply Nat.max_lub; [| apply Hm].
+      unfold set_at. case_decide as He;
+        [injection He as -> ->; exact H0 | apply Hv].
+    + unfold set_at. case_decide as He;
+        [injection He as -> ->; exact H0 | apply Hv].
+Qed.
+
+Print Assumptions kstep_ok.
+
+(** ** What dependency ordering gives, and what it does not
+
+    The release-acquire invariant said a thread is at least as far along as the
+    publisher of anything it *can see*.  That is not available here, and the
+    reason is not a weakness of the proof: under dependency ordering a thread
+    may come to hold a link it never dereferenced --- it can be carried forward
+    at one cell as a side effect of dereferencing another --- and nothing
+    orders the target of a pointer that was never followed.  So the guarantee
+    is not a property of a configuration at all.  It is a property of the
+    *step*: what a dereference orders is the node it dereferenced.
+
+    That is the right shape and not a concession.  Heap-domain closure, the one
+    invariant a weak model endangers, says a thread that can see an edge can
+    see the node at the end of it --- and a thread that has not followed the
+    edge has no business seeing the node.  The per-dereference statement is
+    exactly the obligation, with nothing left over. *)
+
+Lemma k_dep_position (V W : View) n g :
+  W n g <= at_node V W n n g.
+Proof. unfold at_node. rewrite decide_True by reflexivity. apply Nat.le_max_r. Qed.
+
+(** After a [rcu_dereference] of [n], the reader sees whatever the publisher of
+    that pointer had already written into [n].  The two side conditions are the
+    programmer's, and they are the same two the release-acquire account needed:
+    initialise before publishing, and do not rewrite afterwards. *)
+Theorem k_dereference_sees c t o f k n g v :
+  ra_ok c ->
+  ra_v c t o f <= k -> k <= ra_c c o f -> ra_h c o f k = Some (VLoc n) ->
+  ra_h c n g (ra_relm c o f k n g) = Some v ->
+  (forall j, ra_relm c o f k n g <= j -> j <= ra_c c n g ->
+     ra_h c n g j = Some v) ->
+  seen (MkRA (ra_h c) (ra_c c)
+          (upd_v (ra_v c) t
+             (at_node (set_at (ra_v c t) o f k) (ra_relm c o f k) n))
+          (ra_relm c)) t n g = Some v.
+Proof.
+  intros (Hv & Hm & _ & _) Hle Hk Hlink Hpub Hstable.
+  unfold seen. cbn [ra_h ra_v]. unfold upd_v.
+  destruct (Nat.eq_dec t t) as [_ | Hc]; [| by destruct Hc].
+  apply Hstable; [apply k_dep_position |].
+  unfold at_node. case_decide as Hn; [| unfold set_at; case_decide as He;
+    [injection He as -> ->; exact Hk | apply Hv]].
+  apply Nat.max_lub; [| apply Hm].
+  unfold set_at. case_decide as He;
+    [injection He as -> ->; exact Hk | apply Hv].
+Qed.
+
+Print Assumptions k_dereference_sees.
+
+(** ** What the weaker read costs
+
+    Under release-acquire we could not build a reader whose view had never been
+    the heap: every attempt failed because the acquire pulled the reader
+    forward everywhere.  Under dependency ordering it builds immediately, and
+    that is the precise statement of what acquire was buying.
+
+    The writer points the root's second field at 5, then at 6, then points the
+    first field at 5.  At every moment the two fields point at different nodes,
+    so unique-paths holds throughout.  A reader that dereferences the second
+    field while it still reads 5, and then dereferences the first, is carried
+    forward only at node 5's own cells --- not at the root's --- so it keeps
+    the stale second field.  Its view has both fields pointing at 5, which no
+    state ever had, and in it 5 has two paths. *)
+
+Definition vs (h : Heap) : LState :=
+  {| ms    := {| stk := fun _ _ => None; hp := h; lk := None; rt := 0%nat;
+                 rds := fun _ => False; bnd := fun _ => False |};
+     obsv  := fun _ _ => False;
+     undf  := fun _ _ => True;
+     thrd  := fun _ => True;
+     flist := fun _ => None |}.
+
+Definition kstep_d (c : RAConf) (t : TID) (o : Loc) (f : FName) (k : nat)
+    (n : Loc) : RAConf :=
+  MkRA (ra_h c) (ra_c c)
+       (upd_v (ra_v c) t
+          (at_node (set_at (ra_v c t) o f k) (ra_relm c o f k) n))
+       (ra_relm c).
+
+Definition kstep_any (c c' : RAConf) : Prop := exists t, kstep t c c'.
+
+Lemma kstep_w_step t c o f v b : kstep t c (step_w c t o f v b).
+Proof. exact (K_write t o f v b c). Qed.
+
+Lemma kstep_d_step t c o f k n :
+  ra_v c t o f <= k -> k <= ra_c c o f -> ra_h c o f k = Some (VLoc n) ->
+  kstep t c (kstep_d c t o f k n).
+Proof. intros H1 H2 H3. exact (K_dep t o f k n c H1 H2 H3). Qed.
+
+Definition kw1 : RAConf := step_w ra0 0%nat 0%nat 1%nat (VLoc 5%nat) true.
+Definition kw2 : RAConf := step_w kw1 0%nat 0%nat 1%nat (VLoc 6%nat) true.
+Definition kw3 : RAConf := step_w kw2 0%nat 0%nat 0%nat (VLoc 5%nat) true.
+Definition kd1 : RAConf := kstep_d kw3 1%nat 0%nat 1%nat 1 5%nat.
+Definition kv  : RAConf := kstep_d kd1 1%nat 0%nat 0%nat 1 5%nat.
+
+Lemma kv_run : rtc kstep_any ra0 kv.
+Proof.
+  eapply rtc_l with (y := kw1); [exists 0%nat; unfold kw1; apply kstep_w_step |].
+  eapply rtc_l with (y := kw2); [exists 0%nat; unfold kw2; apply kstep_w_step |].
+  eapply rtc_l with (y := kw3); [exists 0%nat; unfold kw3; apply kstep_w_step |].
+  eapply rtc_l with (y := kd1).
+  { exists 1%nat. unfold kd1. apply kstep_d_step;
+      [apply Nat.le_0_l | apply Nat.le_succ_diag_r | reflexivity]. }
+  eapply rtc_l with (y := kv); [| apply rtc_refl].
+  exists 1%nat. unfold kv. apply kstep_d_step;
+    [apply Nat.le_0_l | apply Nat.le_refl | reflexivity].
+Qed.
+
+Lemma kv_view_f : ra_heap kv 1%nat 0%nat 0%nat = Some (VLoc 5%nat).
+Proof. reflexivity. Qed.
+
+Lemma kv_view_g : ra_heap kv 1%nat 0%nat 1%nat = Some (VLoc 5%nat).
+Proof. reflexivity. Qed.
+
+Lemma kv_now_f : ra_now kv 0%nat 0%nat = Some (VLoc 5%nat).
+Proof. reflexivity. Qed.
+
+Lemma kv_now_g : ra_now kv 0%nat 1%nat = Some (VLoc 6%nat).
+Proof. reflexivity. Qed.
+
+Lemma kv_other (q g : nat) :
+  (q, g) <> (0%nat, 0%nat) -> (q, g) <> (0%nat, 1%nat) ->
+  ra_now kv q g = Some VNull /\ ra_heap kv 1%nat q g = Some VNull.
+Proof.
+  intros H1 H2. unfold ra_now, ra_heap, seen, kv, kd1, kw3, kw2, kw1, ra0,
+    kstep_d, step_w, write, set_at, at_node, upd_v, upd_m, bot.
+  cbn [ra_h ra_c ra_v ra_relm].
+  destruct (Nat.eq_dec 1%nat 1%nat) as [_ | Hc]; [| by destruct Hc].
+  repeat (rewrite decide_False by congruence).
+  destruct (decide (q = 5%nat)) as [-> | Hq].
+  - rewrite decide_True by reflexivity.
+    repeat (rewrite decide_False by congruence). by split.
+  - rewrite decide_False by exact Hq.
+    repeat (rewrite decide_False by congruence). by split.
+Qed.
+
+Theorem dependency_ordering_loses_the_whole_view :
+  rtc kstep_any ra0 kv
+  /\ ~ UNQR (vs (ra_heap kv 1%nat))
+  /\ UNQR (vs (ra_now kv)).
+Proof.
+  repeat apply conj; [exact kv_run | |].
+  - intros H.
+    assert (Hf : Reaches (vs (ra_heap kv 1%nat)) [0%nat] 5%nat)
+      by (unfold Reaches; cbn [hstar ms hp rt vs];
+          by rewrite (kv_view_f : ra_heap kv 1%nat 0%nat 0%nat = _)).
+    assert (Hg : Reaches (vs (ra_heap kv 1%nat)) [1%nat] 5%nat)
+      by (unfold Reaches; cbn [hstar ms hp rt vs];
+          by rewrite (kv_view_g : ra_heap kv 1%nat 0%nat 1%nat = _)).
+    pose proof (H [0%nat] [1%nat] 5%nat Hf Hg) as Hc. discriminate.
+  - assert (Hpath : forall p o, hstar (ra_now kv) 0%nat p = Some o ->
+              (p = [] /\ o = 0%nat) \/ (p = [0%nat] /\ o = 5%nat)
+              \/ (p = [1%nat] /\ o = 6%nat)).
+    { intros [| a [| b p]] o Hp; cbn [hstar] in Hp.
+      - injection Hp as <-. by left.
+      - destruct (decide (a = 0%nat)) as [-> | Ha];
+          [rewrite kv_now_f in Hp; injection Hp as <-; right; by left |].
+        destruct (decide (a = 1%nat)) as [-> | Hb];
+          [rewrite kv_now_g in Hp; injection Hp as <-; right; by right |].
+        rewrite (proj1 (kv_other 0%nat a ltac:(congruence) ltac:(congruence)))
+          in Hp. discriminate.
+      - destruct (decide (a = 0%nat)) as [-> | Ha]; [rewrite kv_now_f in Hp |].
+        + rewrite (proj1 (kv_other 5%nat b ltac:(congruence) ltac:(congruence)))
+            in Hp. discriminate.
+        + destruct (decide (a = 1%nat)) as [-> | Hb];
+            [rewrite kv_now_g in Hp |].
+          * rewrite (proj1 (kv_other 6%nat b ltac:(congruence)
+                              ltac:(congruence))) in Hp. discriminate.
+          * rewrite (proj1 (kv_other 0%nat a ltac:(congruence)
+                              ltac:(congruence))) in Hp. discriminate. }
+    intros p p' o Hp Hp'.
+    destruct (Hpath p o Hp) as [[Hp1 Ho1] | [[Hp1 Ho1] | [Hp1 Ho1]]];
+      destruct (Hpath p' o Hp') as [[Hp2 Ho2] | [[Hp2 Ho2] | [Hp2 Ho2]]];
+      subst; try reflexivity; discriminate.
+Qed.
+
+Print Assumptions dependency_ordering_loses_the_whole_view.

@@ -95,7 +95,7 @@ checked rather than asserted: a successful build proves less than it looks,
 since \texttt{Admitted} compiles and \texttt{Print Assumptions} reports an axiom
 on standard output without failing anything.  \texttt{make check} rebuilds from
 scratch, rejects \texttt{Admitted} and axiom declarations outright, and counts
-the \texttt{Print Assumptions} reports: all 328 say \emph{closed under the
+the \texttt{Print Assumptions} reports: all 331 say \emph{closed under the
 global context}, and none reports an axiom.
 
 That target had the bug it exists to catch, and we report it because the
@@ -2628,11 +2628,49 @@ reader acquires nothing.  Both are outside what \textsc{ToRCUWrite} permits,
 which is to say the type system is what enforces the hypothesis of that
 theorem.
 
-What stands is that this is release-acquire and not weaker.  Every read
-acquires and every view only grows, so there is nothing out of thin air to rule
-out, and nothing here would survive a relaxed model unchanged.  A claim about
-the Linux kernel memory model, where \texttt{rcu\_dereference} rests on address
-dependencies rather than on acquire, would be a different piece of work.
+One thing about that account was stronger than Linux, and we have since
+repaired it rather than left it as a caveat.  Every read in it acquires, and
+there was no relaxed load at all.  Linux is not that.
+\texttt{rcu\_assign\_pointer} \emph{is} a release store, so the publishing half
+matches; but \texttt{rcu\_dereference} is \texttt{READ\_ONCE} plus a compiler
+barrier, and what orders the access is the address \emph{dependency} between
+loading the pointer and loading through it.  An acquire orders the load against
+everything the publisher knew; a dependency orders it only against accesses
+that use the value --- the target's own cells, and nothing else.
+
+So there is a second relation, with the same releasing write, a relaxed read,
+and a dependency-ordered read that acquires at the target only.  Both are kept,
+because having both is what lets the difference be stated, and the difference
+is sharp.
+
+Under release-acquire every reader's view is one of the writer's past views.
+Under dependency ordering that is false, and we give the run: the writer points
+the root's second field at 5, then at 6, then the first field at 5, so
+unique-paths holds at every moment; a reader that dereferences the second field
+while it still reads 5 and then dereferences the first is carried forward only
+at node 5's cells, not at the root's, so it keeps the stale field.  Its view has
+both fields at 5, which no state ever had, and in that view 5 has two paths.
+That is the exact price of the weaker read.
+
+What survives is what is needed, and the coincidence is worth naming.  The
+guarantee under dependency ordering is not a property of a configuration --- a
+thread may come to hold a link it never dereferenced, and nothing orders the
+target of a pointer that was never followed --- but of the \emph{step}: after
+an \texttt{rcu\_dereference} of $n$, the reader sees whatever the publisher of
+that pointer had already written into $n$.  Heap-domain closure, the one
+invariant a weak model endangers, says a thread that can see an edge can see
+the node at the end of it, and a thread that has not followed the edge has no
+business seeing the node.  The per-dereference statement is the obligation with
+nothing left over.
+
+What still stands is that this is release-acquire and dependency ordering, and
+not a relaxed model: every view only grows, so there is nothing out of thin air
+to rule out.  And source-level dependencies are not guaranteed by C --- a
+compiler may break them by value speculation or by arithmetic that cancels ---
+so the kernel memory model formalises the kernel's assumptions about its
+toolchain rather than standard C semantics.  A proof against it is a proof
+against a model in which the compiler is trusted, not proven, to respect
+dependencies.  We say that rather than absorb it.
 
 What we claim is narrower than ``RCU is verified under weak memory'' and, we
 think, more useful: the single invariant a weak memory model endangers is

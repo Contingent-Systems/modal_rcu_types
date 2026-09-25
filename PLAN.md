@@ -514,7 +514,144 @@ existing proof rather than designed, and the five theorems that file already had
 slotted in unchanged — which is what said the record was the right shape before
 any time was spent on the bridge.
 
-**A3 is done as far as this development goes; the remaining gaps are named above.**
+**A3's release-acquire account is done.  The gaps it leaves are Part III.**
+
+---
+
+## Part III — the gaps, listed
+
+Seven items.  W1–W3 are the memory model being made faithful to Linux and are
+the subject of this pass.  W4 is the replacement for what W1 destroys.  W5 is
+the prerequisite everything else has been borrowing against.  W6 is the
+external claim.  W7 cannot be fixed and must be said.
+
+### W1. `rcu_dereference` as it actually is
+
+**The model is stronger than Linux and that is a defect, not a simplification.**
+`RA_read` unconditionally unions in the message's release view: every read
+acquires, and there is no relaxed load in the model at all.  Linux is not that.
+`rcu_assign_pointer` *is* a release store — that half matches — but
+`rcu_dereference` is `READ_ONCE` plus a compiler barrier, and the ordering
+comes from the **address dependency** between loading the pointer and loading
+through it.  An acquire orders the load against everything the publisher knew;
+a dependency orders it only against accesses that use the value.
+
+Tasks: a second step relation with three steps — the same releasing write, a
+relaxed read (`READ_ONCE`), and a dependency-ordered read (`rcu_dereference`)
+which acquires *only at the target's own cells*.  Keep the release-acquire
+relation beside it: having both is what lets the difference be stated.
+
+*Risk* low.  *Acceptance* the publication guarantee still holds.
+
+**Done.**  `kstep` with `K_write`, `K_rlx` and `K_dep`; `at_node` is acquire
+restricted to the target's own cells.  `kstep_ok` holds.  The relaxed read is
+of a non-pointer, which is the discipline rather than a limitation: reading a
+pointer without `rcu_dereference` is the bug `rcu_dereference` exists to
+prevent.  The release-acquire relation is kept beside it.
+
+### W2. What the weaker read costs, exhibited
+
+`reader_views_are_past_writer_views` is available only because reads acquire.
+Under dependency ordering it should be false, and the counterexample we could
+not build under release-acquire should build immediately.
+
+Tasks: run it.  If the view is now a genuine mixture that was never the heap,
+that is the decisive statement of what acquire was buying, and it says the
+whole-state bridge has to be replaced rather than repaired.
+
+*Risk* low — both outcomes are informative.  *Acceptance* a run whose reader's
+view violates an invariant the heap satisfies throughout.
+
+**Done, and it builds immediately.**
+`dependency_ordering_loses_the_whole_view`: the writer points the root's second
+field at 5, then at 6, then the first field at 5, so unique-paths holds at
+every moment.  A reader that dereferences the second field while it still
+reads 5, then dereferences the first, is carried forward only at node 5's
+cells — not at the root's — so it keeps the stale field.  Its view has both
+fields at 5, which no state ever had, and in it 5 has two paths.  That is the
+exact statement of what acquire was buying.
+
+### W3. The publication guarantee under dependency ordering
+
+The one invariant a weak model endangers is **HD**, and HD says exactly that a
+thread which can see an edge can see the node at the end of it — which is
+exactly what an address dependency orders, and nothing more.  So the
+expectation is that dependency ordering buys precisely what is needed and not
+a byte more.
+
+Tasks: the dependency-ordered analogue of `RAClosed`, restricted to the
+target's cells; preservation; and `Published` for every thread's view.
+
+*Acceptance* HD holds of every view under the weaker read.
+
+**Done, and the acceptance criterion was wrong.**  HD does *not* hold of every
+view under dependency ordering, and it should not: a thread may come to hold a
+link it never dereferenced — carried forward at one cell as a side effect of
+dereferencing another — and nothing orders the target of a pointer that was
+never followed.  So the guarantee is not a property of a configuration at all.
+It is a property of the *step*, and `k_dereference_sees` is it: after an
+`rcu_dereference` of `n`, the reader sees whatever the publisher of that
+pointer had already written into `n`.
+
+That is the right shape rather than a concession.  Heap-domain closure says a
+thread that can see an edge can see the node at the end of it — and a thread
+that has not followed the edge has no business seeing the node.  The
+per-dereference statement is the obligation with nothing left over, and it is
+the per-traversal form identified under W4 arriving early.
+
+### W4. Per-message state tagging, to replace the whole-state bridge
+
+W2 removes the bridge's hypothesis.  The replacement is the one identified
+earlier and avoided: record with each message the logical state it was written
+in, prove every recorded state well formed along a run, and conclude that every
+edge a reader holds was an edge of a well-formed state.  Properties the reader
+needs that are *stable forward in time* then transfer; the one that is not is
+"not yet reclaimed", which is the grace period's job and is already proved.
+
+*Effort* the largest item after W5.  *Risk* medium.
+
+### W5. A program semantics
+
+**The prerequisite everything has been borrowing against.**  There is no
+command language, no thread pool, no configurations, and no typing judgement
+over programs anywhere in the development: `lstep : LState -> LState -> Prop`
+relates states.  So "well-typed program" is not an object that can be
+quantified over, and every theorem is of the form "any state reached by these
+steps satisfies…".  This is also why W1 has to model a dependency as a combined
+step rather than as a relation on program order — there is no program order.
+
+Tasks: commands, a thread pool, configurations, a typing judgement; lift
+`lstep` to configurations; restate progress per thread.
+
+*Effort* weeks.  *Risk* medium-high, and it touches everything.
+
+### W6. The LKMM correspondence
+
+Two different projects hide under "verify against the LKMM".  **(a)** Take its
+RCU axioms as given and show the type system sound with respect to them — the
+core guarantee is that a read-side section does not span a grace period, which
+is literally Alglave's first requirement and is already
+`no_section_spans_a_grace_period`.  The natural home is `Refine.v`: instantiate
+`Impl` and discharge the clauses.  The obstacle is that `Refines` is
+operational and the LKMM is axiomatic over executions, so an
+operational-to-axiomatic bridge is needed.  **(b)** Implement RCU from counters
+and verify it under the LKMM — the Tassarotti-shaped project, much larger, and
+note they chose release-acquire rather than the LKMM precisely to keep it
+tractable.
+
+Do (a), after W5.
+
+### W7. The dependency the compiler may not preserve
+
+**Cannot be fixed here and must be stated.**  Source-level address dependencies
+are not guaranteed by C: a compiler may break them by value speculation or by
+arithmetic that cancels.  The LKMM models the kernel's assumptions about its
+toolchain, not standard C semantics.  A proof against it is a proof against a
+model in which the compiler is *trusted*, not proven, to respect dependencies.
+Say so in the paper rather than absorb it.
+
+**Order** W1, W2, W3 together; then W4; then W5; then W6.  W7 throughout, as
+prose.
 
 ## Do not
 
